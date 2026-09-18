@@ -26,6 +26,7 @@ import (
 	"github.com/chrissnell/graywolf/pkg/modembridge"
 	"github.com/chrissnell/graywolf/pkg/packetlog"
 	"github.com/chrissnell/graywolf/pkg/remoteactions"
+	"github.com/chrissnell/graywolf/pkg/rxttelemetry"
 	"github.com/chrissnell/graywolf/pkg/stationcache"
 	"github.com/chrissnell/graywolf/pkg/txgovernor"
 	"github.com/chrissnell/graywolf/pkg/updatescheck"
@@ -95,41 +96,41 @@ type App struct {
 	// device change). The watcher rebuilds the snapshot on each
 	// received signal.
 	txBackendReload chan struct{}
-	agwServer         *agw.Server // nil if AGW is disabled in config
+	agwServer       *agw.Server // nil if AGW is disabled in config
 	// agwMu guards access to agwServer so a reload can swap in a new
 	// instance while the modem-bridge frame consumer is calling
 	// BroadcastMonitoredUI on the old one. Readers use currentAgw();
 	// the reload goroutine takes the write lock to stop the old server
 	// and install (or clear) a replacement.
-	agwMu       sync.Mutex
-	digi           *digipeater.Digipeater
-	gpsCache       *gps.MemCache
+	agwMu    sync.Mutex
+	digi     *digipeater.Digipeater
+	gpsCache *gps.MemCache
 	// satelliteCache points at gpsCache today (MemCache implements both
 	// PositionCache and SatelliteCache, with separate internal locks).
 	// The field is typed as the narrower SatelliteCache interface so the
 	// android per-sat reader can swap in an alternate implementation
 	// without touching gpsCache.
 	satelliteCache gps.SatelliteCache
-	stationPos  *gps.StationPos
-	gpsMgr      *gpsManager
-	appAndroidExt // platformClient lives here on Android, empty on desktop
-	beaconSched *beacon.Scheduler
+	stationPos     *gps.StationPos
+	gpsMgr         *gpsManager
+	appAndroidExt  // platformClient lives here on Android, empty on desktop
+	beaconSched    *beacon.Scheduler
 	// ig is the live *igate.Igate; nil while the iGate is disabled.
 	// Held in an atomic pointer so the runtime enable/disable toggle
 	// (reloadIgate) can swap it without coordinating with consumers
 	// (RF->IS fanout adapter, status fn closures, beacon ISSink).
-	ig          atomic.Pointer[igate.Igate]
+	ig atomic.Pointer[igate.Igate]
 	// igateOut is the always-allocated aprs.PacketOutput adapter for the
 	// RF->IS fanout. Its inner *igate.Igate is set/cleared by reloadIgate
 	// so the bridge fanout doesn't need to be torn down on toggle.
-	igateOut    *igate.IgateOutput
+	igateOut *igate.IgateOutput
 	// igateLineSender is the always-allocated IGateLineSender adapter
 	// passed to messages.Service. It loads a.ig on every SendLine call
 	// so a runtime enable lights up the IS path without rebuilding the
 	// Service.
 	igateLineSender *liveIGateLineSender
-	apiSrv      *webapi.Server
-	httpSrv     *http.Server
+	apiSrv          *webapi.Server
+	httpSrv         *http.Server
 	// pprofSrv is the dedicated debug listener for /debug/pprof/*. nil
 	// when cfg.PprofAddr is empty (the default). Has no auth — operators
 	// are expected to bind loopback only.
@@ -140,6 +141,8 @@ type App struct {
 	// via SetUpdatesChecker so GET /api/updates/status can project its
 	// cached Snapshot.
 	updatesChecker *updatescheck.Checker
+	rxtTelemetry   *rxttelemetry.Service
+	rxtWG          sync.WaitGroup
 
 	// Guards reloadIgate's no-op-skip. Owned by the single igateComponent
 	// reload goroutine, so no mutex is needed.

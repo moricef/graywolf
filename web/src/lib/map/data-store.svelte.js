@@ -160,6 +160,11 @@ export function createDataStore() {
         headers,
       });
 
+      // This store belongs to one mounted map route. A fetch may resolve after
+      // stop() when the operator has already left the map; that retired route
+      // must not change shared connection state or its own polling state.
+      if (!started) return;
+
       // The fetch resolved, so the server is reachable — even a 4xx/5xx
       // response clears a prior lost-connection state (GH #365).
       markConnected();
@@ -204,6 +209,10 @@ export function createDataStore() {
       pollingState = 'polling';
       lastFetchAt = new Date();
     } catch (e) {
+      // Likewise, ignore a late network rejection from a map generation that
+      // has already been torn down. The newly mounted route owns connectivity
+      // reporting now.
+      if (!started) return;
       console.error('[data-store] poll error:', e);
       backoff = Math.min(backoff * 2, POLL_MAX_MS);
       pollingState = 'error';

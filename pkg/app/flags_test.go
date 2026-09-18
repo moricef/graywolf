@@ -34,6 +34,7 @@ func TestParseFlagsValues(t *testing.T) {
 		"-config", "/tmp/g.db",
 		"-modem", "/opt/graywolf-modem",
 		"-http", "0.0.0.0:9090",
+		"-rxt-endpoint", "http://192.168.1.161/rxt.json",
 		"-shutdown-timeout", "3s",
 		"-flac", "/tmp/test.flac",
 		"-debug",
@@ -50,6 +51,9 @@ func TestParseFlagsValues(t *testing.T) {
 	}
 	if cfg.HTTPAddr != "0.0.0.0:9090" {
 		t.Errorf("HTTPAddr: %q", cfg.HTTPAddr)
+	}
+	if cfg.RXTEndpoint != "http://192.168.1.161/rxt.json" {
+		t.Errorf("RXTEndpoint: %q", cfg.RXTEndpoint)
 	}
 	if cfg.ShutdownTimeout != 3*time.Second {
 		t.Errorf("ShutdownTimeout: %s", cfg.ShutdownTimeout)

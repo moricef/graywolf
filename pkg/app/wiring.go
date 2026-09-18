@@ -43,6 +43,7 @@ import (
 	"github.com/chrissnell/graywolf/pkg/platform"
 	"github.com/chrissnell/graywolf/pkg/pttdevice"
 	"github.com/chrissnell/graywolf/pkg/remoteactions"
+	"github.com/chrissnell/graywolf/pkg/rxttelemetry"
 	"github.com/chrissnell/graywolf/pkg/stationcache"
 	"github.com/chrissnell/graywolf/pkg/txgovernor"
 	"github.com/chrissnell/graywolf/pkg/updatescheck"
@@ -704,6 +705,10 @@ func (a *App) wireServicesInner(ctx context.Context) error {
 	}
 	a.authStore = authStore
 
+	// Optional LoRa APRS RXT side-channel. Construction is unconditional so
+	// the API can return an empty array when no endpoint was configured.
+	a.rxtTelemetry = rxttelemetry.New(a.cfg.RXTEndpoint, nil, a.logger)
+
 	// --- HTTP server ---------------------------------------------------
 	if err := a.wireHTTP(ctx); err != nil {
 		return err
@@ -746,6 +751,7 @@ func (a *App) wireServicesInner(ctx context.Context) error {
 		// already hooked into the rxfanout + IS paths at construction
 		// time; this component owns only the start/stop semantics.
 		a.actionsComponent(),
+		a.rxtTelemetryComponent(),
 		a.httpComponent(),
 		a.pprofComponent(),
 	}
@@ -1529,6 +1535,7 @@ func (a *App) wireHTTP(ctx context.Context) error {
 	webapi.RegisterStations(apiSrv, apiMux, a.stationCache)
 	webapi.RegisterHeatmap(apiSrv, apiMux, a.stationCache)
 	webapi.RegisterPosition(apiSrv, apiMux, a.stationPos)
+	webapi.RegisterRXT(apiSrv, apiMux, a.rxtTelemetry, a.stationCache)
 	// /api/system-logs reads the slog ring buffer. a.cfg.LogBuffer is a
 	// concrete *logbuffer.DB that may be nil; assign through a typed
 	// interface variable so a nil DB arrives as a true nil interface
@@ -1904,6 +1911,26 @@ func (a *App) updatesCheckComponent() namedComponent {
 				return nil
 			}
 			return waitGroup(shutdownCtx, &a.updatesWG, "updates check")
+		},
+	}
+}
+
+func (a *App) rxtTelemetryComponent() namedComponent {
+	return namedComponent{
+		name: "RXT telemetry",
+		start: func(ctx context.Context) error {
+			if a.rxtTelemetry == nil || !a.rxtTelemetry.Enabled() {
+				return nil
+			}
+			a.rxtWG.Add(1)
+			go func() { defer a.rxtWG.Done(); a.rxtTelemetry.Run(ctx) }()
+			return nil
+		},
+		stop: func(shutdownCtx context.Context) error {
+			if a.rxtTelemetry == nil || !a.rxtTelemetry.Enabled() {
+				return nil
+			}
+			return waitGroup(shutdownCtx, &a.rxtWG, "RXT telemetry")
 		},
 	}
 }

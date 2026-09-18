@@ -12,6 +12,7 @@
 export const LAYER_TOGGLES_DEFAULTS = {
   stations: true,
   trails: true,
+  rxtLinks: true,
   weather: true,
   myPosition: true,
   fixedPoints: true,

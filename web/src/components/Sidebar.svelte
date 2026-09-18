@@ -31,6 +31,7 @@
     { path: '/terminal', label: 'Terminal', svgIcon: 'terminal', badge: 'terminal' },
     { path: '/actions', label: 'Actions', svgIcon: 'zap' },
     { path: '/logs', label: 'APRS Logs', svgIcon: 'logs' },
+    { path: '/rxt', label: 'RXT Telemetry', svgIcon: 'rxt' },
     { path: '/system-logs', label: 'System Logs', svgIcon: 'system-logs' },
   ];
 
@@ -263,6 +264,22 @@
                 <rect x="2" y="4" width="20" height="16" rx="2" />
                 <polyline points="6 9 9 12 6 15" />
                 <line x1="12" y1="15" x2="17" y2="15" />
+              </svg>
+            {:else if item.svgIcon === 'rxt'}
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.75"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M5 12.55a11 11 0 0 1 14.08 0" />
+                <path d="M8.5 16a6 6 0 0 1 7 0" />
+                <circle cx="12" cy="20" r="1" />
               </svg>
             {/if}
             {#if unread > 0}

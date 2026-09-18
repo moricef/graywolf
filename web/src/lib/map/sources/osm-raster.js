@@ -11,11 +11,11 @@ export function osmRasterStyle() {
     sources: {
       osm: {
         type: 'raster',
-        tiles: [
-          'https://a.tile.openstreetmap.org/{z}/{x}/{y}.png',
-          'https://b.tile.openstreetmap.org/{z}/{x}/{y}.png',
-          'https://c.tile.openstreetmap.org/{z}/{x}/{y}.png',
-        ],
+        // Use OSM's canonical HTTP/2 endpoint. The historical a/b/c
+        // sharding forces three DNS lookups and three TLS connections on a
+        // cold SPA remount, which makes the online basemap appear unavailable
+        // briefly even though the Graywolf server and offline maps are fine.
+        tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
         tileSize: 256,
         maxzoom: 19,
         attribution:

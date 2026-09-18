@@ -37,6 +37,13 @@
   // orphan map -- accumulated orphan contexts are what push the browser past
   // its per-page WebGL context budget and trigger the context loss in #461.
   let destroyed = false;
+  // SPA route changes can mount the map while the parent is still switching
+  // to its full-bleed layout. MapLibre only watches window resizes, so without
+  // observing the actual container it can keep the zero/stale dimensions it
+  // measured during that transition until the whole page is reloaded.
+  let resizeObserver = null;
+  let resizeFrame = null;
+  let initialResizeFrame = null;
   // Debounce between 'webglcontextlost' and a possible 'webglcontextrestored'
   // so we only escalate to a remount when the loss is permanent.
   let ctxRestoreTimer = null;
@@ -219,6 +226,26 @@
       attributionControl: { compact: true },
       transformRequest,
     });
+    // Track layout-driven size changes (sidebar, route/full-bleed transition,
+    // mobile chrome) as well as window resizes. Coalesce ResizeObserver bursts
+    // into one animation frame and give the initial route render one extra
+    // frame to settle before taking the first definitive measurement.
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(() => {
+        if (resizeFrame !== null) cancelAnimationFrame(resizeFrame);
+        resizeFrame = requestAnimationFrame(() => {
+          resizeFrame = null;
+          if (!destroyed && map) map.resize();
+        });
+      });
+      resizeObserver.observe(container);
+    }
+    initialResizeFrame = requestAnimationFrame(() => {
+      initialResizeFrame = requestAnimationFrame(() => {
+        initialResizeFrame = null;
+        if (!destroyed && map) map.resize();
+      });
+    });
     // Drop the rotate component of the two-finger touch gesture. On phones
     // a pinch-to-zoom too easily nudges the bearing, leaving the map askew
     // with no obvious way back (GH #348). Pinch-zoom is preserved; only the
@@ -369,6 +396,16 @@
 
   onDestroy(() => {
     destroyed = true;
+    resizeObserver?.disconnect();
+    resizeObserver = null;
+    if (resizeFrame !== null) {
+      cancelAnimationFrame(resizeFrame);
+      resizeFrame = null;
+    }
+    if (initialResizeFrame !== null) {
+      cancelAnimationFrame(initialResizeFrame);
+      initialResizeFrame = null;
+    }
     if (ctxRestoreTimer) {
       clearTimeout(ctxRestoreTimer);
       ctxRestoreTimer = null;

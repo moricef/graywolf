@@ -38,6 +38,7 @@
   import Terminal from './routes/Terminal.svelte';
   import TerminalTranscripts from './routes/TerminalTranscripts.svelte';
   import Actions from './routes/Actions.svelte';
+  import RxtTelemetry from './routes/RxtTelemetry.svelte';
 
   const baseRoutes = {
     '/login': Login,
@@ -61,6 +62,7 @@
     '/simulation': Simulation,
     '/position-log': PositionLog,
     '/logs': Logs,
+    '/rxt': RxtTelemetry,
     '/system-logs': SystemLogs,
     '/preferences': Preferences,
     '/preferences/maps': MapsSettings,

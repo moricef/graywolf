@@ -20,6 +20,7 @@
   import { mountMyPositionLayer } from '../lib/map/layers/my-position.js';
   import { mountRadarLayer } from '../lib/map/layers/radar.js';
   import { mountHeatmapLayer } from '../lib/map/layers/direct-rx-heatmap.js';
+  import { mountRXTLinksLayer, loadRXTLinks } from '../lib/map/layers/rxt-links.js';
   import { loadHeatmap } from '../lib/map/sources/heatmap-source.js';
   import {
     radarManifestUrlForRegion,
@@ -108,6 +109,21 @@
   let heatmapLayer = null;
   let heatmapTimer = null;
   let fixedPointsLayer = null;
+  let rxtLinksLayer = null;
+  let rxtLinksTimer = null;
+
+  async function refreshRXTLinks() {
+    if (!rxtLinksLayer || !layerToggles.rxtLinks) return;
+    try { rxtLinksLayer.refresh(await loadRXTLinks()); } catch { /* next poll retries */ }
+  }
+  function startRXTLinksPolling() {
+    if (rxtLinksTimer) return;
+    refreshRXTLinks();
+    rxtLinksTimer = setInterval(refreshRXTLinks, 5000);
+  }
+  function stopRXTLinksPolling() {
+    if (rxtLinksTimer) { clearInterval(rxtLinksTimer); rxtLinksTimer = null; }
+  }
 
   // Bumping this key fully remounts <MaplibreMap>, which is how we recover
   // from a permanent WebGL context loss (graywolf#461): the map component's
@@ -663,6 +679,8 @@
       visible: layerToggles.directRxHeatmap,
       opacity: layerToggles.directRxHeatmapOpacity,
     });
+    rxtLinksLayer = mountRXTLinksLayer(map, { visible: layerToggles.rxtLinks });
+    if (layerToggles.rxtLinks) startRXTLinksPolling();
     if (layerToggles.directRxHeatmap) {
       refreshHeatmap();
       startHeatmapPolling();
@@ -761,6 +779,7 @@
     windBarbsLayer.setVisible(layerToggles.weather);
     myPositionLayer.setVisible(layerToggles.myPosition);
     fixedPointsLayer.setVisible(layerToggles.fixedPoints);
+    rxtLinksLayer.setVisible(layerToggles.rxtLinks);
     // Fronts layer disabled for now.
     // frontsLayer.setVisible(layerToggles.fronts);
     const initialPred = layerToggles.directRxOnly
@@ -967,6 +986,11 @@
     const v = layerToggles.trails;
     trailsLayer?.setVisible(v);
   });
+  $effect(() => {
+    const v = layerToggles.rxtLinks;
+    rxtLinksLayer?.setVisible(v);
+    if (v) startRXTLinksPolling(); else stopRXTLinksPolling();
+  });
   // Wind barbs ride along with the Weather overlay -- they ARE the
   // weather wind display, so one toggle governs both the temp chip and
   // the barb rather than splitting them across two controls.
@@ -1072,6 +1096,7 @@
 
   function startHeatmapPolling() {
     stopHeatmapPolling();
+    stopRXTLinksPolling();
     heatmapTimer = setInterval(refreshHeatmap, 15000);
   }
 
@@ -1265,6 +1290,7 @@
     hoverPathLayer?.destroy();
     myPositionLayer?.destroy();
     fixedPointsLayer?.destroy();
+    rxtLinksLayer?.destroy();
     radarLayer = null;
     frontsLayer = null;
     heatmapLayer = null;
@@ -1275,6 +1301,7 @@
     hoverPathLayer = null;
     myPositionLayer = null;
     fixedPointsLayer = null;
+    rxtLinksLayer = null;
     mapRef = null;
     // Drop the console debug handle so a context-lost/removed map isn't pinned
     // in the heap after a recovery remount or navigation away (graywolf#461).
@@ -1335,6 +1362,14 @@
             onchange={(e) => (layerToggles.trails = e.currentTarget.checked)}
           />
           <span>Trails</span>
+        </label>
+        <label class="toggle-row" title="LoRa RXT reception paths; green is fresh, orange is older than 10 minutes">
+          <input
+            type="checkbox"
+            checked={layerToggles.rxtLinks}
+            onchange={(e) => (layerToggles.rxtLinks = e.currentTarget.checked)}
+          />
+          <span>RXT Links</span>
         </label>
         <label class="toggle-row">
           <input
