@@ -2,15 +2,20 @@ package webapi
 
 import (
 	"net/http"
+	"net/url"
 	"sort"
+	"strings"
 	"sync/atomic"
 	"time"
 
+	"github.com/chrissnell/graywolf/pkg/configstore"
 	"github.com/chrissnell/graywolf/pkg/rxttelemetry"
 )
 
 type RXTLinkSource interface {
 	Enabled() bool
+	Endpoint() string
+	SetEndpoint(string)
 	Snapshot(time.Time) []rxttelemetry.Link
 }
 
@@ -25,7 +30,43 @@ type RXTPositionDTO struct {
 	Lon float64 `json:"lon"`
 }
 
-func RegisterRXT(srv *Server, mux *http.ServeMux, source RXTLinkSource, stations StationCache) {
+type rxtConfigDTO struct {
+	Endpoint string `json:"endpoint"`
+}
+
+func RegisterRXT(srv *Server, mux *http.ServeMux, source RXTLinkSource, stations StationCache, store *configstore.Store) {
+	mux.HandleFunc("GET /api/rxt/config", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, http.StatusOK, rxtConfigDTO{Endpoint: source.Endpoint()})
+	})
+	mux.HandleFunc("PUT /api/rxt/config", func(w http.ResponseWriter, r *http.Request) {
+		body, err := decodeJSON[rxtConfigDTO](r)
+		if err != nil {
+			badRequest(w, err.Error())
+			return
+		}
+		body.Endpoint = strings.TrimSpace(body.Endpoint)
+		if body.Endpoint != "" {
+			u, err := url.ParseRequestURI(body.Endpoint)
+			if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+				badRequest(w, "endpoint must be an absolute HTTP or HTTPS URL")
+				return
+			}
+		}
+		if store == nil {
+			http.Error(w, "RXT configuration store unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		if err := store.UpsertRXTConfig(r.Context(), configstore.RXTConfig{Endpoint: body.Endpoint}); err != nil {
+			if srv != nil {
+				srv.internalError(w, r, "save RXT config", err)
+			} else {
+				http.Error(w, err.Error(), 500)
+			}
+			return
+		}
+		source.SetEndpoint(body.Endpoint)
+		writeJSON(w, http.StatusOK, body)
+	})
 	var lastCounts atomic.Uint64
 	mux.HandleFunc("GET /api/rxt/links", func(w http.ResponseWriter, _ *http.Request) {
 		if source == nil || !source.Enabled() {

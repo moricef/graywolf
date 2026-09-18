@@ -705,9 +705,20 @@ func (a *App) wireServicesInner(ctx context.Context) error {
 	}
 	a.authStore = authStore
 
-	// Optional LoRa APRS RXT side-channel. Construction is unconditional so
-	// the API can return an empty array when no endpoint was configured.
-	a.rxtTelemetry = rxttelemetry.New(a.cfg.RXTEndpoint, nil, a.logger)
+	// Optional LoRa APRS RXT side-channel. The database is canonical. The
+	// legacy CLI flag seeds/overrides it once so existing deployments migrate
+	// without losing their configured endpoint.
+	rxtCfg, err := a.store.GetRXTConfig(ctx)
+	if err != nil {
+		return fmt.Errorf("read RXT config: %w", err)
+	}
+	if a.cfg.RXTEndpoint != "" && rxtCfg.ID == 0 {
+		rxtCfg.Endpoint = a.cfg.RXTEndpoint
+		if err := a.store.UpsertRXTConfig(ctx, rxtCfg); err != nil {
+			return fmt.Errorf("persist CLI RXT endpoint: %w", err)
+		}
+	}
+	a.rxtTelemetry = rxttelemetry.New(rxtCfg.Endpoint, nil, a.logger)
 
 	// --- HTTP server ---------------------------------------------------
 	if err := a.wireHTTP(ctx); err != nil {
@@ -1535,7 +1546,7 @@ func (a *App) wireHTTP(ctx context.Context) error {
 	webapi.RegisterStations(apiSrv, apiMux, a.stationCache)
 	webapi.RegisterHeatmap(apiSrv, apiMux, a.stationCache)
 	webapi.RegisterPosition(apiSrv, apiMux, a.stationPos)
-	webapi.RegisterRXT(apiSrv, apiMux, a.rxtTelemetry, a.stationCache)
+	webapi.RegisterRXT(apiSrv, apiMux, a.rxtTelemetry, a.stationCache, a.store)
 	// /api/system-logs reads the slog ring buffer. a.cfg.LogBuffer is a
 	// concrete *logbuffer.DB that may be nil; assign through a typed
 	// interface variable so a nil DB arrives as a true nil interface

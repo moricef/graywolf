@@ -507,6 +507,15 @@ type UpdatesConfig struct {
 	UpdatedAt time.Time `json:"-"`
 }
 
+// RXTConfig stores the optional LoRa APRS iGate JSON side-channel URL.
+// Singleton at id=1; an empty endpoint disables RXT polling.
+type RXTConfig struct {
+	ID        uint32    `gorm:"primaryKey;autoIncrement" json:"id"`
+	Endpoint  string    `gorm:"not null;default:''" json:"endpoint"`
+	CreatedAt time.Time `json:"-"`
+	UpdatedAt time.Time `json:"-"`
+}
+
 // LogBufferConfig stores the operator's override for the in-database
 // log ring size. Singleton at id=1. MaxRows == 0 disables persistence
 // entirely (back to console-only logging). When no row exists, the

@@ -68,12 +68,28 @@ func New(endpoint string, client *http.Client, logger *slog.Logger) *Service {
 	}
 }
 
-func (s *Service) Enabled() bool { return s != nil && s.endpoint != "" }
+func (s *Service) Endpoint() string {
+	if s == nil {
+		return ""
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.endpoint
+}
 
-func (s *Service) Run(ctx context.Context) {
-	if !s.Enabled() {
+func (s *Service) SetEndpoint(endpoint string) {
+	if s == nil {
 		return
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.endpoint = strings.TrimSpace(endpoint)
+	s.links = make(map[string]Link)
+}
+
+func (s *Service) Enabled() bool { return s != nil && s.Endpoint() != "" }
+
+func (s *Service) Run(ctx context.Context) {
 	s.pollOnce(ctx)
 	t := time.NewTicker(s.poll)
 	defer t.Stop()
@@ -105,7 +121,11 @@ func (s *Service) Snapshot(now time.Time) []Link {
 }
 
 func (s *Service) pollOnce(ctx context.Context) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.endpoint, nil)
+	endpoint := s.Endpoint()
+	if endpoint == "" {
+		return
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		s.logger.Warn("invalid RXT endpoint", "err", err)
 		return

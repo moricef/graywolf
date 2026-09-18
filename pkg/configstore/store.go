@@ -167,6 +167,7 @@ func (s *Store) Migrate() error {
 		&BlockedCallsign{},
 		&StationConfig{},
 		&UpdatesConfig{},
+		&RXTConfig{},
 		&UnitsConfig{},
 		&ThemeConfig{},
 		&MapsConfig{},
