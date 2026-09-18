@@ -1,6 +1,6 @@
 <script>
   import { onMount } from 'svelte';
-  import { Button, Box, Input } from '@chrissnell/chonky-ui';
+  import { Button, Box } from '@chrissnell/chonky-ui';
   import PageHeader from '../components/PageHeader.svelte';
 
   let links = $state([]);
@@ -8,48 +8,12 @@
   let error = $state('');
   let updatedAt = $state(null);
   let pollTimer;
-  let endpoint = $state('');
-  let saving = $state(false);
-  let saved = $state(false);
 
   onMount(() => {
-    loadConfig();
     loadLinks();
     pollTimer = setInterval(loadLinks, 5000);
     return () => clearInterval(pollTimer);
   });
-
-  async function loadConfig() {
-    try {
-      const response = await fetch('/api/rxt/config', { credentials: 'same-origin' });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      endpoint = (await response.json()).endpoint || '';
-    } catch (err) {
-      error = `Unable to load RXT configuration: ${err?.message || err}`;
-    }
-  }
-
-  async function saveConfig() {
-    saving = true;
-    saved = false;
-    try {
-      const response = await fetch('/api/rxt/config', {
-        method: 'PUT',
-        credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ endpoint }),
-      });
-      if (!response.ok) throw new Error((await response.text()) || `HTTP ${response.status}`);
-      endpoint = (await response.json()).endpoint || '';
-      error = '';
-      saved = true;
-      await loadLinks();
-    } catch (err) {
-      error = `Unable to save RXT configuration: ${err?.message || err}`;
-    } finally {
-      saving = false;
-    }
-  }
 
   async function loadLinks() {
     try {
@@ -100,17 +64,6 @@
 {#if error}
   <div class="error" role="alert">{error}</div>
 {/if}
-
-<Box>
-  <form class="config" onsubmit={(event) => { event.preventDefault(); saveConfig(); }}>
-    <label for="rxt-endpoint"><strong>iGate RXT endpoint</strong></label>
-    <div class="config-row">
-      <Input id="rxt-endpoint" type="url" bind:value={endpoint} placeholder="http://192.168.1.161/rxt.json" />
-      <Button variant="primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save'}</Button>
-    </div>
-    <span class="hint">Leave empty to disable RXT polling.{saved ? ' Saved.' : ''}</span>
-  </form>
-</Box>
 
 <Box>
   <div class="summary">
@@ -177,9 +130,6 @@
     border: 1px solid currentColor;
     border-radius: 6px;
   }
-  .config { display: grid; gap: 8px; }
-  .config-row { display: grid; grid-template-columns: minmax(240px, 1fr) auto; gap: 8px; }
-  .hint { color: var(--color-text-dim); font-size: 12px; }
   .summary {
     display: flex;
     flex-wrap: wrap;

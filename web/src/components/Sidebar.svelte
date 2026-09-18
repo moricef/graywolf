@@ -49,6 +49,7 @@
     { path: '/preferences/messages', label: 'Messaging' },
     { path: '/position-log', label: 'Position Log' },
     { path: '/ptt', label: 'PTT' },
+    { path: '/preferences/rxt', label: 'RXT' },
     { path: '/simulation', label: 'Simulation' },
     { path: '/callsign', label: 'Station Callsign' },
     { path: '/preferences/storage', label: 'Storage' },

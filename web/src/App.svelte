@@ -39,6 +39,7 @@
   import TerminalTranscripts from './routes/TerminalTranscripts.svelte';
   import Actions from './routes/Actions.svelte';
   import RxtTelemetry from './routes/RxtTelemetry.svelte';
+  import RxtSettings from './routes/RxtSettings.svelte';
 
   const baseRoutes = {
     '/login': Login,
@@ -68,6 +69,7 @@
     '/preferences/maps': MapsSettings,
     '/preferences/storage': StorageSettings,
     '/preferences/messages': MessagesSettings,
+    '/preferences/rxt': RxtSettings,
     '/about': About,
   };
   const routes = (() => {
