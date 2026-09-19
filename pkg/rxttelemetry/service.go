@@ -43,6 +43,17 @@ type Link struct {
 	Packet     string    `json:"packet,omitempty"`
 }
 
+// Status describes the health of the configured RXT side-channel.
+type Status struct {
+	Enabled         bool       `json:"enabled"`
+	Endpoint        string     `json:"endpoint"`
+	LastAttemptAt   *time.Time `json:"last_attempt_at,omitempty"`
+	LastSuccessAt   *time.Time `json:"last_success_at,omitempty"`
+	LastError       string     `json:"last_error,omitempty"`
+	RecordsReceived int        `json:"records_received"`
+	ActiveLinks     int        `json:"active_links"`
+}
+
 type Service struct {
 	endpoint string
 	client   *http.Client
@@ -52,6 +63,11 @@ type Service struct {
 
 	mu    sync.RWMutex
 	links map[string]Link
+
+	lastAttempt     time.Time
+	lastSuccess     time.Time
+	lastError       string
+	recordsReceived int
 }
 
 func New(endpoint string, client *http.Client, logger *slog.Logger) *Service {
@@ -83,8 +99,16 @@ func (s *Service) SetEndpoint(endpoint string) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.endpoint = strings.TrimSpace(endpoint)
+	endpoint = strings.TrimSpace(endpoint)
+	if endpoint == s.endpoint {
+		return
+	}
+	s.endpoint = endpoint
 	s.links = make(map[string]Link)
+	s.lastAttempt = time.Time{}
+	s.lastSuccess = time.Time{}
+	s.lastError = ""
+	s.recordsReceived = 0
 }
 
 func (s *Service) Enabled() bool { return s != nil && s.Endpoint() != "" }
@@ -120,18 +144,60 @@ func (s *Service) Snapshot(now time.Time) []Link {
 	return out
 }
 
+// Status returns the current endpoint health and prunes expired links before
+// reporting their count.
+func (s *Service) Status(now time.Time) Status {
+	if s == nil {
+		return Status{}
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for key, link := range s.links {
+		if now.Sub(link.ObservedAt) > s.ttl {
+			delete(s.links, key)
+		}
+	}
+	status := Status{
+		Enabled:         s.endpoint != "",
+		Endpoint:        s.endpoint,
+		LastError:       s.lastError,
+		RecordsReceived: s.recordsReceived,
+		ActiveLinks:     len(s.links),
+	}
+	if !s.lastAttempt.IsZero() {
+		attempt := s.lastAttempt
+		status.LastAttemptAt = &attempt
+	}
+	if !s.lastSuccess.IsZero() {
+		success := s.lastSuccess
+		status.LastSuccessAt = &success
+	}
+	return status
+}
+
+func (s *Service) setPollError(message string) {
+	s.mu.Lock()
+	s.lastError = message
+	s.mu.Unlock()
+}
+
 func (s *Service) pollOnce(ctx context.Context) {
 	endpoint := s.Endpoint()
 	if endpoint == "" {
 		return
 	}
+	s.mu.Lock()
+	s.lastAttempt = time.Now().UTC()
+	s.mu.Unlock()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
+		s.setPollError(err.Error())
 		s.logger.Warn("invalid RXT endpoint", "err", err)
 		return
 	}
 	resp, err := s.client.Do(req)
 	if err != nil {
+		s.setPollError(err.Error())
 		if ctx.Err() == nil {
 			s.logger.Debug("RXT poll failed", "err", err)
 		}
@@ -139,17 +205,22 @@ func (s *Service) pollOnce(ctx context.Context) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
+		s.setPollError(fmt.Sprintf("HTTP %d", resp.StatusCode))
 		s.logger.Debug("RXT poll returned non-200", "status", resp.StatusCode)
 		return
 	}
 	var rows []record
 	if err := json.NewDecoder(io.LimitReader(resp.Body, maxResponseBytes)).Decode(&rows); err != nil {
+		s.setPollError(err.Error())
 		s.logger.Debug("RXT response decode failed", "err", err)
 		return
 	}
 	now := time.Now().UTC()
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.lastSuccess = now
+	s.lastError = ""
+	s.recordsReceived = len(rows)
 	for _, row := range rows {
 		// The firmware currently emits rx_time as a wall-clock-only value
 		// ("16:15:01"). age_ms is unambiguous and also survives timezone

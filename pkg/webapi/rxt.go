@@ -17,6 +17,7 @@ type RXTLinkSource interface {
 	Endpoint() string
 	SetEndpoint(string)
 	Snapshot(time.Time) []rxttelemetry.Link
+	Status(time.Time) rxttelemetry.Status
 }
 
 type RXTLinkDTO struct {
@@ -66,6 +67,9 @@ func RegisterRXT(srv *Server, mux *http.ServeMux, source RXTLinkSource, stations
 		}
 		source.SetEndpoint(body.Endpoint)
 		writeJSON(w, http.StatusOK, body)
+	})
+	mux.HandleFunc("GET /api/rxt/status", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, http.StatusOK, source.Status(time.Now().UTC()))
 	})
 	var lastCounts atomic.Uint64
 	mux.HandleFunc("GET /api/rxt/links", func(w http.ResponseWriter, _ *http.Request) {

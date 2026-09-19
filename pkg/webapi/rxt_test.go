@@ -20,6 +20,9 @@ func (f fakeRXTSource) Enabled() bool                          { return true }
 func (f fakeRXTSource) Endpoint() string                       { return "http://igate/rxt.json" }
 func (f fakeRXTSource) SetEndpoint(string)                     {}
 func (f fakeRXTSource) Snapshot(time.Time) []rxttelemetry.Link { return f.links }
+func (f fakeRXTSource) Status(time.Time) rxttelemetry.Status {
+	return rxttelemetry.Status{Enabled: true, Endpoint: f.Endpoint(), ActiveLinks: len(f.links)}
+}
 
 func TestRXTLinksResolvesStationPositions(t *testing.T) {
 	mux := http.NewServeMux()
@@ -72,5 +75,23 @@ func TestRXTConfigCanBeUpdated(t *testing.T) {
 	got, err := store.GetRXTConfig(req.Context())
 	if err != nil || got.Endpoint != source.Endpoint() {
 		t.Fatalf("stored config=%+v err=%v", got, err)
+	}
+}
+
+func TestRXTStatusReportsSourceHealth(t *testing.T) {
+	mux := http.NewServeMux()
+	source := fakeRXTSource{links: []rxttelemetry.Link{{}}}
+	RegisterRXT(nil, mux, source, &mockStationCache{}, nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/rxt/status", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	var got rxttelemetry.Status
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if !got.Enabled || got.Endpoint != source.Endpoint() || got.ActiveLinks != 1 {
+		t.Fatalf("unexpected response: %+v", got)
 	}
 }

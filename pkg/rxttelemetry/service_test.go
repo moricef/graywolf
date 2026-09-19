@@ -27,6 +27,19 @@ func TestPollDecodesAndKeepsNewestLink(t *testing.T) {
 	if links[0].RSSI != -112 || links[0].TTH != 6200 {
 		t.Fatalf("unexpected metrics: %+v", links[0])
 	}
+	status := s.Status(time.Now().UTC())
+	if status.LastSuccessAt == nil || status.LastError != "" || status.RecordsReceived != 1 || status.ActiveLinks != 1 {
+		t.Fatalf("unexpected status: %+v", status)
+	}
+}
+
+func TestPollFailureIsVisibleInStatus(t *testing.T) {
+	s := New("http://127.0.0.1:1/rxt.json", &http.Client{Timeout: 100 * time.Millisecond}, nil)
+	s.pollOnce(context.Background())
+	status := s.Status(time.Now().UTC())
+	if status.LastAttemptAt == nil || status.LastSuccessAt != nil || status.LastError == "" {
+		t.Fatalf("unexpected status: %+v", status)
+	}
 }
 
 func TestSnapshotExpiresLinks(t *testing.T) {
