@@ -719,6 +719,10 @@ func (a *App) wireServicesInner(ctx context.Context) error {
 		}
 	}
 	a.rxtTelemetry = rxttelemetry.New(rxtCfg.Endpoint, nil, a.logger)
+	a.rxtTelemetry.SetResumeState(rxtCfg.LastEventID, rxtCfg.LastBootID, rxtCfg.ResumeSupported)
+	a.rxtTelemetry.SetResumeHandler(func(state rxttelemetry.ResumeState) error {
+		return a.store.UpdateRXTResume(context.Background(), state.Endpoint, state.EventID, state.BootID, state.Supported)
+	})
 	a.rxtTelemetry.SetPacketHandler(a.aprsJSONProduce)
 
 	// --- HTTP server ---------------------------------------------------

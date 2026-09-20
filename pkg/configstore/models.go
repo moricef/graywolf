@@ -510,10 +510,13 @@ type UpdatesConfig struct {
 // RXTConfig stores the optional LoRa APRS JSON source URL. Singleton at id=1;
 // an empty endpoint disables stream consumption and legacy RXT polling.
 type RXTConfig struct {
-	ID        uint32    `gorm:"primaryKey;autoIncrement" json:"id"`
-	Endpoint  string    `gorm:"not null;default:''" json:"endpoint"`
-	CreatedAt time.Time `json:"-"`
-	UpdatedAt time.Time `json:"-"`
+	ID              uint32    `gorm:"primaryKey;autoIncrement" json:"id"`
+	Endpoint        string    `gorm:"not null;default:''" json:"endpoint"`
+	LastEventID     string    `gorm:"not null;default:''" json:"-"`
+	LastBootID      string    `gorm:"not null;default:''" json:"-"`
+	ResumeSupported bool      `gorm:"not null;default:false" json:"-"`
+	CreatedAt       time.Time `json:"-"`
+	UpdatedAt       time.Time `json:"-"`
 }
 
 // LogBufferConfig stores the operator's override for the in-database

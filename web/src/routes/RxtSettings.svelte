@@ -100,6 +100,8 @@
     <span>Last success</span><strong>{timestamp(status?.last_success_at)}</strong>
     <span>Records received</span><strong>{status?.records_received ?? 0}</strong>
     <span>Active links</span><strong>{status?.active_links ?? 0}</strong>
+    <span>History resume</span><strong>{status?.resume_supported ? 'Available' : 'Unavailable'}</strong>
+    <span>Last cursor</span><strong class="cursor">{status?.last_event_id || 'None'}</strong>
   </div>
   {#if status?.last_error}<p class="status-error">{status.last_error}</p>{/if}
 </Box>
@@ -112,6 +114,7 @@
   .error { margin-bottom: 12px; padding: 10px 12px; color: var(--color-danger, #ff6b6b); border: 1px solid currentColor; border-radius: 6px; }
   .status-grid { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 8px 20px; font-size: 13px; }
   .status-grid span { color: var(--text-muted); }
+  .cursor { overflow-wrap: anywhere; }
   .healthy { color: #2fbf71; }
   .failed, .status-error { color: var(--color-danger, #ff6b6b); }
   .status-error { margin: 12px 0 0; font-size: 13px; overflow-wrap: anywhere; }

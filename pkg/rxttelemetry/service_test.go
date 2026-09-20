@@ -152,6 +152,137 @@ func TestConsumeStreamContinuesAfterMalformedPacketHandlerError(t *testing.T) {
 	}
 }
 
+func TestResumeLifecycle(t *testing.T) {
+	s := New("http://igate.invalid/api/v1/aprs/stream?source=rf", nil, nil)
+	var states []ResumeState
+	s.SetResumeHandler(func(state ResumeState) error {
+		states = append(states, state)
+		return nil
+	})
+
+	hello := streamRecord{Protocol: "lora-aprs-json", ProtocolVersion: "1", Event: "hello", BootID: "boot-1"}
+	hello.Capabilities.Features = []string{"local_metrics", "history_resume"}
+	if err := s.processStreamRecord(context.Background(), hello); err != nil {
+		t.Fatal(err)
+	}
+	rx := streamRecord{
+		Protocol: "lora-aprs-json", ProtocolVersion: "1", Event: "rx",
+		EventID: "boot-1:7", BootID: "boot-1", Sequence: 7,
+	}
+	rx.Packet.RawTNC2 = []byte("N0CALL>APRS:>resume")
+	if err := s.processStreamRecord(context.Background(), rx); err != nil {
+		t.Fatal(err)
+	}
+
+	gotURL, err := s.resumeURL(s.Endpoint())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotURL != "http://igate.invalid/api/v1/aprs/stream?after=boot-1%3A7&source=rf" {
+		t.Fatalf("resume URL = %q", gotURL)
+	}
+	status := s.Status(time.Now().UTC())
+	if !status.ResumeSupported || status.LastEventID != "boot-1:7" {
+		t.Fatalf("status after rx = %+v", status)
+	}
+	if len(states) != 2 || states[1].EventID != "boot-1:7" || !states[1].Supported {
+		t.Fatalf("persisted states = %+v", states)
+	}
+
+	gap := streamRecord{
+		Protocol: "lora-aprs-json", ProtocolVersion: "1", Event: "gap",
+		BootID: "boot-1", RequestedAfter: "boot-1:7", Reason: "history_expired",
+	}
+	if err := s.processStreamRecord(context.Background(), gap); err != nil {
+		t.Fatal(err)
+	}
+	gotURL, err = s.resumeURL(s.Endpoint())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotURL != s.Endpoint() {
+		t.Fatalf("URL after gap = %q, want %q", gotURL, s.Endpoint())
+	}
+	if states[len(states)-1].EventID != "" {
+		t.Fatalf("state after gap = %+v", states[len(states)-1])
+	}
+}
+
+func TestHelloClearsCursorOnBootChangeOrCapabilityRemoval(t *testing.T) {
+	s := New("http://igate.invalid/api/v1/aprs/stream", nil, nil)
+	s.SetResumeState("old-boot:9", "old-boot", true)
+
+	hello := streamRecord{Protocol: "lora-aprs-json", ProtocolVersion: "1", Event: "hello", BootID: "new-boot"}
+	hello.Capabilities.Features = []string{"history_resume"}
+	if err := s.processStreamRecord(context.Background(), hello); err != nil {
+		t.Fatal(err)
+	}
+	if status := s.Status(time.Now().UTC()); status.LastEventID != "" || !status.ResumeSupported {
+		t.Fatalf("status after boot change = %+v", status)
+	}
+
+	s.SetResumeState("new-boot:3", "new-boot", true)
+	hello.Capabilities.Features = nil
+	if err := s.processStreamRecord(context.Background(), hello); err != nil {
+		t.Fatal(err)
+	}
+	if status := s.Status(time.Now().UTC()); status.LastEventID != "" || status.ResumeSupported {
+		t.Fatalf("status without resume capability = %+v", status)
+	}
+}
+
+func TestSequenceGapReconnectsFromLastCursor(t *testing.T) {
+	s := New("http://igate.invalid/api/v1/aprs/stream", nil, nil)
+	s.SetResumeState("boot-1:4", "boot-1", true)
+	s.lastSequence = 4
+
+	event := streamRecord{
+		Protocol: "lora-aprs-json", ProtocolVersion: "1", Event: "rx",
+		EventID: "boot-1:6", BootID: "boot-1", Sequence: 6,
+	}
+	event.Packet.RawTNC2 = []byte("N0CALL>APRS:>gap")
+	err := s.processStreamRecord(context.Background(), event)
+	if err == nil || !strings.Contains(err.Error(), "sequence gap") {
+		t.Fatalf("processStreamRecord error = %v", err)
+	}
+	if status := s.Status(time.Now().UTC()); status.LastEventID != "boot-1:4" || status.RecordsReceived != 0 {
+		t.Fatalf("status after sequence gap = %+v", status)
+	}
+}
+
+func TestUnsupportedResumeResponseClearsPersistedCursor(t *testing.T) {
+	var requestedURL string
+	client := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		requestedURL = req.URL.String()
+		return &http.Response{
+			StatusCode: http.StatusBadRequest,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader(`{"code":"history_resume_unsupported"}`)),
+			Request:    req,
+		}, nil
+	})}
+	s := New("http://igate.invalid/api/v1/aprs/stream", client, nil)
+	s.SetResumeState("boot-1:9", "boot-1", true)
+	var persisted ResumeState
+	s.SetResumeHandler(func(state ResumeState) error {
+		persisted = state
+		return nil
+	})
+
+	if _, err := s.consumeOnce(context.Background(), s.Endpoint()); err == nil {
+		t.Fatal("consumeOnce succeeded, want HTTP 400")
+	}
+	if requestedURL != "http://igate.invalid/api/v1/aprs/stream?after=boot-1%3A9" {
+		t.Fatalf("requested URL = %q", requestedURL)
+	}
+	if persisted.EventID != "" || persisted.BootID != "" || persisted.Supported {
+		t.Fatalf("persisted state after HTTP 400 = %+v", persisted)
+	}
+	if got, err := s.resumeURL(s.Endpoint()); err != nil || got != s.Endpoint() {
+		t.Fatalf("URL after HTTP 400 = %q, err=%v", got, err)
+	}
+}
+
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }

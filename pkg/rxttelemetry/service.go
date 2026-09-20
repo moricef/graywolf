@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"mime"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -73,7 +74,12 @@ type streamRecord struct {
 	EventID         string `json:"event_id"`
 	BootID          string `json:"boot_id"`
 	Sequence        uint64 `json:"sequence"`
-	Receiver        struct {
+	RequestedAfter  string `json:"requested_after"`
+	Reason          string `json:"reason"`
+	Capabilities    struct {
+		Features []string `json:"features"`
+	} `json:"capabilities"`
+	Receiver struct {
 		Station string `json:"station"`
 	} `json:"receiver"`
 	Packet struct {
@@ -102,6 +108,15 @@ type RXEvent struct {
 
 type PacketHandler func(context.Context, RXEvent) error
 
+type ResumeState struct {
+	Endpoint  string
+	EventID   string
+	BootID    string
+	Supported bool
+}
+
+type ResumeHandler func(ResumeState) error
+
 type Link struct {
 	Hop
 	ObservedAt time.Time `json:"observed_at"`
@@ -117,6 +132,8 @@ type Status struct {
 	LastError       string     `json:"last_error,omitempty"`
 	RecordsReceived int        `json:"records_received"`
 	ActiveLinks     int        `json:"active_links"`
+	ResumeSupported bool       `json:"resume_supported"`
+	LastEventID     string     `json:"last_event_id,omitempty"`
 }
 
 type Service struct {
@@ -128,9 +145,10 @@ type Service struct {
 	logger   *slog.Logger
 	changed  chan struct{}
 
-	mu      sync.RWMutex
-	links   map[string]Link
-	handler PacketHandler
+	mu            sync.RWMutex
+	links         map[string]Link
+	handler       PacketHandler
+	resumeHandler ResumeHandler
 
 	lastAttempt     time.Time
 	lastSuccess     time.Time
@@ -138,6 +156,8 @@ type Service struct {
 	recordsReceived int
 	lastBootID      string
 	lastSequence    uint64
+	lastEventID     string
+	resumeSupported bool
 }
 
 func New(endpoint string, client *http.Client, logger *slog.Logger) *Service {
@@ -186,11 +206,40 @@ func (s *Service) SetEndpoint(endpoint string) {
 	s.recordsReceived = 0
 	s.lastBootID = ""
 	s.lastSequence = 0
+	s.lastEventID = ""
+	s.resumeSupported = false
+	resumeHandler := s.resumeHandler
+	state := s.resumeStateLocked()
 	s.mu.Unlock()
+	if resumeHandler != nil {
+		if err := resumeHandler(state); err != nil {
+			s.logger.Warn("persist reset RXT resume cursor", "err", err)
+		}
+	}
 	select {
 	case s.changed <- struct{}{}:
 	default:
 	}
+}
+
+func (s *Service) SetResumeState(eventID, bootID string, supported bool) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	s.lastEventID = eventID
+	s.lastBootID = bootID
+	s.resumeSupported = supported
+	s.mu.Unlock()
+}
+
+func (s *Service) SetResumeHandler(handler ResumeHandler) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	s.resumeHandler = handler
+	s.mu.Unlock()
 }
 
 func (s *Service) SetPacketHandler(handler PacketHandler) {
@@ -297,6 +346,7 @@ func (s *Service) Status(now time.Time) Status {
 	status := Status{
 		Enabled: s.endpoint != "", Endpoint: s.endpoint, LastError: s.lastError,
 		RecordsReceived: s.recordsReceived, ActiveLinks: len(s.links),
+		ResumeSupported: s.resumeSupported, LastEventID: s.lastEventID,
 	}
 	if !s.lastAttempt.IsZero() {
 		attempt := s.lastAttempt
@@ -332,7 +382,11 @@ func (s *Service) consumeOnce(ctx context.Context, endpoint string) (bool, error
 	s.mu.Lock()
 	s.lastAttempt = time.Now().UTC()
 	s.mu.Unlock()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	requestURL, resumed, err := s.resumeRequestURL(endpoint)
+	if err != nil {
+		return false, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
 		return false, err
 	}
@@ -343,6 +397,9 @@ func (s *Service) consumeOnce(ctx context.Context, endpoint string) (bool, error
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode == http.StatusBadRequest && resumed {
+			s.clearResumeState()
+		}
 		return false, fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 	mediaType, _, _ := mime.ParseMediaType(resp.Header.Get("Content-Type"))
@@ -350,6 +407,41 @@ func (s *Service) consumeOnce(ctx context.Context, endpoint string) (bool, error
 		return true, s.consumeStream(ctx, resp.Body)
 	}
 	return false, s.consumeLegacy(resp.Body)
+}
+
+func (s *Service) resumeURL(endpoint string) (string, error) {
+	requestURL, _, err := s.resumeRequestURL(endpoint)
+	return requestURL, err
+}
+
+func (s *Service) resumeRequestURL(endpoint string) (string, bool, error) {
+	u, err := url.Parse(endpoint)
+	if err != nil {
+		return "", false, err
+	}
+	s.mu.RLock()
+	eventID := s.lastEventID
+	supported := s.resumeSupported
+	s.mu.RUnlock()
+	if supported && eventID != "" {
+		query := u.Query()
+		query.Set("after", eventID)
+		u.RawQuery = query.Encode()
+		return u.String(), true, nil
+	}
+	return u.String(), false, nil
+}
+
+func (s *Service) clearResumeState() {
+	s.mu.Lock()
+	s.lastEventID = ""
+	s.lastBootID = ""
+	s.lastSequence = 0
+	s.resumeSupported = false
+	resumeHandler := s.resumeHandler
+	state := s.resumeStateLocked()
+	s.mu.Unlock()
+	s.persistResumeState(resumeHandler, state)
 }
 
 func (s *Service) consumeLegacy(body io.Reader) error {
@@ -402,11 +494,40 @@ func (s *Service) processStreamRecord(ctx context.Context, event streamRecord) e
 		s.mu.Lock()
 		s.lastSuccess = now
 		s.lastError = ""
+		resumeSupported := contains(event.Capabilities.Features, "history_resume")
 		if event.BootID != s.lastBootID {
 			s.lastBootID = event.BootID
 			s.lastSequence = 0
+			s.lastEventID = ""
 		}
+		if !resumeSupported {
+			s.lastEventID = ""
+		}
+		s.resumeSupported = resumeSupported
+		resumeHandler := s.resumeHandler
+		state := s.resumeStateLocked()
 		s.mu.Unlock()
+		s.persistResumeState(resumeHandler, state)
+		return nil
+	}
+	if event.Event == "heartbeat" {
+		s.mu.Lock()
+		s.lastSuccess = now
+		s.lastError = ""
+		s.mu.Unlock()
+		return nil
+	}
+	if event.Event == "gap" {
+		s.mu.Lock()
+		s.lastSuccess = now
+		s.lastError = ""
+		s.lastEventID = ""
+		s.lastSequence = 0
+		resumeHandler := s.resumeHandler
+		state := s.resumeStateLocked()
+		s.mu.Unlock()
+		s.logger.Warn("RXT history gap", "requested_after", event.RequestedAfter, "reason", event.Reason)
+		s.persistResumeState(resumeHandler, state)
 		return nil
 	}
 	if event.Event != "rx" {
@@ -415,8 +536,17 @@ func (s *Service) processStreamRecord(ctx context.Context, event streamRecord) e
 	if len(event.Packet.RawTNC2) == 0 {
 		return errors.New("rx record has no raw_tnc2_base64 payload")
 	}
+	if event.EventID == "" || event.BootID == "" || event.Sequence == 0 {
+		return errors.New("rx record has incomplete identity")
+	}
 
 	s.mu.Lock()
+	if event.BootID == s.lastBootID && s.lastSequence > 0 &&
+		event.Sequence > s.lastSequence+1 && s.resumeSupported && s.lastEventID != "" {
+		lastEventID := s.lastEventID
+		s.mu.Unlock()
+		return fmt.Errorf("rx sequence gap after %s: got %d", lastEventID, event.Sequence)
+	}
 	if event.BootID == s.lastBootID && event.Sequence <= s.lastSequence {
 		s.mu.Unlock()
 		return nil
@@ -466,7 +596,45 @@ func (s *Service) processStreamRecord(ctx context.Context, event streamRecord) e
 			s.logger.Debug("RXT packet delivery failed", "event_id", event.EventID, "err", err)
 		}
 	}
+
+	s.mu.Lock()
+	// SetEndpoint resets these values. Do not attach an event from a canceled
+	// connection to a newly configured producer.
+	if s.lastBootID != event.BootID || s.lastSequence != event.Sequence {
+		s.mu.Unlock()
+		return nil
+	}
+	s.lastEventID = event.EventID
+	resumeHandler := s.resumeHandler
+	state := s.resumeStateLocked()
+	s.mu.Unlock()
+	s.persistResumeState(resumeHandler, state)
 	return nil
+}
+
+func (s *Service) resumeStateLocked() ResumeState {
+	return ResumeState{
+		Endpoint: s.endpoint, EventID: s.lastEventID,
+		BootID: s.lastBootID, Supported: s.resumeSupported,
+	}
+}
+
+func (s *Service) persistResumeState(handler ResumeHandler, state ResumeState) {
+	if handler == nil {
+		return
+	}
+	if err := handler(state); err != nil {
+		s.logger.Warn("persist RXT resume cursor", "err", err)
+	}
+}
+
+func contains(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Service) storeLinkLocked(hop Hop, observed time.Time, packet string) {
