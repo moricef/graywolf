@@ -47,9 +47,19 @@ without terminating the stream. Their authoritative bytes are offered to the
 normal APRS pipeline, which rejects invalid TNC2 data without forwarding or
 digipeating it; later stream records continue to be processed normally.
 
-The source is intentionally receive-only in this pilot: TX, history resume,
-and heartbeat handling are not required. Sequence duplicates from the same
-producer boot are ignored after reconnect.
+The source is intentionally receive-only: Graywolf does not use the optional
+JSON TX API. It does handle heartbeat records and reliable history resume.
+When the producer advertises `history_resume`, Graywolf persists the last
+accepted `event_id` and reconnects with `after=<event_id>`. Replayed duplicates
+from the same producer boot are ignored. A `gap` record clears the stale cursor
+before subsequent live events establish a new one.
+
+Graywolf deliberately does not consume the producer's
+`GET /api/v1/aprs/events?limit=10` snapshot. That endpoint is intended for
+dashboard polling, not lossless ingestion; mixing it with the continuous
+stream would add a second source of duplicate and boundary handling. The
+Graywolf RXT page instead polls its local `/api/rxt/links` projection, which is
+populated from the continuous stream.
 
 ## Legacy endpoint compatibility
 
