@@ -98,6 +98,60 @@ func TestConsumeStreamDeliversPacketAndBuildsRXTAndLocalLinks(t *testing.T) {
 	}
 }
 
+func TestConsumeStreamAcceptsLegacyHopWithoutInventingMetrics(t *testing.T) {
+	tnc2 := []byte("F1SRC>APRS,F2LEG-1*,F3RXT-2*:>mixed")
+	hello := `{"protocol":"lora-aprs-json","protocol_version":"1","event":"hello","boot_id":"boot-mixed","latest_sequence":0}`
+	rx := fmt.Sprintf(`{"protocol":"lora-aprs-json","protocol_version":"1","event":"rx","event_id":"boot-mixed:1","boot_id":"boot-mixed","sequence":1,"receiver":{"station":"F4RX"},"packet":{"raw_tnc2_base64":%q,"tnc2":%q,"source":{"text":"F1SRC"},"path":[{"text":"F2LEG-1*","repeated":true},{"text":"F3RXT-2*","repeated":true}]},"reception":{"rxt":{"hops":[{"ordinal":1,"tx":"F1SRC","rx":"F2LEG-1","has_data":false},{"ordinal":2,"tx":"F2LEG-1","rx":"F3RXT-2","has_data":true,"rssi_dbm":-116,"snr_db":4.75,"frequency_error_hz":-1782,"tth_ms":6791}]}}}`,
+		base64.StdEncoding.EncodeToString(tnc2), string(tnc2))
+
+	s := New("http://igate.invalid/api/v1/aprs/stream", nil, nil)
+	if err := s.consumeStream(context.Background(), strings.NewReader(hello+"\n"+rx+"\n")); !errors.Is(err, io.ErrUnexpectedEOF) {
+		t.Fatalf("consumeStream error = %v, want unexpected EOF", err)
+	}
+	links := s.Snapshot(time.Now().UTC())
+	if len(links) != 1 {
+		t.Fatalf("got %d links, want only the measured RXT link: %+v", len(links), links)
+	}
+	if links[0].From != "F2LEG-1" || links[0].To != "F3RXT-2" || !links[0].HasData {
+		t.Fatalf("measured link = %+v", links[0])
+	}
+}
+
+func TestConsumeStreamContinuesAfterMalformedPacketHandlerError(t *testing.T) {
+	malformed := []byte("THIS IS BROKEN")
+	valid := []byte("N0CALL>APRS:>ok")
+	hello := `{"protocol":"lora-aprs-json","protocol_version":"1","event":"hello","boot_id":"boot-bad","latest_sequence":0}`
+	rx := func(sequence int, payload []byte, status string) string {
+		return fmt.Sprintf(`{"protocol":"lora-aprs-json","protocol_version":"1","event":"rx","event_id":"boot-bad:%d","boot_id":"boot-bad","sequence":%d,"receiver":{"station":"RX"},"packet":{"raw_tnc2_base64":%q,"parse_status":%q},"reception":{}}`,
+			sequence, sequence, base64.StdEncoding.EncodeToString(payload), status)
+	}
+	stream := strings.Join([]string{
+		hello,
+		rx(1, malformed, "malformed"),
+		rx(2, valid, "parsed"),
+		"",
+	}, "\n")
+
+	s := New("http://igate.invalid/api/v1/aprs/stream", nil, nil)
+	var delivered [][]byte
+	s.SetPacketHandler(func(_ context.Context, event RXEvent) error {
+		delivered = append(delivered, append([]byte(nil), event.TNC2...))
+		if string(event.TNC2) == string(malformed) {
+			return errors.New("not valid TNC2")
+		}
+		return nil
+	})
+	if err := s.consumeStream(context.Background(), strings.NewReader(stream)); !errors.Is(err, io.ErrUnexpectedEOF) {
+		t.Fatalf("consumeStream error = %v, want unexpected EOF", err)
+	}
+	if len(delivered) != 2 || string(delivered[0]) != string(malformed) || string(delivered[1]) != string(valid) {
+		t.Fatalf("delivered payloads = %q", delivered)
+	}
+	if got := s.Status(time.Now().UTC()).RecordsReceived; got != 2 {
+		t.Fatalf("RecordsReceived = %d, want 2", got)
+	}
+}
+
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }

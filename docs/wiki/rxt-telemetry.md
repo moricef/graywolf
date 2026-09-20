@@ -36,9 +36,16 @@ expire after 30 minutes.
 
 The endpoint emits one JSON object per line. Graywolf accepts `hello` control
 records and processes `rx` records from protocol family `1`. For every
-reception it keeps the declared RXT hops and also derives the final local link
-from the last repeated path station (or the packet source for a direct frame)
+reception it keeps the declared measured RXT links and also derives the final
+local link from the last repeated path station (or the packet source for a direct frame)
 to `receiver.station`, using `reception.local` RSSI, SNR, and frequency error.
+Legacy hops with `has_data:false` are accepted but are not drawn as measured
+links, because the stream deliberately provides no radio metrics for them.
+
+CRC-valid records marked `parse_status:"malformed"` are accepted and counted
+without terminating the stream. Their authoritative bytes are offered to the
+normal APRS pipeline, which rejects invalid TNC2 data without forwarding or
+digipeating it; later stream records continue to be processed normally.
 
 The source is intentionally receive-only in this pilot: TX, history resume,
 and heartbeat handling are not required. Sequence duplicates from the same

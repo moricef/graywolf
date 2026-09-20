@@ -84,6 +84,22 @@ func TestAPRSJSONIngressFeedsAPRSWithoutDigipeating(t *testing.T) {
 	}
 }
 
+func TestAPRSJSONIngressRejectsMalformedTNC2(t *testing.T) {
+	h := newKissTncHarness(t)
+	defer h.stop()
+
+	err := h.app.aprsJSONProduce(h.ctx, rxttelemetry.RXEvent{
+		EventID: "boot-1:2", BootID: "boot-1", Sequence: 2,
+		TNC2: []byte("THIS IS BROKEN"),
+	})
+	if err == nil {
+		t.Fatal("malformed TNC2 was accepted by the APRS pipeline")
+	}
+	if got := h.digiEmits.Len(); got != 0 {
+		t.Fatalf("malformed JSON ingress produced %d digipeater transmissions", got)
+	}
+}
+
 // TestDispatchRxFrameAudioLevelGating proves the source gating end-to-end:
 // a modem-RX frame lands in the packet log with its mark/space level
 // attached, while a hardware KISS-TNC frame (already demodulated, no
