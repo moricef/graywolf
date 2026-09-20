@@ -719,6 +719,7 @@ func (a *App) wireServicesInner(ctx context.Context) error {
 		}
 	}
 	a.rxtTelemetry = rxttelemetry.New(rxtCfg.Endpoint, nil, a.logger)
+	a.rxtTelemetry.SetPacketHandler(a.aprsJSONProduce)
 
 	// --- HTTP server ---------------------------------------------------
 	if err := a.wireHTTP(ctx); err != nil {
@@ -1930,7 +1931,7 @@ func (a *App) rxtTelemetryComponent() namedComponent {
 	return namedComponent{
 		name: "RXT telemetry",
 		start: func(ctx context.Context) error {
-			if a.rxtTelemetry == nil || !a.rxtTelemetry.Enabled() {
+			if a.rxtTelemetry == nil {
 				return nil
 			}
 			a.rxtWG.Add(1)
@@ -1938,7 +1939,7 @@ func (a *App) rxtTelemetryComponent() namedComponent {
 			return nil
 		},
 		stop: func(shutdownCtx context.Context) error {
-			if a.rxtTelemetry == nil || !a.rxtTelemetry.Enabled() {
+			if a.rxtTelemetry == nil {
 				return nil
 			}
 			return waitGroup(shutdownCtx, &a.rxtWG, "RXT telemetry")

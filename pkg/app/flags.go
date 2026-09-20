@@ -64,7 +64,7 @@ func parseFlagsTo(args []string, w io.Writer) (Config, error) {
 	fs.StringVar(&cfg.TileCacheDir, "tile-cache-dir", cfg.TileCacheDir,
 		"directory for offline PMTiles cache (created on startup if missing)")
 	fs.StringVar(&cfg.HTTPAddr, "http", cfg.HTTPAddr, "HTTP listen address")
-	fs.StringVar(&cfg.RXTEndpoint, "rxt-endpoint", "", "LoRa APRS iGate RXT JSON endpoint (for example http://192.168.1.161/rxt.json)")
+	fs.StringVar(&cfg.RXTEndpoint, "rxt-endpoint", "", "LoRa APRS JSON stream endpoint (for example http://192.168.1.161/api/v1/aprs/stream)")
 	fs.StringVar(&cfg.PprofAddr, "pprof", "",
 		"optional pprof debug listen address (e.g. 127.0.0.1:6060); empty disables pprof")
 	fs.DurationVar(&cfg.ShutdownTimeout, "shutdown-timeout", cfg.ShutdownTimeout,

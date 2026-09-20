@@ -2,8 +2,13 @@ package rxttelemetry
 
 import (
 	"context"
+	"encoding/base64"
+	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -48,5 +53,91 @@ func TestSnapshotExpiresLinks(t *testing.T) {
 	s.links["A>B"] = Link{Hop: Hop{From: "A", To: "B", HasData: true}, ObservedAt: now.Add(-DefaultLinkTTL - time.Second)}
 	if got := s.Snapshot(now); len(got) != 0 {
 		t.Fatalf("got %d expired links", len(got))
+	}
+}
+
+func TestConsumeStreamDeliversPacketAndBuildsRXTAndLocalLinks(t *testing.T) {
+	tnc2 := []byte("F6ZDD-10>APLRG1,F4MLV-10*,WIDE2-1:!L84^@O(dt# test")
+	hello := `{"protocol":"lora-aprs-json","protocol_version":"1","schema_version":"1.0","event":"hello","boot_id":"boot-1","latest_sequence":12}`
+	rx := fmt.Sprintf(`{"protocol":"lora-aprs-json","protocol_version":"1","schema_version":"1.0","event":"rx","event_id":"boot-1:13","boot_id":"boot-1","sequence":13,"receiver":{"station":"F4MLV-2"},"packet":{"raw_tnc2_base64":%q,"tnc2":%q,"source":{"text":"F6ZDD-10"},"path":[{"text":"F4MLV-10*","repeated":true},{"text":"WIDE2-1","repeated":false}]},"reception":{"local":{"rssi_dbm":-69,"snr_db":9.5,"frequency_error_hz":2062},"rxt":{"hops":[{"ordinal":1,"tx":"F6ZDD-10","rx":"F4MLV-10","has_data":true,"rssi_dbm":-116,"snr_db":4.75,"frequency_error_hz":-1782,"tth_ms":6791}]}}}`,
+		base64.StdEncoding.EncodeToString(tnc2), string(tnc2))
+	stream := hello + "\n" + rx + "\n"
+
+	s := New("http://igate.invalid/api/v1/aprs/stream", nil, nil)
+	var delivered []RXEvent
+	s.SetPacketHandler(func(_ context.Context, event RXEvent) error {
+		delivered = append(delivered, event)
+		return nil
+	})
+	err := s.consumeStream(context.Background(), strings.NewReader(stream))
+	if !errors.Is(err, io.ErrUnexpectedEOF) {
+		t.Fatalf("consumeStream error = %v, want unexpected EOF", err)
+	}
+	if len(delivered) != 1 || string(delivered[0].TNC2) != string(tnc2) {
+		t.Fatalf("delivered = %+v", delivered)
+	}
+	links := s.Snapshot(time.Now().UTC())
+	if len(links) != 2 {
+		t.Fatalf("got %d links, want RXT + local links: %+v", len(links), links)
+	}
+	got := make(map[string]Link, len(links))
+	for _, link := range links {
+		got[link.From+">"+link.To] = link
+	}
+	if got["F6ZDD-10>F4MLV-10"].TTH != 6791 {
+		t.Fatalf("RXT link = %+v", got["F6ZDD-10>F4MLV-10"])
+	}
+	if local := got["F4MLV-10>F4MLV-2"]; local.RSSI != -69 || local.FO != 2062 {
+		t.Fatalf("local link = %+v", local)
+	}
+
+	// Replaying the same boot/sequence must not inject or count it twice.
+	_ = s.consumeStream(context.Background(), strings.NewReader(stream))
+	if len(delivered) != 1 || s.Status(time.Now().UTC()).RecordsReceived != 1 {
+		t.Fatalf("duplicate was accepted: delivered=%d status=%+v", len(delivered), s.Status(time.Now().UTC()))
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
+
+func TestRunStartsAfterRuntimeConfigurationAndReconnects(t *testing.T) {
+	calls := make(chan struct{}, 4)
+	hello := `{"protocol":"lora-aprs-json","protocol_version":"1","schema_version":"1.0","event":"hello","boot_id":"boot-1","latest_sequence":0}` + "\n"
+	client := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if accept := req.Header.Get("Accept"); !strings.Contains(accept, "application/x-ndjson") {
+			t.Errorf("Accept = %q", accept)
+		}
+		calls <- struct{}{}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"application/x-ndjson"}},
+			Body:       io.NopCloser(strings.NewReader(hello)),
+			Request:    req,
+		}, nil
+	})}
+	s := New("", client, nil)
+	s.retry = 5 * time.Millisecond
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		s.Run(ctx)
+		close(done)
+	}()
+
+	s.SetEndpoint("http://igate.invalid/api/v1/aprs/stream")
+	for attempt := 1; attempt <= 2; attempt++ {
+		select {
+		case <-calls:
+		case <-time.After(time.Second):
+			t.Fatalf("timed out waiting for connection attempt %d", attempt)
+		}
+	}
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("Run did not stop after cancellation")
 	}
 }

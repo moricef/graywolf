@@ -21,8 +21,9 @@ import (
 // fields must be added here rather than threaded through Run as extra
 // parameters.
 type Config struct {
-	// RXTEndpoint is an optional LoRa APRS iGate /rxt.json URL. When set,
-	// Graywolf polls it and exposes resolved RXT links to the live map.
+	// RXTEndpoint is an optional LoRa APRS JSON stream URL. Graywolf consumes
+	// APRS packets and radio metadata from it; legacy /rxt.json URLs remain
+	// supported for link telemetry only.
 	RXTEndpoint string
 
 	// DBPath is the path to the SQLite config database (-config).

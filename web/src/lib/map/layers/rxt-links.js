@@ -55,7 +55,8 @@ export function mountRXTLinksLayer(map, { visible = true } = {}) {
     const title = document.createElement('strong');
     title.textContent = `${p.from} → ${p.to}`;
     const metrics = document.createElement('div');
-    metrics.textContent = `RSSI ${p.rssi_dbm} dBm · SNR ${Number(p.snr_db).toFixed(2)} dB · FO ${p.fo_hz} Hz · TTH ${p.tth_ms} ms`;
+    const tth = p.tth_ms == null ? '—' : `${p.tth_ms} ms`;
+    metrics.textContent = `RSSI ${p.rssi_dbm} dBm · SNR ${Number(p.snr_db).toFixed(2)} dB · FO ${p.fo_hz} Hz · TTH ${tth}`;
     body.append(title, metrics);
     popup = new maplibregl.Popup({ offset: 8, maxWidth: '360px' })
       .setLngLat(event.lngLat).setDOMContent(body).addTo(map);

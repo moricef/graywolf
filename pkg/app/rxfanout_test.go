@@ -7,6 +7,7 @@ import (
 	"github.com/chrissnell/graywolf/pkg/app/ingress"
 	pb "github.com/chrissnell/graywolf/pkg/ipcproto"
 	"github.com/chrissnell/graywolf/pkg/packetlog"
+	"github.com/chrissnell/graywolf/pkg/rxttelemetry"
 )
 
 func TestAudioLevelFromFrame(t *testing.T) {
@@ -51,6 +52,35 @@ func TestAudioLevelFromFrame(t *testing.T) {
 					got.MarkDBFS, got.SpaceDBFS, got.LevelDBFS, tt.wantMarkDB, tt.wantSpaceDB, tt.wantLevelDB)
 			}
 		})
+	}
+}
+
+func TestAPRSJSONIngressFeedsAPRSWithoutDigipeating(t *testing.T) {
+	h := newKissTncHarness(t)
+	defer h.stop()
+
+	event := rxttelemetry.RXEvent{
+		EventID: "boot-1:1", BootID: "boot-1", Sequence: 1,
+		TNC2: []byte("KD7ABC-1>APRS,WIDE2-2:!4000.00N/10500.00W>json"),
+	}
+	if err := h.app.aprsJSONProduce(h.ctx, event); err != nil {
+		t.Fatalf("aprsJSONProduce: %v", err)
+	}
+	h.waitDispatched(1, 2*time.Second)
+	select {
+	case pkt := <-h.aprsOut:
+		if pkt.Source != "KD7ABC-1" {
+			t.Fatalf("source = %q", pkt.Source)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("JSON packet did not reach APRS output")
+	}
+	if got := h.digiEmits.Len(); got != 0 {
+		t.Fatalf("JSON ingress produced %d digipeater transmissions", got)
+	}
+	entries := h.app.plog.Query(packetlog.Filter{Channel: -1})
+	if len(entries) != 1 || entries[0].Source != "aprs-json" {
+		t.Fatalf("packet log = %+v", entries)
 	}
 }
 

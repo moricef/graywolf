@@ -83,12 +83,12 @@
 
 <Box title="iGate endpoint">
   <form class="config" onsubmit={(event) => { event.preventDefault(); saveConfig(); }}>
-    <label for="rxt-endpoint">RXT JSON URL</label>
+    <label for="rxt-endpoint">LoRa APRS JSON URL</label>
     <div class="config-row">
-      <Input id="rxt-endpoint" type="url" bind:value={endpoint} disabled={loading} placeholder="http://192.168.1.161/rxt.json" />
+      <Input id="rxt-endpoint" type="url" bind:value={endpoint} disabled={loading} placeholder="http://192.168.1.161/api/v1/aprs/stream" />
       <Button variant="primary" type="submit" disabled={loading || saving}>{saving ? 'Saving…' : 'Save'}</Button>
     </div>
-    <p class="hint">Graywolf polls this iGate endpoint every five seconds. Leave it empty to disable RXT polling.</p>
+    <p class="hint">Graywolf continuously consumes the NDJSON stream and reconnects automatically. Legacy /rxt.json polling remains supported. Leave it empty to disable the source.</p>
     {#if saved}<p class="saved">Saved and applied.</p>{/if}
   </form>
 </Box>

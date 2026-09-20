@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"math"
 
 	"github.com/chrissnell/graywolf/pkg/app/ingress"
@@ -9,8 +10,32 @@ import (
 	"github.com/chrissnell/graywolf/pkg/ax25"
 	pb "github.com/chrissnell/graywolf/pkg/ipcproto"
 	"github.com/chrissnell/graywolf/pkg/packetlog"
+	"github.com/chrissnell/graywolf/pkg/rxttelemetry"
 	"github.com/chrissnell/graywolf/pkg/stationcache"
 )
+
+// aprsJSONProduce converts the stream's authoritative TNC2 bytes back into a
+// canonical AX.25 UI frame and feeds the normal APRS receive pipeline. JSON
+// ingress is tagged separately so it cannot be echoed to KISS or digipeated.
+func (a *App) aprsJSONProduce(ctx context.Context, event rxttelemetry.RXEvent) error {
+	frame, err := aprs.ParseTNC2(event.TNC2)
+	if err != nil {
+		return fmt.Errorf("parse TNC2: %w", err)
+	}
+	raw, err := frame.Encode()
+	if err != nil {
+		return fmt.Errorf("encode AX.25: %w", err)
+	}
+	select {
+	case a.rxFanout <- rxFanoutItem{
+		rf:  &pb.ReceivedFrame{Data: raw},
+		src: ingress.APRSJSON(),
+	}:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
 
 // kissTncProduce is the RxIngress callback wired into kiss.Manager. It
 // performs a non-blocking send of (rf, src) onto the shared rxFanout
@@ -94,13 +119,11 @@ func toDBFS(amp float64) float64 {
 	return db
 }
 
-// dispatchRxFrame runs the fanout consumer's per-frame work: KISS
-// broadcast (with self-echo suppression for KISS-TNC sources), digi
-// handling, AGW monitoring, APRS decode + submit, station cache
-// update, and packet-log recording. Source-specific differences are
-// limited to the broadcast skip arguments and the packetlog "source"
-// string; all other subscribers treat KISS-TNC frames identically to
-// modem-RX frames, which is the D2 invariant.
+// dispatchRxFrame runs the fanout consumer's per-frame work: KISS broadcast,
+// digi handling, AGW monitoring, APRS decode + submit, station cache update,
+// and packet-log recording. Modem and KISS-TNC inputs take the full physical
+// ingress path. APRS JSON input begins at the APRS layer and therefore skips
+// KISS, AGW and digi forwarding to prevent loops.
 func (a *App) dispatchRxFrame(ctx context.Context, item rxFanoutItem, aprsSubmit *aprsSubmitter) {
 	rf := item.rf
 	src := item.src
@@ -116,6 +139,8 @@ func (a *App) dispatchRxFrame(ctx context.Context, item rxFanoutItem, aprsSubmit
 		logSource = "kiss-tnc"
 		skipID = src.ID
 		skip = true
+	case ingress.KindAPRSJSON:
+		logSource = "aprs-json"
 	default:
 		if a.logger != nil {
 			a.logger.Warn("rx fanout: unknown ingress kind; dropping frame",
@@ -124,7 +149,11 @@ func (a *App) dispatchRxFrame(ctx context.Context, item rxFanoutItem, aprsSubmit
 		return
 	}
 
-	a.kissMgr.BroadcastFromChannel(rf.Channel, rf.Data, skipID, skip)
+	// A JSON stream is already an application-level copy of a remote RF
+	// reception. Re-broadcasting or digipeating it would create loops.
+	if src.Kind != ingress.KindAPRSJSON {
+		a.kissMgr.BroadcastFromChannel(rf.Channel, rf.Data, skipID, skip)
+	}
 
 	// Per-packet audio level comes from the soundcard demodulator only.
 	// Hardware KISS-TNC frames arrive already demodulated, so they carry no
@@ -168,10 +197,12 @@ func (a *App) dispatchRxFrame(ctx context.Context, item rxFanoutItem, aprsSubmit
 	}
 
 	if f.IsUI() {
-		if srv := a.currentAgwServer(); srv != nil {
-			srv.BroadcastMonitoredUI(uint8(rf.Channel), f)
+		if src.Kind != ingress.KindAPRSJSON {
+			if srv := a.currentAgwServer(); srv != nil {
+				srv.BroadcastMonitoredUI(uint8(rf.Channel), f)
+			}
+			a.digi.Handle(ctx, rf.Channel, f, src)
 		}
-		a.digi.Handle(ctx, rf.Channel, f, src)
 		if pkt, err := aprs.Parse(f); err == nil && pkt != nil {
 			pkt.Channel = int(rf.Channel)
 			pkt.Direction = aprs.DirectionRF

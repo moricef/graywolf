@@ -25,7 +25,7 @@ roles.
 - [`glossary.md`](glossary.md) -- domain terms as graywolf uses them, with source pointers.
 - [`actions.md`](actions.md) -- the `@@`-prefixed APRS Actions subsystem: trigger surface, classifier topology, source-aware reply, lifecycle, schema.
 - [`remote-actions.md`](remote-actions.md) -- outbound Actions: macro + remote-OTP credential CRUD; the Messages drawer that fires `@@<otp>#<action>` at remote stations.
-- [`rxt-telemetry.md`](rxt-telemetry.md) -- LoRa APRS RXT JSON input, configuration, health status, link lifetime, and portable Windows setup.
+- [`rxt-telemetry.md`](rxt-telemetry.md) -- LoRa APRS NDJSON/RXT input, APRS delivery, configuration, health status, link lifetime, and portable Windows setup.
 
 ## Maintenance
 

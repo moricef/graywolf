@@ -507,8 +507,8 @@ type UpdatesConfig struct {
 	UpdatedAt time.Time `json:"-"`
 }
 
-// RXTConfig stores the optional LoRa APRS iGate JSON side-channel URL.
-// Singleton at id=1; an empty endpoint disables RXT polling.
+// RXTConfig stores the optional LoRa APRS JSON source URL. Singleton at id=1;
+// an empty endpoint disables stream consumption and legacy RXT polling.
 type RXTConfig struct {
 	ID        uint32    `gorm:"primaryKey;autoIncrement" json:"id"`
 	Endpoint  string    `gorm:"not null;default:''" json:"endpoint"`

@@ -53,3 +53,21 @@ func TestFormatTNC2(t *testing.T) {
 		})
 	}
 }
+
+func TestParseTNC2PreservesPathAndBinaryInfo(t *testing.T) {
+	raw := append([]byte("F4ABC-7>APRS,WIDE1-1*,WIDE2-1:"), '\'', 0x80, 0xff, 0x00)
+	frame, err := ParseTNC2(raw)
+	if err != nil {
+		t.Fatalf("ParseTNC2: %v", err)
+	}
+	if got := frame.Source.String(); got != "F4ABC-7" {
+		t.Fatalf("source = %q", got)
+	}
+	if len(frame.Path) != 2 || !frame.Path[0].Repeated || frame.Path[1].Repeated {
+		t.Fatalf("path = %+v", frame.Path)
+	}
+	wantInfo := []byte{'\'', 0x80, 0xff, 0x00}
+	if string(frame.Info) != string(wantInfo) {
+		t.Fatalf("info = %x, want %x", frame.Info, wantInfo)
+	}
+}
