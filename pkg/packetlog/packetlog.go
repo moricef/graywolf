@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/chrissnell/graywolf/pkg/aprs"
+	"github.com/chrissnell/graywolf/pkg/rxttelemetry"
 )
 
 // Direction labels a packet's flow.
@@ -40,6 +41,9 @@ type Entry struct {
 	Type string `json:"type,omitempty"`
 	// Decoded is the parsed APRS payload when decoding succeeded; nil otherwise.
 	Decoded *aprs.DecodedAPRSPacket `json:"decoded,omitempty"`
+	// APRSJSON preserves the complete LoRa APRS JSON reception independently
+	// of TNC2 parsing, APRS decoding and classic AX.25 representability.
+	APRSJSON *rxttelemetry.RawReception `json:"aprs_json,omitempty"`
 	// Notes is a short annotation describing how this entry was handled (e.g. "deduped", "rate-limited", "digi consumed WIDE1-1").
 	Notes string `json:"notes,omitempty"`
 	// AudioLevel is the demodulator's per-packet received audio level (dBFS,

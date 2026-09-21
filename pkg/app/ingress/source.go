@@ -19,9 +19,6 @@ const (
 	// KindKissTnc is a frame ingested from a KISS interface configured
 	// in TNC mode (i.e. an off-air RX source, not a TX peer).
 	KindKissTnc
-	// KindAPRSJSON is a clean packet delivered by a remote LoRa APRS JSON
-	// stream. It feeds APRS consumers but is not rebroadcast or digipeated.
-	KindAPRSJSON
 )
 
 // Source identifies where an RX frame entered graywolf. ID is the
@@ -37,9 +34,6 @@ func Modem() Source { return Source{Kind: KindModem} }
 // KissTnc returns a Source tagging a frame as coming from the KISS-TNC
 // interface with the given DB row ID.
 func KissTnc(ifaceID uint32) Source { return Source{Kind: KindKissTnc, ID: ifaceID} }
-
-// APRSJSON returns a Source tagging a packet from the LoRa APRS JSON stream.
-func APRSJSON() Source { return Source{Kind: KindAPRSJSON} }
 
 // IsKissTnc reports whether this Source is the KISS-TNC interface with
 // the given ID. Used by the broadcast subscriber to suppress echo back

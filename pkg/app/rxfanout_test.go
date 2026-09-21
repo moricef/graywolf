@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -8,6 +9,8 @@ import (
 	pb "github.com/chrissnell/graywolf/pkg/ipcproto"
 	"github.com/chrissnell/graywolf/pkg/packetlog"
 	"github.com/chrissnell/graywolf/pkg/rxttelemetry"
+	"github.com/chrissnell/graywolf/pkg/stationcache"
+	"github.com/chrissnell/graywolf/pkg/tnc2"
 )
 
 func TestAudioLevelFromFrame(t *testing.T) {
@@ -55,48 +58,108 @@ func TestAudioLevelFromFrame(t *testing.T) {
 	}
 }
 
-func TestAPRSJSONIngressFeedsAPRSWithoutDigipeating(t *testing.T) {
+func TestAPRSJSONIngressFeedsPassiveSemanticsWithoutOutput(t *testing.T) {
 	h := newKissTncHarness(t)
 	defer h.stop()
 
-	event := rxttelemetry.RXEvent{
+	raw := []byte("KD7ABC-16>APRS,WIDE2-2:!4000.00N/10500.00W>json")
+	packet, err := tnc2.Parse(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	event := rxttelemetry.RawReception{
 		EventID: "boot-1:1", BootID: "boot-1", Sequence: 1,
-		TNC2: []byte("KD7ABC-1>APRS,WIDE2-2:!4000.00N/10500.00W>json"),
+		RawTNC2: raw, ParseStatus: "parsed", Packet: packet,
 	}
 	if err := h.app.aprsJSONProduce(h.ctx, event); err != nil {
 		t.Fatalf("aprsJSONProduce: %v", err)
 	}
-	h.waitDispatched(1, 2*time.Second)
 	select {
 	case pkt := <-h.aprsOut:
-		if pkt.Source != "KD7ABC-1" {
-			t.Fatalf("source = %q", pkt.Source)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("JSON packet did not reach APRS output")
+		t.Fatalf("receive-only JSON ingress reached APRS output: %+v", pkt)
+	default:
 	}
 	if got := h.digiEmits.Len(); got != 0 {
 		t.Fatalf("JSON ingress produced %d digipeater transmissions", got)
 	}
 	entries := h.app.plog.Query(packetlog.Filter{Channel: -1})
-	if len(entries) != 1 || entries[0].Source != "aprs-json" {
+	if len(entries) != 1 || entries[0].Source != "aprs-json" || entries[0].APRSJSON == nil {
 		t.Fatalf("packet log = %+v", entries)
+	}
+	if entries[0].Decoded == nil || entries[0].Decoded.Source != "KD7ABC-16" {
+		t.Fatalf("extended source was not preserved in APRS semantics: %+v", entries[0].Decoded)
 	}
 }
 
-func TestAPRSJSONIngressRejectsMalformedTNC2(t *testing.T) {
+func TestAPRSJSONIngressPreservesMalformedReception(t *testing.T) {
 	h := newKissTncHarness(t)
 	defer h.stop()
 
-	err := h.app.aprsJSONProduce(h.ctx, rxttelemetry.RXEvent{
+	err := h.app.aprsJSONProduce(h.ctx, rxttelemetry.RawReception{
 		EventID: "boot-1:2", BootID: "boot-1", Sequence: 2,
-		TNC2: []byte("THIS IS BROKEN"),
+		RawTNC2: []byte("THIS IS BROKEN"), ParseStatus: "malformed",
 	})
-	if err == nil {
-		t.Fatal("malformed TNC2 was accepted by the APRS pipeline")
+	if err != nil {
+		t.Fatalf("malformed protocol reception was not retained: %v", err)
 	}
 	if got := h.digiEmits.Len(); got != 0 {
 		t.Fatalf("malformed JSON ingress produced %d digipeater transmissions", got)
+	}
+	entries := h.app.plog.Query(packetlog.Filter{Channel: -1})
+	if len(entries) != 1 || entries[0].APRSJSON == nil || entries[0].Decoded != nil || string(entries[0].APRSJSON.RawTNC2) != "THIS IS BROKEN" {
+		t.Fatalf("malformed packet log = %+v", entries)
+	}
+}
+
+func TestAPRSJSONRepresentablePacketStillDoesNotAuthorizeOutput(t *testing.T) {
+	h := newKissTncHarness(t)
+	defer h.stop()
+
+	raw := []byte("N0CALL-15>APRS:>receive only")
+	packet, err := tnc2.Parse(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.app.aprsJSONProduce(h.ctx, rxttelemetry.RawReception{
+		EventID: "boot-output:1", BootID: "boot-output", Sequence: 1,
+		RawTNC2: raw, ParseStatus: "parsed", Packet: packet,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case pkt := <-h.aprsOut:
+		t.Fatalf("representable JSON ingress reached APRS output: %+v", pkt)
+	default:
+	}
+	if h.digiEmits.Len() != 0 {
+		t.Fatal("representable JSON ingress reached RF/digipeater output")
+	}
+}
+
+func TestAPRSJSONExtendedIdentityUsesOneStationCacheKey(t *testing.T) {
+	h := newKissTncHarness(t)
+	defer h.stop()
+
+	for sequence, raw := range [][]byte{
+		[]byte("NN7LE-GS>APRS:!4000.00N/10500.00W>first"),
+		[]byte("NN7LE-GS>APRS:!4001.00N/10501.00W>second"),
+	} {
+		packet, err := tnc2.Parse(raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := h.app.aprsJSONProduce(h.ctx, rxttelemetry.RawReception{
+			EventID: "boot-identity:" + fmt.Sprint(sequence+1), BootID: "boot-identity",
+			Sequence: uint64(sequence + 1), RawTNC2: raw, ParseStatus: "parsed", Packet: packet,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	stations := h.app.stationCache.QueryBBox(stationcache.BBox{
+		SwLat: -90, SwLon: -180, NeLat: 90, NeLon: 180,
+	}, time.Hour)
+	if len(stations) != 1 || stations[0].Callsign != "NN7LE-GS" {
+		t.Fatalf("station cache identities = %+v", stations)
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"strings"
 
 	"github.com/chrissnell/graywolf/pkg/app/ingress"
 	"github.com/chrissnell/graywolf/pkg/aprs"
@@ -14,27 +15,52 @@ import (
 	"github.com/chrissnell/graywolf/pkg/stationcache"
 )
 
-// aprsJSONProduce converts the stream's authoritative TNC2 bytes back into a
-// canonical AX.25 UI frame and feeds the normal APRS receive pipeline. JSON
-// ingress is tagged separately so it cannot be echoed to KISS or digipeated.
-func (a *App) aprsJSONProduce(ctx context.Context, event rxttelemetry.RXEvent) error {
-	frame, err := aprs.ParseTNC2(event.TNC2)
-	if err != nil {
-		return fmt.Errorf("parse TNC2: %w", err)
+// aprsJSONProduce preserves a protocol reception before the stream cursor can
+// advance. Parsed envelopes feed passive APRS semantics (packet log, station
+// cache and map) directly from their textual model. They never enter an AX.25
+// output fanout merely because an address happens to be representable.
+func (a *App) aprsJSONProduce(ctx context.Context, reception rxttelemetry.RawReception) error {
+	if err := ctx.Err(); err != nil {
+		return err
 	}
-	raw, err := frame.Encode()
-	if err != nil {
-		return fmt.Errorf("encode AX.25: %w", err)
+	if a.plog == nil {
+		return fmt.Errorf("APRS JSON packet log is unavailable")
 	}
-	select {
-	case a.rxFanout <- rxFanoutItem{
-		rf:  &pb.ReceivedFrame{Data: raw},
-		src: ingress.APRSJSON(),
-	}:
+
+	entry := packetlog.Entry{
+		Direction: packetlog.DirRX,
+		Source:    "aprs-json",
+		Display:   string(reception.RawTNC2),
+		APRSJSON:  &reception,
+	}
+	if reception.Packet == nil {
+		entry.Notes = "TNC2 envelope unavailable (" + reception.ParseStatus + ")"
+		if len(reception.Warnings) > 0 {
+			entry.Notes += ": " + strings.Join(reception.Warnings, "; ")
+		}
+		a.plog.Record(entry)
 		return nil
-	case <-ctx.Done():
-		return ctx.Err()
 	}
+
+	pkt, err := aprs.ParseTNC2Packet(reception.Packet)
+	if err != nil {
+		entry.Notes = "APRS decode: " + err.Error()
+		a.plog.Record(entry)
+		return nil
+	}
+	pkt.Direction = aprs.DirectionRF
+	entry.Type = string(pkt.Type)
+	entry.Decoded = pkt
+	if a.stationCache != nil {
+		if entries := stationcache.ExtractEntry(pkt, "aprs-json", "RX", 0); len(entries) > 0 {
+			a.stationCache.Update(entries)
+		}
+		if ev, ok := stationcache.BuildRxEvent(pkt); ok {
+			a.stationCache.RecordRxEvent(ev)
+		}
+	}
+	a.plog.Record(entry)
+	return nil
 }
 
 // kissTncProduce is the RxIngress callback wired into kiss.Manager. It
@@ -121,9 +147,9 @@ func toDBFS(amp float64) float64 {
 
 // dispatchRxFrame runs the fanout consumer's per-frame work: KISS broadcast,
 // digi handling, AGW monitoring, APRS decode + submit, station cache update,
-// and packet-log recording. Modem and KISS-TNC inputs take the full physical
-// ingress path. APRS JSON input begins at the APRS layer and therefore skips
-// KISS, AGW and digi forwarding to prevent loops.
+// and packet-log recording. This fanout accepts physical modem and KISS-TNC
+// inputs. LoRa APRS JSON receptions use the separate receive-only textual
+// path in aprsJSONProduce and cannot enter this AX.25 output path.
 func (a *App) dispatchRxFrame(ctx context.Context, item rxFanoutItem, aprsSubmit *aprsSubmitter) {
 	rf := item.rf
 	src := item.src
@@ -139,8 +165,6 @@ func (a *App) dispatchRxFrame(ctx context.Context, item rxFanoutItem, aprsSubmit
 		logSource = "kiss-tnc"
 		skipID = src.ID
 		skip = true
-	case ingress.KindAPRSJSON:
-		logSource = "aprs-json"
 	default:
 		if a.logger != nil {
 			a.logger.Warn("rx fanout: unknown ingress kind; dropping frame",
@@ -149,11 +173,7 @@ func (a *App) dispatchRxFrame(ctx context.Context, item rxFanoutItem, aprsSubmit
 		return
 	}
 
-	// A JSON stream is already an application-level copy of a remote RF
-	// reception. Re-broadcasting or digipeating it would create loops.
-	if src.Kind != ingress.KindAPRSJSON {
-		a.kissMgr.BroadcastFromChannel(rf.Channel, rf.Data, skipID, skip)
-	}
+	a.kissMgr.BroadcastFromChannel(rf.Channel, rf.Data, skipID, skip)
 
 	// Per-packet audio level comes from the soundcard demodulator only.
 	// Hardware KISS-TNC frames arrive already demodulated, so they carry no
@@ -197,12 +217,10 @@ func (a *App) dispatchRxFrame(ctx context.Context, item rxFanoutItem, aprsSubmit
 	}
 
 	if f.IsUI() {
-		if src.Kind != ingress.KindAPRSJSON {
-			if srv := a.currentAgwServer(); srv != nil {
-				srv.BroadcastMonitoredUI(uint8(rf.Channel), f)
-			}
-			a.digi.Handle(ctx, rf.Channel, f, src)
+		if srv := a.currentAgwServer(); srv != nil {
+			srv.BroadcastMonitoredUI(uint8(rf.Channel), f)
 		}
+		a.digi.Handle(ctx, rf.Channel, f, src)
 		if pkt, err := aprs.Parse(f); err == nil && pkt != nil {
 			pkt.Channel = int(rf.Channel)
 			pkt.Direction = aprs.DirectionRF

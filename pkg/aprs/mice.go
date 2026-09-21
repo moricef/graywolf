@@ -23,8 +23,6 @@ package aprs
 import (
 	"errors"
 	"strings"
-
-	"github.com/chrissnell/graywolf/pkg/ax25"
 )
 
 // Mic-E message labels indexed by the 3-bit message code (ABC bits
@@ -42,12 +40,12 @@ var miceMessageLabels = [8]string{
 	"Returning", "In Service", "En Route", "Off Duty",
 }
 
-// parseMicE is invoked when the info field starts with '\'' or '`'.
-// The frame is required to pull the latitude from the destination
-// address; if it's nil (e.g. ParseInfo without a frame) we bail.
-func parseMicE(pkt *DecodedAPRSPacket, info []byte, frame *ax25.Frame) error {
-	if frame == nil {
-		return errors.New("aprs: mic-e requires frame")
+// parseMicE is invoked when the info field starts with '\” or '`'.
+// The textual destination call is required to pull the latitude. Keeping it
+// as text lets the semantic decoder work without an enclosing AX.25 frame.
+func parseMicE(pkt *DecodedAPRSPacket, info []byte, dest string) error {
+	if dest == "" {
+		return errors.New("aprs: mic-e requires destination")
 	}
 	// info[0] is the Mic-E type byte ('`' current, '\'' old). The
 	// actual payload — longitude, speed/course, symbol — starts at
@@ -57,7 +55,6 @@ func parseMicE(pkt *DecodedAPRSPacket, info []byte, frame *ax25.Frame) error {
 		return errors.New("aprs: mic-e info too short")
 	}
 	body := info[1:]
-	dest := frame.Dest.Call
 	if len(dest) != 6 {
 		return errors.New("aprs: mic-e destination not 6 chars")
 	}

@@ -1,7 +1,8 @@
 # LoRa APRS JSON full compatibility TODO
 
-Status: paused at the user's request on 2026-09-20. Architectural review
-incorporated on 2026-09-21; no implementation has started.
+Status: implemented on 2026-09-21. The architecture review is incorporated,
+the focused compatibility suite passes, and the operator/wiki documentation
+describes the implemented behavior.
 
 ## Objective
 
@@ -30,9 +31,10 @@ alphanumeric suffixes, graphical application integration, and possible use
 with TNC2-compatible non-APRS packet-radio applications. JSON is the modern
 application interface; it is not the current on-air RF encoding.
 
-## Current defect
+## Defect addressed
 
-The JSON service correctly decodes `packet.raw_tnc2_base64`, but
+Before this implementation, the JSON service decoded
+`packet.raw_tnc2_base64`, but
 `app.aprsJSONProduce` immediately calls `aprs.ParseTNC2`. That parser converts
 every address through `ax25.ParseAddress`, which requires a 1-6 character
 callsign and a numeric SSID in the range 0-15. The frame is then encoded back
@@ -137,29 +139,29 @@ type TNC2Packet struct {
 
 ## Ordered implementation checklist
 
-1. [ ] Introduce the lossless `RawReception` model and preserve every
+1. [x] Introduce the lossless `RawReception` model and preserve every
        schema-valid `rx`, including `parse_status:"malformed"`.
-2. [ ] Introduce `PacketAddress` and optional `TNC2Packet` without numeric or
+2. [x] Introduce `PacketAddress` and optional `TNC2Packet` without numeric or
        AX.25-derived limits.
-3. [ ] Add a lossless extended-TNC2 parser that preserves raw bytes, binary
+3. [x] Add a lossless extended-TNC2 parser that preserves raw bytes, binary
        information fields, opaque suffixes and exact path `*` markers.
-4. [ ] Add a separate, explicit and checked `TNC2Packet` to `ax25.Frame`
+4. [x] Add a separate, explicit and checked `TNC2Packet` to `ax25.Frame`
        adapter. Keep existing `ax25.Address` and encoder semantics strict.
-5. [ ] Move JSON ingress onto `RawReception` and the optional extended TNC2
+5. [x] Move JSON ingress onto `RawReception` and the optional extended TNC2
        model instead of immediately forcing `aprs.ParseTNC2` and AX.25
        re-encoding.
-6. [ ] Decouple APRS semantic decoding from the requirement that the complete
+6. [x] Decouple APRS semantic decoding from the requirement that the complete
        transport envelope first become an `ax25.Frame`. Preserve the existing
        constraints of individual APRS fields.
-7. [ ] Feed accepted receptions and extended identities to the packet log,
+7. [x] Feed accepted receptions and extended identities to the packet log,
        station cache and map without truncation or identity rewriting. Retain
        valid non-APRS application data as well.
-8. [ ] Audit every output boundary. Require explicit policy authorization in
+8. [x] Audit every output boundary. Require explicit policy authorization in
        addition to representability, and keep JSON ingress receive-only by
        default.
-9. [ ] Add the complete protocol compatibility and regression suite listed
+9. [x] Add the complete protocol compatibility and regression suite listed
        below, using official schema/example vectors where possible.
-10. [ ] Update `docs/wiki/rxt-telemetry.md` and operator-facing documentation
+10. [x] Update `docs/wiki/rxt-telemetry.md` and operator-facing documentation
         only after implementation behavior matches the wider model.
 
 Throughout these steps, continue extracting `reception.local` and
@@ -169,34 +171,34 @@ terminating later valid stream records unnecessarily.
 
 ## Compatibility tests
 
-- [ ] Normal APRS packet with an AX.25-compatible source, destination and path.
-- [ ] `F4JJE-16` preserved exactly and not encoded as AX.25.
-- [ ] `NN7LE-S` and `NN7LE-GS` preserved exactly.
-- [ ] Extended identity used in source, destination and each path position.
-- [ ] Numeric suffix 0-15 converts to AX.25 without changing identity.
-- [ ] Numeric suffix greater than 15 remains valid TNC2 but is not AX.25
+- [x] Normal APRS packet with an AX.25-compatible source, destination and path.
+- [x] `F4JJE-16` preserved exactly and not encoded as AX.25.
+- [x] `NN7LE-S` and `NN7LE-GS` preserved exactly.
+- [x] Extended identity used in source, destination and each path position.
+- [x] Numeric suffix 0-15 converts to AX.25 without changing identity.
+- [x] Numeric suffix greater than 15 remains valid TNC2 but is not AX.25
       encodable.
-- [ ] Numeric suffix too large for `uint64` is preserved exactly and rejected
+- [x] Numeric suffix too large for `uint64` is preserved exactly and rejected
       only by the AX.25 adapter.
-- [ ] A path element retains its exact trailing `*` in `Text` while also
+- [x] A path element retains its exact trailing `*` in `Text` while also
       exposing `Repeated=true`.
-- [ ] The same extended textual identity appearing in multiple packets is
+- [x] The same extended textual identity appearing in multiple packets is
       recognized as the same station.
-- [ ] Binary Mic-E information remains byte-for-byte identical.
-- [ ] TNC2-compatible non-APRS application data is retained.
-- [ ] Valid non-APRS TNC2 with an extended suffix is retained.
-- [ ] Schema-valid `parse_status:"malformed"` with no possible `TNC2Packet` is
+- [x] Binary Mic-E information remains byte-for-byte identical.
+- [x] TNC2-compatible non-APRS application data is retained.
+- [x] Valid non-APRS TNC2 with an extended suffix is retained.
+- [x] Schema-valid `parse_status:"malformed"` with no possible `TNC2Packet` is
       retained without terminating the stream.
-- [ ] APRS information with an extended transport source is decoded where
+- [x] APRS information with an extended transport source is decoded where
       applicable without relaxing unrelated fixed-width APRS fields.
-- [ ] RXT accompanying non-APRS, malformed or non-AX.25-representable data is
+- [x] RXT accompanying non-APRS, malformed or non-AX.25-representable data is
       retained according to the JSON event.
-- [ ] Replay duplicates remain deduplicated by `event_id`/boot sequence.
-- [ ] A rejected output conversion does not lose the accepted input event.
-- [ ] An AX.25-representable JSON input is still not emitted without separate
+- [x] Replay duplicates remain deduplicated by `event_id`/boot sequence.
+- [x] A rejected output conversion does not lose the accepted input event.
+- [x] An AX.25-representable JSON input is still not emitted without separate
       explicit output authorization.
-- [ ] Existing KISS, RF, digipeater and APRS-IS behavior does not regress.
-- [ ] Exercise the official protocol schema and example vectors as consumer
+- [x] Existing KISS, RF, digipeater and APRS-IS behavior does not regress.
+- [x] Exercise the official protocol schema and example vectors as consumer
       compatibility fixtures, with their provenance recorded.
 
 ## Boundaries and non-goals for schema 1.0
@@ -214,18 +216,19 @@ terminating later valid stream records unnecessarily.
 
 ## Open design decisions
 
-- [ ] Choose the package and public API for `RawReception`, `PacketAddress`
-      and `TNC2Packet`.
-- [ ] Decide whether the existing packet-log schema can preserve all raw
-      receptions or needs a migration/new reception record.
-- [ ] Define which APRS semantic features apply to extended transport
-      identities, especially messages, actions, filters and APRS-IS policy.
-- [ ] Decide how Graywolf consumes the protocol repository's validation
-      vectors without allowing the two projects to drift.
-- [ ] Define UI presentation for a valid retained reception that is malformed,
-      non-APRS or not representable as AX.25.
-- [ ] Define the exact durability point after which the resume cursor may be
-      persisted for each accepted reception.
+- [x] `RawReception` lives in `pkg/rxttelemetry`; the independent textual model
+      lives in `pkg/tnc2`, with the one-way adapter in `pkg/tnc2ax25`.
+- [x] The existing packet-log entry now embeds the complete `RawReception`, so
+      no database migration is required for the bounded in-memory log.
+- [x] Extended JSON identities feed passive APRS decode, packet log, station
+      cache and map semantics. Messages, actions, KISS, RF, digipeater and
+      APRS-IS output remain unauthorized for JSON ingress.
+- [x] A pinned subset of the official protocol vectors is vendored under
+      `pkg/rxttelemetry/testdata`, with its source commit recorded.
+- [x] Malformed and non-APRS receptions use their raw TNC2 display plus notes
+      and the embedded JSON reception metadata in the existing packet log.
+- [x] The durability point is the successful synchronous packet-log record;
+      handler failure leaves the resume cursor unchanged for replay.
 
 ## Completion criteria
 

@@ -2011,3 +2011,33 @@ Source: [`../../pkg/kiss/manager.go`](../../pkg/kiss/manager.go)
 (`stopManaged`, `Manager.Start`, `managedServer.serveDone`,
 `serveShutdownGrace`);
 [`../../pkg/kiss/manager_rebind_test.go`](../../pkg/kiss/manager_rebind_test.go).
+
+### 68. LoRa APRS JSON reception is lossless and receive-only before AX.25
+
+Every accepted `rx` record first becomes an
+`rxttelemetry.RawReception`. `packet.raw_tnc2_base64` and the raw NDJSON
+record are authoritative and remain available even when `parse_status` is
+`malformed`, producer-derived fields disagree, APRS decoding fails, or an
+address cannot be represented in classic AX.25. An optional
+`tnc2.TNC2Packet` is a derived textual envelope; it must not call or depend on
+`ax25.ParseAddress`. Only `tnc2ax25` may apply the classic 1--6 character
+callsign and decimal SSID 0--15 constraints.
+
+LoRa APRS JSON also does not enter `rxFanout`. Its passive path may update the
+packet log, station cache and map, but it cannot reach KISS, AGW, digipeating,
+actions, messages, RF or APRS-IS merely because conversion would succeed.
+Representability and output authorization are separate gates. The resume
+cursor advances only after the synchronous preservation handler succeeds.
+
+*Why:* opaque LoRa identities such as `F4JJE-16` and `NN7LE-GS`, non-APRS
+TNC2-compatible traffic, and malformed-but-valid reception events are part of
+the protocol. Forcing them through AX.25 either loses the event or rewrites its
+identity; feeding a remote reception copy into physical/output fanout creates
+loops and unintended transmissions.
+
+Source: [`../../pkg/rxttelemetry/service.go`](../../pkg/rxttelemetry/service.go)
+(`RawReception`, `processStreamRecord`),
+[`../../pkg/tnc2/packet.go`](../../pkg/tnc2/packet.go),
+[`../../pkg/tnc2ax25/adapter.go`](../../pkg/tnc2ax25/adapter.go),
+[`../../pkg/app/rxfanout.go`](../../pkg/app/rxfanout.go)
+(`aprsJSONProduce`).

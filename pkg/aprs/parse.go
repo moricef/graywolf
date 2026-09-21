@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/chrissnell/graywolf/pkg/ax25"
+	"github.com/chrissnell/graywolf/pkg/tnc2"
 )
 
 // ErrEmpty is returned when the AX.25 info field contains no APRS data.
@@ -39,7 +40,34 @@ func Parse(f *ax25.Frame) (*DecodedAPRSPacket, error) {
 		return pkt, ErrEmpty
 	}
 	info := f.Info
-	if err := parseInfo(pkt, info, f); err != nil {
+	pkt.info = bytes.Clone(info)
+	if err := parseInfo(pkt, info, f.Dest.Call); err != nil {
+		return pkt, err
+	}
+	return pkt, nil
+}
+
+// ParseTNC2Packet decodes APRS semantics directly from the lossless textual
+// transport model. It does not require, attempt or imply AX.25 conversion.
+func ParseTNC2Packet(p *tnc2.TNC2Packet) (*DecodedAPRSPacket, error) {
+	if p == nil {
+		return nil, errors.New("aprs: nil TNC2 packet")
+	}
+	pkt := &DecodedAPRSPacket{
+		Source:    p.Source.Text,
+		Dest:      p.Destination.Text,
+		Type:      PacketUnknown,
+		Timestamp: time.Now().UTC(),
+		info:      bytes.Clone(p.Information),
+	}
+	pkt.Path = make([]string, 0, len(p.Path))
+	for _, address := range p.Path {
+		pkt.Path = append(pkt.Path, address.Text)
+	}
+	if len(p.Information) == 0 {
+		return pkt, ErrEmpty
+	}
+	if err := parseInfo(pkt, p.Information, p.Destination.Call); err != nil {
 		return pkt, err
 	}
 	return pkt, nil
@@ -56,7 +84,7 @@ func ParseInfo(info []byte) (*DecodedAPRSPacket, error) {
 	if len(info) == 0 {
 		return pkt, ErrEmpty
 	}
-	if err := parseInfo(pkt, info, nil); err != nil {
+	if err := parseInfo(pkt, info, ""); err != nil {
 		return pkt, err
 	}
 	return pkt, nil
@@ -71,11 +99,11 @@ func ParseInfo(info []byte) (*DecodedAPRSPacket, error) {
 // '$' (raw GPS NMEA), '#' (Peet Bros U-II), '*' (Peet Bros complete),
 // '%' (Agrelo DFjr), '&' (reserved), ',' (invalid/test), '[' (Maidenhead
 // grid locator beacon), '{' (user-defined).
-func parseInfo(pkt *DecodedAPRSPacket, info []byte, frame *ax25.Frame) error {
-	return parseInfoDepth(pkt, info, frame, 0)
+func parseInfo(pkt *DecodedAPRSPacket, info []byte, micEDestination string) error {
+	return parseInfoDepth(pkt, info, micEDestination, 0)
 }
 
-func parseInfoDepth(pkt *DecodedAPRSPacket, info []byte, frame *ax25.Frame, depth int) error {
+func parseInfoDepth(pkt *DecodedAPRSPacket, info []byte, micEDestination string, depth int) error {
 	// Mic-E is special: the geographic data lives in the AX.25
 	// destination address, not the info field's first byte.
 	c := info[0]
@@ -100,7 +128,7 @@ func parseInfoDepth(pkt *DecodedAPRSPacket, info []byte, frame *ax25.Frame, dept
 	case ')':
 		return parseItem(pkt, info)
 	case '\'', '`':
-		return parseMicE(pkt, info, frame)
+		return parseMicE(pkt, info, micEDestination)
 	case '>':
 		return parseStatus(pkt, info)
 	case '<':
@@ -151,7 +179,7 @@ func parseInfoDepth(pkt *DecodedAPRSPacket, info []byte, frame *ax25.Frame, dept
 			}
 		}
 		if len(innerInfo) > 0 {
-			_ = parseInfoDepth(inner, innerInfo, nil, depth+1)
+			_ = parseInfoDepth(inner, innerInfo, "", depth+1)
 		}
 		pkt.ThirdParty = inner
 		return nil

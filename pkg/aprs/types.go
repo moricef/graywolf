@@ -67,15 +67,15 @@ type Symbol struct {
 
 // Message is a directed-addressee message (addressee, text, id/ack/rej).
 type Message struct {
-	Addressee  string // 1..9 chars, space-padded in packet
-	Text       string
-	MessageID  string // optional identifier used for ACK/REJ correlation
-	ReplyAck   string // piggybacked reply-ack id (aprs11/replyacks), empty if absent
-	HasReplyAck bool  // true if a reply-ack trailer was present (ack may still be "")
-	IsAck      bool
-	IsRej      bool
-	IsBulletin bool // addressee starts with BLN
-	IsNWS      bool // NWS-originated
+	Addressee   string // 1..9 chars, space-padded in packet
+	Text        string
+	MessageID   string // optional identifier used for ACK/REJ correlation
+	ReplyAck    string // piggybacked reply-ack id (aprs11/replyacks), empty if absent
+	HasReplyAck bool   // true if a reply-ack trailer was present (ack may still be "")
+	IsAck       bool
+	IsRej       bool
+	IsBulletin  bool // addressee starts with BLN
+	IsNWS       bool // NWS-originated
 }
 
 // TelemetryMeta carries PARM/UNIT/EQNS/BITS metadata messages (APRS101
@@ -180,6 +180,7 @@ type DirectionFinding struct {
 // graywolf's PacketOutput pipeline.
 type DecodedAPRSPacket struct {
 	Raw           []byte // original AX.25 frame bytes
+	info          []byte // transport-independent APRS information bytes
 	Source        string // callsign-SSID
 	Dest          string
 	Path          []string
@@ -205,7 +206,7 @@ type DecodedAPRSPacket struct {
 	// received from APRS-IS by the iGate. Unset (DirectionUnknown) when
 	// the packet is synthesized (e.g. inner third-party decode, tests) or
 	// constructed before ingress provenance is known.
-	Direction     Direction
+	Direction Direction
 }
 
 // FromAX25 populates the Source/Dest/Path fields of a DecodedAPRSPacket
@@ -248,11 +249,14 @@ func (p *DecodedAPRSPacket) DedupKey() string {
 	return p.Source + "\x00" + string(info)
 }
 
-// dedupInfoBytes recovers the AX.25 info field for dedup keying.
-// Prefer the original Raw frame's info (lossless and byte-accurate);
-// return nil if no Raw frame is available since an empty key
-// disables dedup rather than silently conflating packets.
+// dedupInfoBytes recovers the transport information field for dedup keying.
+// The textual TNC2 parser records it directly; classic packets fall back to
+// the original AX.25 frame. Return nil when neither lossless source exists so
+// an empty key disables dedup rather than silently conflating packets.
 func (p *DecodedAPRSPacket) dedupInfoBytes() []byte {
+	if len(p.info) > 0 {
+		return p.info
+	}
 	if len(p.Raw) == 0 {
 		return nil
 	}

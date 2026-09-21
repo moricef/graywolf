@@ -17,6 +17,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/chrissnell/graywolf/pkg/tnc2"
 )
 
 const (
@@ -51,62 +53,110 @@ type streamAddress struct {
 	Kind     string `json:"kind"`
 }
 
-type streamMetrics struct {
+// LocalMetrics is the measurement made by the JSON producer's local radio.
+type LocalMetrics struct {
 	RSSI float64 `json:"rssi_dbm"`
 	SNR  float64 `json:"snr_db"`
-	FO   int     `json:"frequency_error_hz"`
+	FO   float64 `json:"frequency_error_hz"`
 }
 
-type streamHop struct {
-	TX      string  `json:"tx"`
-	RX      string  `json:"rx"`
-	HasData bool    `json:"has_data"`
-	RSSI    float64 `json:"rssi_dbm"`
-	SNR     float64 `json:"snr_db"`
-	FO      int     `json:"frequency_error_hz"`
-	TTH     int     `json:"tth_ms"`
+// RadioParameters records the RF settings associated with a reception.
+type RadioParameters struct {
+	FrequencyHz     uint64 `json:"frequency_hz,omitempty"`
+	BandwidthHz     uint64 `json:"bandwidth_hz,omitempty"`
+	SpreadingFactor uint8  `json:"spreading_factor,omitempty"`
+	CodingRate      string `json:"coding_rate,omitempty"`
+}
+
+// RXTHop preserves one protocol RXT hop. Pointer metrics retain the
+// distinction between an explicit zero and the absence required by
+// has_data:false.
+type RXTHop struct {
+	Ordinal        uint64   `json:"ordinal"`
+	TX             string   `json:"tx,omitempty"`
+	RX             string   `json:"rx,omitempty"`
+	IdentityStatus string   `json:"identity_status,omitempty"`
+	HasData        bool     `json:"has_data"`
+	RSSI           *float64 `json:"rssi_dbm,omitempty"`
+	SNR            *float64 `json:"snr_db,omitempty"`
+	FO             *int     `json:"frequency_error_hz,omitempty"`
+	TTH            *int     `json:"tth_ms,omitempty"`
+	RSSIClipped    bool     `json:"rssi_clipped,omitempty"`
+	SNRClipped     bool     `json:"snr_clipped,omitempty"`
+	FOClipped      bool     `json:"frequency_error_clipped,omitempty"`
+}
+
+type RXTTelemetry struct {
+	Encoding string   `json:"encoding"`
+	Raw      string   `json:"raw"`
+	Hops     []RXTHop `json:"hops"`
 }
 
 type streamRecord struct {
 	Protocol        string `json:"protocol"`
 	ProtocolVersion string `json:"protocol_version"`
+	SchemaVersion   string `json:"schema_version"`
 	Event           string `json:"event"`
 	EventID         string `json:"event_id"`
 	BootID          string `json:"boot_id"`
 	Sequence        uint64 `json:"sequence"`
+	CreatedAt       string `json:"created_at"`
+	UptimeMS        uint64 `json:"uptime_ms"`
 	RequestedAfter  string `json:"requested_after"`
 	Reason          string `json:"reason"`
+	rawJSON         []byte
 	Capabilities    struct {
 		Features []string `json:"features"`
 	} `json:"capabilities"`
 	Receiver struct {
-		Station string `json:"station"`
+		Station   string `json:"station"`
+		Interface string `json:"interface"`
 	} `json:"receiver"`
 	Packet struct {
-		RawTNC2 []byte          `json:"raw_tnc2_base64"`
-		TNC2    string          `json:"tnc2"`
-		Source  streamAddress   `json:"source"`
-		Path    []streamAddress `json:"path"`
+		RawTNC2     []byte          `json:"raw_tnc2_base64"`
+		RFTNC2      []byte          `json:"rf_tnc2_base64"`
+		TNC2        string          `json:"tnc2"`
+		ParseStatus string          `json:"parse_status"`
+		Source      streamAddress   `json:"source"`
+		Destination streamAddress   `json:"destination"`
+		Path        []streamAddress `json:"path"`
+		Information struct {
+			Raw []byte `json:"raw_base64"`
+		} `json:"information"`
 	} `json:"packet"`
 	Reception struct {
-		Local *streamMetrics `json:"local"`
-		RXT   *struct {
-			Hops []streamHop `json:"hops"`
-		} `json:"rxt"`
+		Local    *LocalMetrics    `json:"local"`
+		Radio    *RadioParameters `json:"radio"`
+		RXT      *RXTTelemetry    `json:"rxt"`
+		CRCValid bool             `json:"crc_valid"`
 	} `json:"reception"`
 }
 
-// RXEvent is the lossless packet payload delivered to the application APRS
-// pipeline after the service has accepted an rx stream record.
-type RXEvent struct {
-	EventID  string
-	BootID   string
-	Sequence uint64
-	Receiver string
-	TNC2     []byte
+// RawReception is the universal, lossless protocol-level container delivered
+// for every accepted rx event. Packet is present only when parse_status is
+// parsed (or for a compatible legacy record whose envelope can be parsed).
+type RawReception struct {
+	RawEvent          []byte           `json:"raw_event,omitempty"`
+	EventID           string           `json:"event_id"`
+	BootID            string           `json:"boot_id"`
+	Sequence          uint64           `json:"sequence"`
+	CreatedAt         string           `json:"created_at,omitempty"`
+	UptimeMS          uint64           `json:"uptime_ms"`
+	Receiver          string           `json:"receiver"`
+	ReceiverInterface string           `json:"receiver_interface,omitempty"`
+	RawTNC2           []byte           `json:"raw_tnc2"`
+	RFTNC2            []byte           `json:"rf_tnc2,omitempty"`
+	TNC2Text          string           `json:"tnc2,omitempty"`
+	ParseStatus       string           `json:"parse_status"`
+	Packet            *tnc2.TNC2Packet `json:"packet,omitempty"`
+	Local             *LocalMetrics    `json:"local,omitempty"`
+	Radio             *RadioParameters `json:"radio,omitempty"`
+	RXT               *RXTTelemetry    `json:"rxt,omitempty"`
+	CRCValid          bool             `json:"crc_valid"`
+	Warnings          []string         `json:"warnings,omitempty"`
 }
 
-type PacketHandler func(context.Context, RXEvent) error
+type PacketHandler func(context.Context, RawReception) error
 
 type ResumeState struct {
 	Endpoint  string
@@ -469,9 +519,11 @@ func (s *Service) consumeStream(ctx context.Context, body io.Reader) error {
 	scanner.Buffer(make([]byte, 4096), maxRecordBytes)
 	for scanner.Scan() {
 		var event streamRecord
-		if err := json.Unmarshal(scanner.Bytes(), &event); err != nil {
+		rawRecord := append([]byte(nil), scanner.Bytes()...)
+		if err := json.Unmarshal(rawRecord, &event); err != nil {
 			return fmt.Errorf("decode NDJSON record: %w", err)
 		}
+		event.rawJSON = rawRecord
 		if err := s.processStreamRecord(ctx, event); err != nil {
 			return err
 		}
@@ -488,6 +540,9 @@ func (s *Service) consumeStream(ctx context.Context, body io.Reader) error {
 func (s *Service) processStreamRecord(ctx context.Context, event streamRecord) error {
 	if event.Protocol != "lora-aprs-json" || event.ProtocolVersion != "1" {
 		return fmt.Errorf("unsupported protocol %q version %q", event.Protocol, event.ProtocolVersion)
+	}
+	if event.SchemaVersion != "" && event.SchemaVersion != "1.0" {
+		return fmt.Errorf("unsupported schema version %q", event.SchemaVersion)
 	}
 	now := time.Now().UTC()
 	if event.Event == "hello" {
@@ -539,6 +594,47 @@ func (s *Service) processStreamRecord(ctx context.Context, event streamRecord) e
 	if event.EventID == "" || event.BootID == "" || event.Sequence == 0 {
 		return errors.New("rx record has incomplete identity")
 	}
+	reception := RawReception{
+		RawEvent:          append([]byte(nil), event.rawJSON...),
+		EventID:           event.EventID,
+		BootID:            event.BootID,
+		Sequence:          event.Sequence,
+		CreatedAt:         event.CreatedAt,
+		UptimeMS:          event.UptimeMS,
+		Receiver:          event.Receiver.Station,
+		ReceiverInterface: event.Receiver.Interface,
+		RawTNC2:           append([]byte(nil), event.Packet.RawTNC2...),
+		RFTNC2:            append([]byte(nil), event.Packet.RFTNC2...),
+		TNC2Text:          event.Packet.TNC2,
+		ParseStatus:       event.Packet.ParseStatus,
+		Local:             event.Reception.Local,
+		Radio:             event.Reception.Radio,
+		RXT:               event.Reception.RXT,
+		CRCValid:          event.Reception.CRCValid,
+	}
+	if event.Packet.TNC2 != "" && event.Packet.TNC2 != string(event.Packet.RawTNC2) {
+		reception.Warnings = append(reception.Warnings,
+			"packet.tnc2 differs from authoritative raw_tnc2_base64")
+	}
+	switch event.Packet.ParseStatus {
+	case "parsed":
+		packet, err := tnc2.Parse(event.Packet.RawTNC2)
+		if err != nil {
+			reception.Warnings = append(reception.Warnings,
+				"could not derive TNC2 packet: "+err.Error())
+		} else {
+			reception.Packet = packet
+		}
+	case "malformed":
+		// A malformed protocol reception is still valid and lossless. It
+		// deliberately has no derived TNC2Packet.
+	case "":
+		// Compatibility with pre-1.0 pilot producers. Current schema 1.0
+		// requires parse_status, but old streams are harmless to retain.
+		reception.Packet, _ = tnc2.Parse(event.Packet.RawTNC2)
+	default:
+		return fmt.Errorf("rx record has unsupported parse_status %q", event.Packet.ParseStatus)
+	}
 
 	s.mu.Lock()
 	if event.BootID == s.lastBootID && s.lastSequence > 0 &&
@@ -546,6 +642,30 @@ func (s *Service) processStreamRecord(ctx context.Context, event streamRecord) e
 		lastEventID := s.lastEventID
 		s.mu.Unlock()
 		return fmt.Errorf("rx sequence gap after %s: got %d", lastEventID, event.Sequence)
+	}
+	if event.BootID == s.lastBootID && event.Sequence <= s.lastSequence {
+		s.mu.Unlock()
+		return nil
+	}
+	handler := s.handler
+	endpoint := s.endpoint
+	s.mu.Unlock()
+
+	// Delivery is the preservation boundary. A failure reconnects without
+	// advancing the resume cursor, so this event can be replayed instead of
+	// being silently skipped by a later sequence.
+	if handler != nil {
+		if err := handler(ctx, reception); err != nil {
+			return fmt.Errorf("preserve rx record %s: %w", event.EventID, err)
+		}
+	}
+
+	s.mu.Lock()
+	// Another delivery or SetEndpoint may have changed state while the
+	// preservation handler ran. Never attach this event to another producer.
+	if s.endpoint != endpoint {
+		s.mu.Unlock()
+		return nil
 	}
 	if event.BootID == s.lastBootID && event.Sequence <= s.lastSequence {
 		s.mu.Unlock()
@@ -565,9 +685,23 @@ func (s *Service) processStreamRecord(ctx context.Context, event streamRecord) e
 	}
 	if event.Reception.RXT != nil {
 		for _, hop := range event.Reception.RXT.Hops {
+			var rssi, snr float64
+			var fo, tth int
+			if hop.RSSI != nil {
+				rssi = *hop.RSSI
+			}
+			if hop.SNR != nil {
+				snr = *hop.SNR
+			}
+			if hop.FO != nil {
+				fo = *hop.FO
+			}
+			if hop.TTH != nil {
+				tth = *hop.TTH
+			}
 			s.storeLinkLocked(Hop{
 				From: hop.TX, To: hop.RX, HasData: hop.HasData,
-				RSSI: hop.RSSI, SNR: hop.SNR, FO: hop.FO, TTH: hop.TTH,
+				RSSI: rssi, SNR: snr, FO: fo, TTH: tth,
 			}, now, packetText)
 		}
 	}
@@ -581,28 +715,8 @@ func (s *Service) processStreamRecord(ctx context.Context, event streamRecord) e
 		s.storeLinkLocked(Hop{
 			From: from, To: event.Receiver.Station, HasData: true,
 			RSSI: event.Reception.Local.RSSI, SNR: event.Reception.Local.SNR,
-			FO: event.Reception.Local.FO,
+			FO: int(event.Reception.Local.FO),
 		}, now, packetText)
-	}
-	handler := s.handler
-	s.mu.Unlock()
-
-	if handler != nil {
-		if err := handler(ctx, RXEvent{
-			EventID: event.EventID, BootID: event.BootID, Sequence: event.Sequence,
-			Receiver: event.Receiver.Station, TNC2: append([]byte(nil), event.Packet.RawTNC2...),
-		}); err != nil {
-			s.setPollError(fmt.Sprintf("deliver rx record: %v", err))
-			s.logger.Debug("RXT packet delivery failed", "event_id", event.EventID, "err", err)
-		}
-	}
-
-	s.mu.Lock()
-	// SetEndpoint resets these values. Do not attach an event from a canceled
-	// connection to a newly configured producer.
-	if s.lastBootID != event.BootID || s.lastSequence != event.Sequence {
-		s.mu.Unlock()
-		return nil
 	}
 	s.lastEventID = event.EventID
 	resumeHandler := s.resumeHandler

@@ -1,9 +1,10 @@
 # LoRa APRS RXT telemetry
 
 Graywolf can consume the versioned LoRa APRS JSON stream exposed by compatible
-receivers and iGates. Each `rx` event supplies the clean APRS packet plus local
-and RXT radio metadata. Graywolf feeds the clean packet into its APRS receive
-pipeline and displays the measured RF links on the map.
+receivers and iGates. Each `rx` event supplies authoritative TNC2-compatible
+bytes plus local and RXT radio metadata. Graywolf preserves every accepted
+reception, decodes APRS semantics when applicable, and displays measured RF
+links on the map.
 
 ## Configure an iGate
 
@@ -20,11 +21,20 @@ last attempt, last successful record, the latest error, the number of `rx`
 records accepted, and the number of active links. An empty URL disables the
 source. Changing the URL takes effect immediately without restarting Graywolf.
 
-The authoritative `packet.raw_tnc2_base64` bytes are converted back to an
-AX.25 UI frame before entering Graywolf's normal APRS parsing, messages,
-station-cache, packet-log, and output pipeline. Stream packets are tagged as
-`aprs-json`; they are not echoed to KISS clients or submitted to Graywolf's
-digipeater, which prevents a remote reception copy from creating an RF loop.
+The authoritative `packet.raw_tnc2_base64` bytes are first stored in a
+lossless reception model. A separate textual TNC2 model is derived only for a
+parsable envelope. Its source, destination and path identities remain exact,
+including opaque or out-of-range suffixes such as `NN7LE-GS` and `F4JJE-16`.
+Graywolf can therefore decode applicable APRS information, populate the packet
+log and station cache, and update the map without first forcing the complete
+envelope into classic AX.25 addressing.
+
+Classic AX.25 conversion is a separate, checked adapter. It accepts only a
+1--6 character AX.25 callsign and an absent or decimal SSID in the range
+0--15. Conversion failure does not invalidate or alter the received JSON
+event. JSON ingress is receive-only by default: representability alone never
+authorizes KISS, digipeater, RF or APRS-IS output, nor an automatic action or
+message response.
 
 The **RXT Telemetry** page lists decoded links and their RSSI, SNR, frequency
 offset, time-to-hop, packet, age, and map-position state. The Live Map draws a
@@ -42,17 +52,20 @@ to `receiver.station`, using `reception.local` RSSI, SNR, and frequency error.
 Legacy hops with `has_data:false` are accepted but are not drawn as measured
 links, because the stream deliberately provides no radio metrics for them.
 
-CRC-valid records marked `parse_status:"malformed"` are accepted and counted
-without terminating the stream. Their authoritative bytes are offered to the
-normal APRS pipeline, which rejects invalid TNC2 data without forwarding or
-digipeating it; later stream records continue to be processed normally.
+CRC-valid records marked `parse_status:"malformed"` are accepted, preserved
+in the packet log and counted without pretending that they produced a parsed
+TNC2 packet. Their reception and RXT metadata remain available, and later
+stream records continue normally. Likewise, a valid TNC2-compatible but
+non-APRS information field is retained even when Graywolf has no APRS
+semantics to attach to it.
 
 The source is intentionally receive-only: Graywolf does not use the optional
 JSON TX API. It does handle heartbeat records and reliable history resume.
 When the producer advertises `history_resume`, Graywolf persists the last
-accepted `event_id` and reconnects with `after=<event_id>`. Replayed duplicates
-from the same producer boot are ignored. A `gap` record clears the stale cursor
-before subsequent live events establish a new one.
+preserved `event_id` and reconnects with `after=<event_id>`. A storage/delivery
+failure does not advance the cursor, so the event can be replayed. Replayed
+duplicates from the same producer boot are ignored. A `gap` record clears the
+stale cursor before subsequent live events establish a new one.
 
 Graywolf deliberately does not consume the producer's
 `GET /api/v1/aprs/events?limit=10` snapshot. That endpoint is intended for

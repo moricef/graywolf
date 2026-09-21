@@ -47,7 +47,7 @@ Reproduce with `./bench.sh`.
 
 - **Live Map** - Like having a private aprs.fi for your station.  Real-time APRS map with trails, digipeater paths, weather overlays, and beautiful animated NEXRAD weather radar, all rendered on our private vector basemap.  You can download maps for your state/province/country for offline use!
 
-- **LoRa APRS JSON/RXT input** - Consume a compatible receiver's continuous NDJSON packet stream, feed clean packets into Graywolf, inspect local and per-hop RSSI/SNR/frequency-offset/TTH measurements, and draw recent RF links. Legacy `/rxt.json` polling remains supported. See [`docs/wiki/rxt-telemetry.md`](docs/wiki/rxt-telemetry.md).
+- **LoRa APRS JSON/RXT input** - Consume a compatible receiver's continuous NDJSON stream, preserve malformed, non-APRS and extended textual identities without AX.25 truncation, decode applicable APRS semantics, inspect local/per-hop radio measurements, and draw recent RF links. Legacy `/rxt.json` polling remains supported. See [`docs/wiki/rxt-telemetry.md`](docs/wiki/rxt-telemetry.md).
 
 - **Messages** - SMS-style APRS messaging with delivery status and unread badges
 

@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -64,8 +65,8 @@ func TestConsumeStreamDeliversPacketAndBuildsRXTAndLocalLinks(t *testing.T) {
 	stream := hello + "\n" + rx + "\n"
 
 	s := New("http://igate.invalid/api/v1/aprs/stream", nil, nil)
-	var delivered []RXEvent
-	s.SetPacketHandler(func(_ context.Context, event RXEvent) error {
+	var delivered []RawReception
+	s.SetPacketHandler(func(_ context.Context, event RawReception) error {
 		delivered = append(delivered, event)
 		return nil
 	})
@@ -73,7 +74,7 @@ func TestConsumeStreamDeliversPacketAndBuildsRXTAndLocalLinks(t *testing.T) {
 	if !errors.Is(err, io.ErrUnexpectedEOF) {
 		t.Fatalf("consumeStream error = %v, want unexpected EOF", err)
 	}
-	if len(delivered) != 1 || string(delivered[0].TNC2) != string(tnc2) {
+	if len(delivered) != 1 || string(delivered[0].RawTNC2) != string(tnc2) {
 		t.Fatalf("delivered = %+v", delivered)
 	}
 	links := s.Snapshot(time.Now().UTC())
@@ -98,6 +99,33 @@ func TestConsumeStreamDeliversPacketAndBuildsRXTAndLocalLinks(t *testing.T) {
 	}
 }
 
+func TestOfficialProtocolConsumerVectors(t *testing.T) {
+	fixture, err := os.Open("testdata/lora-aprs-json-v1-consumer-vectors.ndjson")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer fixture.Close()
+
+	s := New("http://igate.invalid/api/v1/aprs/stream", nil, nil)
+	var delivered []RawReception
+	s.SetPacketHandler(func(_ context.Context, reception RawReception) error {
+		delivered = append(delivered, reception)
+		return nil
+	})
+	if err := s.consumeStream(context.Background(), fixture); !errors.Is(err, io.ErrUnexpectedEOF) {
+		t.Fatalf("consumeStream error = %v, want unexpected EOF", err)
+	}
+	if len(delivered) != 2 {
+		t.Fatalf("delivered %d receptions, want 2", len(delivered))
+	}
+	if delivered[0].Packet == nil || delivered[0].Packet.Source.Text != "NN7LE-GS" || delivered[0].Packet.Source.Suffix != "GS" {
+		t.Fatalf("official opaque suffix vector = %+v", delivered[0])
+	}
+	if delivered[1].Packet == nil || string(delivered[1].Packet.Information) != "keyboard-to-keyboard" || delivered[1].RXT == nil {
+		t.Fatalf("official non-APRS/RXT vector = %+v", delivered[1])
+	}
+}
+
 func TestConsumeStreamAcceptsLegacyHopWithoutInventingMetrics(t *testing.T) {
 	tnc2 := []byte("F1SRC>APRS,F2LEG-1*,F3RXT-2*:>mixed")
 	hello := `{"protocol":"lora-aprs-json","protocol_version":"1","event":"hello","boot_id":"boot-mixed","latest_sequence":0}`
@@ -117,13 +145,17 @@ func TestConsumeStreamAcceptsLegacyHopWithoutInventingMetrics(t *testing.T) {
 	}
 }
 
-func TestConsumeStreamContinuesAfterMalformedPacketHandlerError(t *testing.T) {
+func TestConsumeStreamPreservesMalformedThenContinues(t *testing.T) {
 	malformed := []byte("THIS IS BROKEN")
 	valid := []byte("N0CALL>APRS:>ok")
 	hello := `{"protocol":"lora-aprs-json","protocol_version":"1","event":"hello","boot_id":"boot-bad","latest_sequence":0}`
 	rx := func(sequence int, payload []byte, status string) string {
-		return fmt.Sprintf(`{"protocol":"lora-aprs-json","protocol_version":"1","event":"rx","event_id":"boot-bad:%d","boot_id":"boot-bad","sequence":%d,"receiver":{"station":"RX"},"packet":{"raw_tnc2_base64":%q,"parse_status":%q},"reception":{}}`,
-			sequence, sequence, base64.StdEncoding.EncodeToString(payload), status)
+		reception := `{}`
+		if status == "malformed" {
+			reception = `{"radio":{"bandwidth_hz":125000,"spreading_factor":12},"rxt":{"encoding":"rxt-v1","raw":")!AC","hops":[{"ordinal":1,"identity_status":"resolved","tx":"BROKEN-TX","rx":"REMOTE-RX","has_data":true,"rssi_dbm":-122,"snr_db":-9,"frequency_error_hz":-208,"tth_ms":4158}]}}`
+		}
+		return fmt.Sprintf(`{"protocol":"lora-aprs-json","protocol_version":"1","event":"rx","event_id":"boot-bad:%d","boot_id":"boot-bad","sequence":%d,"receiver":{"station":"RX"},"packet":{"raw_tnc2_base64":%q,"parse_status":%q},"reception":%s}`,
+			sequence, sequence, base64.StdEncoding.EncodeToString(payload), status, reception)
 	}
 	stream := strings.Join([]string{
 		hello,
@@ -133,22 +165,75 @@ func TestConsumeStreamContinuesAfterMalformedPacketHandlerError(t *testing.T) {
 	}, "\n")
 
 	s := New("http://igate.invalid/api/v1/aprs/stream", nil, nil)
-	var delivered [][]byte
-	s.SetPacketHandler(func(_ context.Context, event RXEvent) error {
-		delivered = append(delivered, append([]byte(nil), event.TNC2...))
-		if string(event.TNC2) == string(malformed) {
-			return errors.New("not valid TNC2")
-		}
+	var delivered []RawReception
+	s.SetPacketHandler(func(_ context.Context, event RawReception) error {
+		delivered = append(delivered, event)
 		return nil
 	})
 	if err := s.consumeStream(context.Background(), strings.NewReader(stream)); !errors.Is(err, io.ErrUnexpectedEOF) {
 		t.Fatalf("consumeStream error = %v, want unexpected EOF", err)
 	}
-	if len(delivered) != 2 || string(delivered[0]) != string(malformed) || string(delivered[1]) != string(valid) {
-		t.Fatalf("delivered payloads = %q", delivered)
+	if len(delivered) != 2 || string(delivered[0].RawTNC2) != string(malformed) || string(delivered[1].RawTNC2) != string(valid) {
+		t.Fatalf("delivered payloads = %+v", delivered)
+	}
+	if delivered[0].Packet != nil || delivered[1].Packet == nil {
+		t.Fatalf("optional packets = malformed:%#v parsed:%#v", delivered[0].Packet, delivered[1].Packet)
+	}
+	if len(delivered[0].RawEvent) == 0 {
+		t.Fatal("malformed reception did not preserve its raw JSON record")
+	}
+	if delivered[0].RXT == nil || len(delivered[0].RXT.Hops) != 1 {
+		t.Fatalf("malformed reception lost RXT metadata: %+v", delivered[0].RXT)
 	}
 	if got := s.Status(time.Now().UTC()).RecordsReceived; got != 2 {
 		t.Fatalf("RecordsReceived = %d, want 2", got)
+	}
+}
+
+func TestHandlerFailureDoesNotAdvanceResumeCursor(t *testing.T) {
+	s := New("http://igate.invalid/api/v1/aprs/stream", nil, nil)
+	s.SetResumeState("boot-1:4", "boot-1", true)
+	s.lastSequence = 4
+	s.SetPacketHandler(func(context.Context, RawReception) error {
+		return errors.New("storage unavailable")
+	})
+	event := streamRecord{
+		Protocol: "lora-aprs-json", ProtocolVersion: "1", SchemaVersion: "1.0",
+		Event: "rx", EventID: "boot-1:5", BootID: "boot-1", Sequence: 5,
+	}
+	event.Packet.RawTNC2 = []byte("N0CALL>APRS:>not stored")
+	event.Packet.ParseStatus = "parsed"
+	if err := s.processStreamRecord(context.Background(), event); err == nil {
+		t.Fatal("handler failure was ignored")
+	}
+	status := s.Status(time.Now().UTC())
+	if status.LastEventID != "boot-1:4" || status.RecordsReceived != 0 {
+		t.Fatalf("cursor advanced after preservation failure: %+v", status)
+	}
+}
+
+func TestParsedClaimThatCannotBeDerivedIsStillPreserved(t *testing.T) {
+	s := New("http://igate.invalid/api/v1/aprs/stream", nil, nil)
+	var delivered RawReception
+	s.SetPacketHandler(func(_ context.Context, reception RawReception) error {
+		delivered = reception
+		return nil
+	})
+	event := streamRecord{
+		Protocol: "lora-aprs-json", ProtocolVersion: "1", SchemaVersion: "1.0",
+		Event: "rx", EventID: "boot-inconsistent:1", BootID: "boot-inconsistent", Sequence: 1,
+	}
+	event.Packet.RawTNC2 = []byte("not a TNC2 envelope")
+	event.Packet.TNC2 = "a stale non-authoritative rendering"
+	event.Packet.ParseStatus = "parsed"
+	if err := s.processStreamRecord(context.Background(), event); err != nil {
+		t.Fatalf("schema-level reception was discarded: %v", err)
+	}
+	if delivered.Packet != nil || len(delivered.Warnings) != 2 || string(delivered.RawTNC2) != "not a TNC2 envelope" {
+		t.Fatalf("preserved inconsistent reception = %+v", delivered)
+	}
+	if status := s.Status(time.Now().UTC()); status.LastEventID != event.EventID {
+		t.Fatalf("accepted cursor = %+v", status)
 	}
 }
 

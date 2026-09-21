@@ -1,12 +1,13 @@
 package aprs
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/chrissnell/graywolf/pkg/ax25"
+	"github.com/chrissnell/graywolf/pkg/tnc2"
+	"github.com/chrissnell/graywolf/pkg/tnc2ax25"
 )
 
 // FormatTNC2 renders a TNC-2 wire line: source>dest[,path...]:info.
@@ -52,44 +53,16 @@ func FormatTNC2(source, dest string, path []string, info []byte) string {
 // is bytes rather than a string so binary APRS information (notably Mic-E)
 // survives unchanged. Repeated markers on path addresses are preserved.
 func ParseTNC2(raw []byte) (*ax25.Frame, error) {
-	if len(raw) == 0 {
-		return nil, errors.New("aprs: empty TNC2 record")
+	packet, err := tnc2.Parse(raw)
+	if err != nil {
+		return nil, fmt.Errorf("aprs: parse TNC2: %w", err)
 	}
-	colon := bytes.IndexByte(raw, ':')
-	if colon < 0 {
-		return nil, errors.New("aprs: TNC2 record missing ':' info separator")
-	}
-	header, info := raw[:colon], raw[colon+1:]
-	if len(info) == 0 {
+	if len(packet.Information) == 0 {
 		return nil, errors.New("aprs: TNC2 record has empty info field")
 	}
-	gt := bytes.IndexByte(header, '>')
-	if gt <= 0 {
-		return nil, errors.New("aprs: TNC2 record missing '>' source/dest separator")
-	}
-
-	source, err := ax25.ParseAddress(string(header[:gt]))
+	frame, err := tnc2ax25.ToFrame(packet)
 	if err != nil {
-		return nil, fmt.Errorf("aprs: parse TNC2 source: %w", err)
+		return nil, fmt.Errorf("aprs: convert TNC2 to AX.25: %w", err)
 	}
-	parts := bytes.Split(header[gt+1:], []byte{','})
-	if len(parts) == 0 || len(parts[0]) == 0 {
-		return nil, errors.New("aprs: TNC2 record missing destination")
-	}
-	dest, err := ax25.ParseAddress(string(parts[0]))
-	if err != nil {
-		return nil, fmt.Errorf("aprs: parse TNC2 destination: %w", err)
-	}
-	path := make([]ax25.Address, 0, len(parts)-1)
-	for _, part := range parts[1:] {
-		if len(part) == 0 {
-			continue
-		}
-		address, err := ax25.ParseAddress(string(part))
-		if err != nil {
-			return nil, fmt.Errorf("aprs: parse TNC2 path %q: %w", part, err)
-		}
-		path = append(path, address)
-	}
-	return ax25.NewUIFrame(source, dest, path, info)
+	return frame, nil
 }
