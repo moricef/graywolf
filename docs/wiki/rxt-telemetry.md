@@ -65,6 +65,12 @@ stream records continue normally. Likewise, a valid TNC2-compatible but
 non-APRS information field is retained even when Graywolf has no APRS
 semantics to attach to it.
 
+Mic-E remains binary end to end. The APRS semantic decoder recognizes all four
+data identifiers defined by APRS 1.2c: printable current/old `` ` `` and `'`,
+plus the non-printable Rev. 0 beta forms `0x1c` and `0x1d`. Neither the JSON
+consumer nor the textual TNC2 envelope converts their information bytes to a
+string before decoding or storage.
+
 The source is intentionally receive-only: Graywolf does not use the optional
 JSON TX API. It does handle heartbeat records and reliable history resume.
 When the producer advertises `history_resume`, Graywolf persists the last

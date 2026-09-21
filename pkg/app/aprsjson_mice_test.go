@@ -20,8 +20,9 @@ import (
 
 // TestAPRSJSONMicEEndToEnd exercises the complete versioned JSON receive path:
 // NDJSON/base64 -> RawReception -> lossless TNC2 packet -> APRS Mic-E decode ->
-// packet log and station map. The Mic-E longitude hundredths byte is 0x1c, so
-// treating the authoritative packet as ordinary text would corrupt this case.
+// packet log and station map. Both the Rev. 0 beta Mic-E DTI 0x1d and the
+// longitude hundredths byte 0x1c are non-printable, so treating the
+// authoritative packet as ordinary text would corrupt this case.
 //
 // The destination and information bytes follow APRS101 chapter 10:
 // latitude 35°30.00'N, longitude 72°30.00'W, speed 123 kt, course 234°,
@@ -31,7 +32,7 @@ func TestAPRSJSONMicEEndToEnd(t *testing.T) {
 	defer h.stop()
 
 	info := []byte{
-		'`',
+		0x1d,           // old Mic-E Rev. 0 beta data identifier
 		'd', ':', 0x1c, // longitude 72°30.00'W
 		'(', '<', '>', // speed 123 kt, course 234°
 		'>', '/', // symbol code and table
@@ -90,7 +91,7 @@ func TestAPRSJSONMicEEndToEnd(t *testing.T) {
 	if !bytes.Equal(entry.APRSJSON.RawEvent, []byte(rx)) {
 		t.Fatal("raw NDJSON rx record was not preserved exactly")
 	}
-	if entry.Decoded == nil || entry.Decoded.Type != aprs.PacketMicE || entry.Decoded.Position == nil {
+	if entry.Decoded == nil || entry.Decoded.Type != aprs.PacketMicE || entry.Decoded.MicE == nil || entry.Decoded.Position == nil {
 		t.Fatalf("Mic-E was not decoded: %+v", entry.Decoded)
 	}
 	position := entry.Decoded.Position
@@ -101,6 +102,9 @@ func TestAPRSJSONMicEEndToEnd(t *testing.T) {
 	}
 	if position.Symbol.Table != '/' || position.Symbol.Code != '>' {
 		t.Fatalf("symbol = %q%q, want '/''>'", position.Symbol.Table, position.Symbol.Code)
+	}
+	if entry.Decoded.MicE.MessageCode != 1 || entry.Decoded.MicE.MessageText != "Priority" {
+		t.Fatalf("message = code %d text %q", entry.Decoded.MicE.MessageCode, entry.Decoded.MicE.MessageText)
 	}
 
 	stations := h.app.stationCache.QueryBBox(stationcache.BBox{

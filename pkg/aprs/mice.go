@@ -13,7 +13,7 @@ package aprs
 //   byte 4   : N/S + longitude offset + message bit
 //   byte 5   : E/W indicator
 //
-// Info-field layout (after the ' or ` type byte):
+// Info-field layout (after the ', `, 0x1c, or 0x1d type byte):
 //   byte 0..2: longitude degrees + minutes + hundredths (offset encoded)
 //   byte 3..5: speed/course (base 10 triplet)
 //   byte 6   : symbol code
@@ -40,14 +40,15 @@ var miceMessageLabels = [8]string{
 	"Returning", "In Service", "En Route", "Off Duty",
 }
 
-// parseMicE is invoked when the info field starts with '\” or '`'.
+// parseMicE is invoked for all four APRS Mic-E data identifiers: current
+// (` and 0x1c) and old (' and 0x1d).
 // The textual destination call is required to pull the latitude. Keeping it
 // as text lets the semantic decoder work without an enclosing AX.25 frame.
 func parseMicE(pkt *DecodedAPRSPacket, info []byte, dest string) error {
 	if dest == "" {
 		return errors.New("aprs: mic-e requires destination")
 	}
-	// info[0] is the Mic-E type byte ('`' current, '\'' old). The
+	// info[0] is the Mic-E type byte (` or 0x1c current, ' or 0x1d old). The
 	// actual payload — longitude, speed/course, symbol — starts at
 	// info[1].
 	// Minimum: type byte + 3 lon + 3 spd/crs + 1 sym code + 1 sym table = 9.

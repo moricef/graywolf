@@ -1,6 +1,7 @@
 package aprs
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/chrissnell/graywolf/pkg/tnc2"
@@ -41,23 +42,58 @@ func TestParseTNC2PacketRetainsNonAPRSApplicationData(t *testing.T) {
 }
 
 func TestParseTNC2PacketMicEUsesTextualDestination(t *testing.T) {
-	dest := EncodeMicEDest(35.5, 1, false, true, 0)
-	info := []byte{
-		'`',
-		byte(72 + 28), byte(30 + 28), byte(0 + 28),
-		byte(0 + 28), byte(0 + 28), byte(0 + 28),
-		'>', '/',
+	tests := []struct {
+		name string
+		dti  byte
+	}{
+		{name: "old", dti: '\''},
+		{name: "current", dti: '`'},
+		{name: "current_rev0_beta", dti: 0x1c},
+		{name: "old_rev0_beta", dti: 0x1d},
 	}
-	raw := append([]byte("F4JJE-16>"+dest+":"), info...)
-	p, err := tnc2.Parse(raw)
-	if err != nil {
-		t.Fatal(err)
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			info := []byte{
+				tc.dti,
+				'd', ':', 0x1c, // longitude 72°30.00'W
+				'(', '<', '>', // speed 123 kt, course 234°
+				'>', '/', // symbol code and table
+			}
+			raw := append([]byte("F4JJE-16>35SP0P:"), info...)
+			p, err := tnc2.Parse(raw)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(p.Raw, raw) || !bytes.Equal(p.Information, info) {
+				t.Fatalf("Mic-E bytes changed: raw=%x info=%x", p.Raw, p.Information)
+			}
+
+			decoded, err := ParseTNC2Packet(p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if decoded.Source != "F4JJE-16" || decoded.Type != PacketMicE || decoded.MicE == nil || decoded.Position == nil {
+				t.Fatalf("Mic-E packet = %+v", decoded)
+			}
+			assertFloatNear(t, "latitude", decoded.Position.Latitude, 35.5, 0.0001)
+			assertFloatNear(t, "longitude", decoded.Position.Longitude, -72.5, 0.0001)
+			if decoded.Position.Speed != 123 || !decoded.Position.HasCourse || decoded.Position.Course != 234 {
+				t.Fatalf("motion = speed %.0f course %d has_course=%v", decoded.Position.Speed, decoded.Position.Course, decoded.Position.HasCourse)
+			}
+			if decoded.Position.Symbol.Table != '/' || decoded.Position.Symbol.Code != '>' {
+				t.Fatalf("symbol = %q%q, want '/''>'", decoded.Position.Symbol.Table, decoded.Position.Symbol.Code)
+			}
+			if decoded.MicE.MessageCode != 1 || decoded.MicE.MessageText != "Priority" {
+				t.Fatalf("message = code %d text %q", decoded.MicE.MessageCode, decoded.MicE.MessageText)
+			}
+		})
 	}
-	decoded, err := ParseTNC2Packet(p)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if decoded.Source != "F4JJE-16" || decoded.Type != PacketMicE || decoded.MicE == nil {
-		t.Fatalf("Mic-E packet = %+v", decoded)
+}
+
+func assertFloatNear(t *testing.T, field string, got, want, tolerance float64) {
+	t.Helper()
+	if got < want-tolerance || got > want+tolerance {
+		t.Fatalf("%s = %.6f, want %.6f ± %.6f", field, got, want, tolerance)
 	}
 }

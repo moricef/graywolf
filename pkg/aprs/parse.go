@@ -127,7 +127,9 @@ func parseInfoDepth(pkt *DecodedAPRSPacket, info []byte, micEDestination string,
 		return parseObject(pkt, info)
 	case ')':
 		return parseItem(pkt, info)
-	case '\'', '`':
+	case '\'', '`', 0x1c, 0x1d:
+		// APRS 1.2c also assigns the non-printable Rev. 0 beta data
+		// identifiers 0x1c (current) and 0x1d (old) to Mic-E.
 		return parseMicE(pkt, info, micEDestination)
 	case '>':
 		return parseStatus(pkt, info)

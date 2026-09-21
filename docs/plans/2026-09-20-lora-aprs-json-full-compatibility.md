@@ -188,7 +188,9 @@ without terminating later valid stream records unnecessarily.
       exposing `Repeated=true`.
 - [x] The same extended textual identity appearing in multiple packets is
       recognized as the same station.
-- [x] Binary Mic-E information remains byte-for-byte identical.
+- [x] Binary Mic-E information remains byte-for-byte identical, including
+      current/old DTI forms `` ` ``, `'`, `0x1c` and `0x1d`; a binary DTI is
+      exercised through JSON reception, APRS decoding and packet logging.
 - [x] TNC2-compatible non-APRS application data is retained.
 - [x] Valid non-APRS TNC2 with an extended suffix is retained.
 - [x] Schema-valid `parse_status:"malformed"` with no possible `TNC2Packet` is
