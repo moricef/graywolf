@@ -2020,8 +2020,13 @@ record are authoritative and remain available even when `parse_status` is
 `malformed`, producer-derived fields disagree, APRS decoding fails, or an
 address cannot be represented in classic AX.25. An optional
 `tnc2.TNC2Packet` is a derived textual envelope; it must not call or depend on
-`ax25.ParseAddress`. Only `tnc2ax25` may apply the classic 1--6 character
-callsign and decimal SSID 0--15 constraints.
+`ax25.ParseAddress`. Only `tnc2ax25` may apply the classic uppercase 1--6
+character callsign and canonical textual suffix constraints: absent for SSID
+0 or decimal 1--15 without a leading zero. Every converted address must render
+back exactly to its authoritative `Text` (including a path `*`). Local-link
+identity is likewise derived only from this reparsed `TNC2Packet`; JSON
+address hints cannot create a measured local link. RXT hop identities remain
+independent protocol data.
 
 LoRa APRS JSON also does not enter `rxFanout`. Its passive path may update the
 packet log, station cache and map, but it cannot reach KISS, AGW, digipeating,

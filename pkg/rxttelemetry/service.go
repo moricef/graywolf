@@ -679,10 +679,7 @@ func (s *Service) processStreamRecord(ctx context.Context, event streamRecord) e
 	s.lastSuccess = now
 	s.lastError = ""
 	s.recordsReceived++
-	packetText := event.Packet.TNC2
-	if packetText == "" {
-		packetText = string(event.Packet.RawTNC2)
-	}
+	packetText := string(event.Packet.RawTNC2)
 	if event.Reception.RXT != nil {
 		for _, hop := range event.Reception.RXT.Hops {
 			var rssi, snr float64
@@ -705,10 +702,10 @@ func (s *Service) processStreamRecord(ctx context.Context, event streamRecord) e
 			}, now, packetText)
 		}
 	}
-	if event.Reception.Local != nil {
-		from := strings.TrimSuffix(event.Packet.Source.Text, "*")
-		for _, address := range event.Packet.Path {
-			if address.Repeated && address.Kind != "alias" {
+	if event.Reception.Local != nil && reception.Packet != nil {
+		from := reception.Packet.Source.Text
+		for _, address := range reception.Packet.Path {
+			if address.Repeated {
 				from = strings.TrimSuffix(address.Text, "*")
 			}
 		}

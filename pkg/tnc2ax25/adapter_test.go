@@ -44,3 +44,42 @@ func TestToFrameRejectsHugeNumericSuffix(t *testing.T) {
 		t.Fatal("expected AX.25 conversion to fail")
 	}
 }
+
+func TestToFrameRequiresCanonicalRoundTripIdentity(t *testing.T) {
+	tests := []struct {
+		address string
+		ok      bool
+	}{
+		{"N0CALL", true},
+		{"N0CALL-1", true},
+		{"N0CALL-15", true},
+		{"N0CALL-0", false},
+		{"N0CALL-00", false},
+		{"N0CALL-01", false},
+		{"N0CALL-00015", false},
+		{"n0call-1", false},
+		{"F4JJE-16", false},
+		{"NN7LE-GS", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.address, func(t *testing.T) {
+			p, err := tnc2.Parse([]byte(tt.address + ">APRS:>status"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			frame, err := ToFrame(p)
+			if tt.ok {
+				if err != nil {
+					t.Fatalf("canonical address rejected: %v", err)
+				}
+				if got := frame.Source.String(); got != tt.address {
+					t.Fatalf("round trip = %q, want %q", got, tt.address)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("non-canonical address converted as %q", frame.Source.String())
+			}
+		})
+	}
+}

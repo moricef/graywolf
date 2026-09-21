@@ -60,7 +60,7 @@ func TestSnapshotExpiresLinks(t *testing.T) {
 func TestConsumeStreamDeliversPacketAndBuildsRXTAndLocalLinks(t *testing.T) {
 	tnc2 := []byte("F6ZDD-10>APLRG1,F4MLV-10*,WIDE2-1:!L84^@O(dt# test")
 	hello := `{"protocol":"lora-aprs-json","protocol_version":"1","schema_version":"1.0","event":"hello","boot_id":"boot-1","latest_sequence":12}`
-	rx := fmt.Sprintf(`{"protocol":"lora-aprs-json","protocol_version":"1","schema_version":"1.0","event":"rx","event_id":"boot-1:13","boot_id":"boot-1","sequence":13,"receiver":{"station":"F4MLV-2"},"packet":{"raw_tnc2_base64":%q,"tnc2":%q,"source":{"text":"F6ZDD-10"},"path":[{"text":"F4MLV-10*","repeated":true},{"text":"WIDE2-1","repeated":false}]},"reception":{"local":{"rssi_dbm":-69,"snr_db":9.5,"frequency_error_hz":2062},"rxt":{"hops":[{"ordinal":1,"tx":"F6ZDD-10","rx":"F4MLV-10","has_data":true,"rssi_dbm":-116,"snr_db":4.75,"frequency_error_hz":-1782,"tth_ms":6791}]}}}`,
+	rx := fmt.Sprintf(`{"protocol":"lora-aprs-json","protocol_version":"1","schema_version":"1.0","event":"rx","event_id":"boot-1:13","boot_id":"boot-1","sequence":13,"receiver":{"station":"F4MLV-2"},"packet":{"raw_tnc2_base64":%q,"tnc2":%q,"source":{"text":"FALSE-HINT"},"path":[{"text":"FALSE-DIGI*","repeated":true}]},"reception":{"local":{"rssi_dbm":-69,"snr_db":9.5,"frequency_error_hz":2062},"rxt":{"hops":[{"ordinal":1,"tx":"F6ZDD-10","rx":"F4MLV-10","has_data":true,"rssi_dbm":-116,"snr_db":4.75,"frequency_error_hz":-1782,"tth_ms":6791}]}}}`,
 		base64.StdEncoding.EncodeToString(tnc2), string(tnc2))
 	stream := hello + "\n" + rx + "\n"
 
@@ -226,6 +226,15 @@ func TestParsedClaimThatCannotBeDerivedIsStillPreserved(t *testing.T) {
 	event.Packet.RawTNC2 = []byte("not a TNC2 envelope")
 	event.Packet.TNC2 = "a stale non-authoritative rendering"
 	event.Packet.ParseStatus = "parsed"
+	event.Packet.Source.Text = "FALSE-HINT"
+	event.Packet.Path = []streamAddress{{Text: "FALSE-DIGI*", Repeated: true}}
+	event.Receiver.Station = "LOCAL-RX"
+	event.Reception.Local = &LocalMetrics{RSSI: -70, SNR: 8, FO: 123}
+	rssi, snr, fo, tth := -120.0, -7.5, -200, 4000
+	event.Reception.RXT = &RXTTelemetry{Hops: []RXTHop{{
+		Ordinal: 1, TX: "RXT-TX", RX: "RXT-RX", IdentityStatus: "resolved", HasData: true,
+		RSSI: &rssi, SNR: &snr, FO: &fo, TTH: &tth,
+	}}}
 	if err := s.processStreamRecord(context.Background(), event); err != nil {
 		t.Fatalf("schema-level reception was discarded: %v", err)
 	}
@@ -234,6 +243,13 @@ func TestParsedClaimThatCannotBeDerivedIsStillPreserved(t *testing.T) {
 	}
 	if status := s.Status(time.Now().UTC()); status.LastEventID != event.EventID {
 		t.Fatalf("accepted cursor = %+v", status)
+	}
+	links := s.Snapshot(time.Now().UTC())
+	if len(links) != 1 || links[0].From != "RXT-TX" || links[0].To != "RXT-RX" {
+		t.Fatalf("derived hints created a local link or RXT was lost: %+v", links)
+	}
+	if links[0].Packet != string(event.Packet.RawTNC2) {
+		t.Fatalf("link packet = %q, want authoritative raw %q", links[0].Packet, event.Packet.RawTNC2)
 	}
 }
 

@@ -47,5 +47,8 @@ func address(a tnc2.PacketAddress) (ax25.Address, error) {
 	}
 	parsed.SSID = ssid
 	parsed.Repeated = a.Repeated
+	if rendered := parsed.String(); rendered != a.Text {
+		return ax25.Address{}, fmt.Errorf("address is not canonical AX.25 text: encodes as %q", rendered)
+	}
 	return parsed, nil
 }

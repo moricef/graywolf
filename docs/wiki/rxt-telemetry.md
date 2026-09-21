@@ -30,11 +30,13 @@ log and station cache, and update the map without first forcing the complete
 envelope into classic AX.25 addressing.
 
 Classic AX.25 conversion is a separate, checked adapter. It accepts only a
-1--6 character AX.25 callsign and an absent or decimal SSID in the range
-0--15. Conversion failure does not invalidate or alter the received JSON
-event. JSON ingress is receive-only by default: representability alone never
-authorizes KISS, digipeater, RF or APRS-IS output, nor an automatic action or
-message response.
+canonical uppercase 1--6 character AX.25 callsign and either no suffix (SSID
+0) or a decimal suffix from 1 through 15 without leading zero. The converted
+address must render back to exactly the authoritative TNC2 identity, including
+the path `*` marker. Conversion failure does not invalidate or alter the
+received JSON event. JSON ingress is receive-only by default: representability
+alone never authorizes KISS, digipeater, RF or APRS-IS output, nor an automatic
+action or message response.
 
 The **RXT Telemetry** page lists decoded links and their RSSI, SNR, frequency
 offset, time-to-hop, packet, age, and map-position state. The Live Map draws a
@@ -46,9 +48,13 @@ expire after 30 minutes.
 
 The endpoint emits one JSON object per line. Graywolf accepts `hello` control
 records and processes `rx` records from protocol family `1`. For every
-reception it keeps the declared measured RXT links and also derives the final
-local link from the last repeated path station (or the packet source for a direct frame)
-to `receiver.station`, using `reception.local` RSSI, SNR, and frequency error.
+reception it keeps the declared measured RXT links. When the authoritative
+bytes produce a `TNC2Packet`, Graywolf also derives the final local link from
+its last repeated path identity (or its source for a direct frame) to
+`receiver.station`, using `reception.local` RSSI, SNR, and frequency error.
+Producer-supplied `packet.source` and `packet.path` hints never create a local
+link, and no local link is invented when the authoritative envelope cannot be
+parsed.
 Legacy hops with `has_data:false` are accepted but are not drawn as measured
 links, because the stream deliberately provides no radio metrics for them.
 

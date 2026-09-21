@@ -19,13 +19,18 @@ type PacketAddress struct {
 	Repeated bool   `json:"repeated,omitempty"`
 }
 
-// AX25SSID reports whether the suffix can be represented in the four-bit
-// classic AX.25 SSID field. It deliberately rejects by inspecting digits and
-// range directly, so an arbitrarily long numeric suffix is never truncated or
-// forced through a bounded integer type.
+// AX25SSID reports whether the suffix is already in the canonical textual
+// form representable by the four-bit classic AX.25 SSID field. An absent
+// suffix represents SSID 0; explicit "0" and leading-zero forms are rejected
+// because AX.25 text rendering cannot preserve them. The method inspects
+// digits and range directly, so an arbitrarily long numeric suffix is never
+// truncated or forced through a bounded integer type.
 func (a PacketAddress) AX25SSID() (uint8, bool) {
 	if a.Suffix == "" {
 		return 0, true
+	}
+	if a.Suffix[0] == '0' {
+		return 0, false
 	}
 	var value uint8
 	for i := 0; i < len(a.Suffix); i++ {

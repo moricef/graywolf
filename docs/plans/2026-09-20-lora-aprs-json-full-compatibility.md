@@ -101,9 +101,11 @@ func (a PacketAddress) AX25SSID() (uint8, bool)
 ```
 
 It succeeds only when the address meets all classic AX.25 constraints and the
-suffix is absent or strictly ASCII-decimal in the range 0-15. An arbitrarily
-long numeric suffix remains valid and exactly preserved even though it cannot
-be converted to an integer or encoded as AX.25.
+suffix is absent (AX.25 SSID 0) or canonical ASCII-decimal in the range 1-15.
+Explicit `-0`, leading-zero suffixes and lowercase calls are not canonical
+because `ax25.Address.String()` would silently rewrite their authoritative
+text. An arbitrarily long numeric suffix remains valid and exactly preserved
+even though it cannot be converted to an integer or encoded as AX.25.
 
 Candidate parsed-packet model:
 
@@ -164,10 +166,11 @@ type TNC2Packet struct {
 10. [x] Update `docs/wiki/rxt-telemetry.md` and operator-facing documentation
         only after implementation behavior matches the wider model.
 
-Throughout these steps, continue extracting `reception.local` and
-`reception.rxt` independently of TNC2 parsing, APRS semantics and AX.25
-encodability. Make preservation or delivery failures observable without
-terminating later valid stream records unnecessarily.
+Throughout these steps, continue extracting `reception.rxt` independently of
+TNC2 parsing, APRS semantics and AX.25 encodability. Derive a local link only
+from the `TNC2Packet` reparsed from authoritative bytes; producer address hints
+must never create one. Make preservation or delivery failures observable
+without terminating later valid stream records unnecessarily.
 
 ## Compatibility tests
 
@@ -175,7 +178,8 @@ terminating later valid stream records unnecessarily.
 - [x] `F4JJE-16` preserved exactly and not encoded as AX.25.
 - [x] `NN7LE-S` and `NN7LE-GS` preserved exactly.
 - [x] Extended identity used in source, destination and each path position.
-- [x] Numeric suffix 0-15 converts to AX.25 without changing identity.
+- [x] An absent suffix and canonical numeric suffixes 1-15 convert to AX.25
+      without changing identity; `-0` and leading-zero forms are refused.
 - [x] Numeric suffix greater than 15 remains valid TNC2 but is not AX.25
       encodable.
 - [x] Numeric suffix too large for `uint64` is preserved exactly and rejected

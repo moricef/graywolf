@@ -43,7 +43,11 @@ func TestAX25SSIDDoesNotBoundOpaqueSuffixStorage(t *testing.T) {
 		ok     bool
 	}{
 		{"", 0, true},
+		{"0", 0, false},
+		{"00", 0, false},
+		{"01", 0, false},
 		{"15", 15, true},
+		{"00015", 0, false},
 		{"16", 0, false},
 		{"GS", 0, false},
 		{"184467440737095516160000000000", 0, false},
