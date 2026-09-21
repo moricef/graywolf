@@ -100,11 +100,11 @@ jobs:
           # pure function of the commit, independent of depth (graywolf#310).
           commit="$(git rev-parse HEAD | cut -c1-8)"
           echo "commit=$commit" >> "$GITHUB_OUTPUT"
-          # GoReleaser names workflow_dispatch snapshots 0.0.0-<sha>.
-          # Give the Rust modem the same base version so Graywolf's startup
-          # compatibility check does not report a false mixed-build warning.
+          # Keep manual snapshots on the repository's real base version.
+          # The commit is already appended separately by both executables;
+          # embedding it in VERSION as well would display it twice.
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "version=0.0.0-$commit" >> "$GITHUB_OUTPUT"
+            echo "version=$(tr -d '[:space:]' < VERSION)" >> "$GITHUB_OUTPUT"
           else
             echo "version=${ref#v}" >> "$GITHUB_OUTPUT"
           fi
@@ -215,7 +215,9 @@ jobs:
       - name: Compute version metadata
         id: ver
         shell: bash
-        run: echo "commit=$(git rev-parse HEAD | cut -c1-8)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "commit=$(git rev-parse HEAD | cut -c1-8)" >> "$GITHUB_OUTPUT"
+          echo "base=$(tr -d '[:space:]' < VERSION)" >> "$GITHUB_OUTPUT"
 
       - name: Download frontend dist
         uses: actions/download-artifact@v5
@@ -290,6 +292,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GRAYWOLF_GIT_COMMIT: ${{ steps.ver.outputs.commit }}
+          GRAYWOLF_BASE_VERSION: ${{ steps.ver.outputs.base }}
 
       - name: Upload Windows binary for installer
         uses: actions/upload-artifact@v5

@@ -181,7 +181,7 @@ changelog:
       - '^test:'
 
 snapshot:
-  # Keep manual branch builds independent of the nearest Git tag. The release
-  # workflow passes the same fixed 8-character SHA to the Go and Rust builds,
-  # so both executables report an identical version at startup.
-  version_template: '0.0.0-{{ envOrDefault "GRAYWOLF_GIT_COMMIT" .ShortCommit }}'
+  # Keep manual branch builds independent of the nearest Git tag while using
+  # the base version from VERSION. The commit is stamped separately, so do not
+  # include it here or the displayed version would repeat the SHA.
+  version_template: '{{ envOrDefault "GRAYWOLF_BASE_VERSION" "0.0.0" }}'
