@@ -71,6 +71,34 @@ plus the non-printable Rev. 0 beta forms `0x1c` and `0x1d`. Neither the JSON
 consumer nor the textual TNC2 envelope converts their information bytes to a
 string before decoding or storage.
 
+## Field validation
+
+On 2026-09-21 the complete RF-to-map path was verified with a real current
+Mic-E beacon from `F4MLV-7`. The tracker transmitted:
+
+```text
+F4MLV-7>4R5WV3,WIDE1-1,WIDE2-1:`w25l*o[/"=?}
+```
+
+The iGate RF log also observed its relayed form with an RXT trailer:
+
+```text
+F4MLV-7>4R5WV3,F4MLV-2*,WIDE2-1:`w25l*o[/"=?}{Yua>}
+```
+
+The firmware dashboard exposed the clean Mic-E frame without the RXT trailer.
+Graywolf consumed the versioned JSON reception, classified the packet as
+`mic-e`, retained `F4MLV-7` and destination `4R5WV3`, and created the drawable
+local RF link `F4MLV-7 -> F4MLV-2` with `-74 dBm`, `13.00 dB` SNR and `459 Hz`
+frequency error. The blank TTH value is intentional: TTH belongs to remote RXT
+hops and is not invented for the final local reception.
+
+The iGate display used UTC (`11:42`) while Graywolf rendered Europe/Paris local
+time (`13:42`). This two-hour display difference did not change event ordering,
+link age or packet identity. This OTA observation validates the printable
+current Mic-E DTI; the non-printable `0x1c` and `0x1d` forms remain covered by
+the byte-exact automated JSON tests.
+
 The source is intentionally receive-only: Graywolf does not use the optional
 JSON TX API. It does handle heartbeat records and reliable history resume.
 When the producer advertises `history_resume`, Graywolf persists the last

@@ -191,6 +191,9 @@ without terminating later valid stream records unnecessarily.
 - [x] Binary Mic-E information remains byte-for-byte identical, including
       current/old DTI forms `` ` ``, `'`, `0x1c` and `0x1d`; a binary DTI is
       exercised through JSON reception, APRS decoding and packet logging.
+- [x] A real OTA current Mic-E beacon traverses the iGate JSON stream into
+      Graywolf as `mic-e`, produces the measured local RF link and remains
+      clean of its RXT trailer; binary DTI variants remain byte-exact tests.
 - [x] TNC2-compatible non-APRS application data is retained.
 - [x] Valid non-APRS TNC2 with an extended suffix is retained.
 - [x] Schema-valid `parse_status:"malformed"` with no possible `TNC2Packet` is
