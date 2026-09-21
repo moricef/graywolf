@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { linksToGeoJSON, mountRXTLinksLayer } from './rxt-links.js';
+import { linksToGeoJSON, mountRXTLinksLayer, RXT_POPUP_CLASS } from './rxt-links.js';
+
+test('RXT popup uses the theme-aware map popup class', () => {
+  assert.match(RXT_POPUP_CLASS, /(?:^|\s)gw-station-popup(?:\s|$)/);
+});
 
 test('linksToGeoJSON omits unresolved and expired links and ages colors', () => {
   const now = Date.parse('2026-09-18T12:30:00Z');

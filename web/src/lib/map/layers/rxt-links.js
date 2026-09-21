@@ -2,6 +2,7 @@ const SOURCE = 'gw-rxt-links';
 const GLOW = 'gw-rxt-links-glow';
 const LINES = 'gw-rxt-links-lines';
 const EMPTY = { type: 'FeatureCollection', features: [] };
+export const RXT_POPUP_CLASS = 'gw-station-popup gw-rxt-popup';
 
 export function linksToGeoJSON(links, now = Date.now()) {
   const features = [];
@@ -58,7 +59,11 @@ export function mountRXTLinksLayer(map, { visible = true } = {}) {
     const tth = p.tth_ms == null ? '—' : `${p.tth_ms} ms`;
     metrics.textContent = `RSSI ${p.rssi_dbm} dBm · SNR ${Number(p.snr_db).toFixed(2)} dB · FO ${p.fo_hz} Hz · TTH ${tth}`;
     body.append(title, metrics);
-    popup = new maplibregl.Popup({ offset: 8, maxWidth: '360px' })
+    popup = new maplibregl.Popup({
+      offset: 8,
+      maxWidth: '360px',
+      className: RXT_POPUP_CLASS,
+    })
       .setLngLat(event.lngLat).setDOMContent(body).addTo(map);
   };
   map.on('mouseenter', LINES, enter);
