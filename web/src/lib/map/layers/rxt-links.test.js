@@ -1,9 +1,27 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { linksToGeoJSON, mountRXTLinksLayer, RXT_POPUP_CLASS } from './rxt-links.js';
+import {
+  linksToGeoJSON,
+  mountRXTLinksLayer,
+  RXT_POPUP_CLASS,
+  uniqueRXTLinkProperties,
+} from './rxt-links.js';
 
 test('RXT popup uses the theme-aware map popup class', () => {
   assert.match(RXT_POPUP_CLASS, /(?:^|\s)gw-station-popup(?:\s|$)/);
+});
+
+test('RXT popup retains every overlapping directed link', () => {
+  const a = { from: 'A', to: 'B', rssi_dbm: -90 };
+  const b = { from: 'B', to: 'A', rssi_dbm: -80 };
+  assert.deepEqual(
+    uniqueRXTLinkProperties([
+      { properties: b },
+      { properties: a },
+      { properties: a },
+    ]),
+    [a, b],
+  );
 });
 
 test('linksToGeoJSON omits unresolved and expired links and ages colors', () => {
@@ -36,6 +54,8 @@ test('RXT layer teardown is safe after MapLibre has removed its style', () => {
     getCanvas() { return { style: {} }; },
   };
   const mounted = mountRXTLinksLayer(map);
+  assert.equal(layers.get('gw-rxt-links-hit')?.paint?.['line-width'], 18);
+  assert.equal(layers.get('gw-rxt-links-hit')?.paint?.['line-opacity'], 0);
   map.style = undefined;
   map.getLayer = () => { throw new TypeError('style already removed'); };
   assert.doesNotThrow(() => mounted.destroy());

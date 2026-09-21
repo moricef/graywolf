@@ -1,8 +1,20 @@
 const SOURCE = 'gw-rxt-links';
+const HIT = 'gw-rxt-links-hit';
 const GLOW = 'gw-rxt-links-glow';
 const LINES = 'gw-rxt-links-lines';
 const EMPTY = { type: 'FeatureCollection', features: [] };
 export const RXT_POPUP_CLASS = 'gw-station-popup gw-rxt-popup';
+
+export function uniqueRXTLinkProperties(features = []) {
+  const links = new Map();
+  for (const feature of features) {
+    const p = feature?.properties;
+    if (!p?.from || !p?.to) continue;
+    links.set(`${p.from}\u0000${p.to}`, p);
+  }
+  return [...links.values()].sort((a, b) =>
+    `${a.from}>${a.to}`.localeCompare(`${b.from}>${b.to}`));
+}
 
 export function linksToGeoJSON(links, now = Date.now()) {
   const features = [];
@@ -35,6 +47,11 @@ export function linksToGeoJSON(links, now = Date.now()) {
 export function mountRXTLinksLayer(map, { visible = true } = {}) {
   if (!map.getSource(SOURCE)) map.addSource(SOURCE, { type: 'geojson', data: EMPTY });
   const visibility = visible ? 'visible' : 'none';
+  if (!map.getLayer(HIT)) map.addLayer({
+    id: HIT, type: 'line', source: SOURCE,
+    layout: { visibility, 'line-cap': 'round' },
+    paint: { 'line-color': '#000000', 'line-width': 18, 'line-opacity': 0 },
+  });
   if (!map.getLayer(GLOW)) map.addLayer({
     id: GLOW, type: 'line', source: SOURCE,
     layout: { visibility, 'line-cap': 'round' },
@@ -46,33 +63,65 @@ export function mountRXTLinksLayer(map, { visible = true } = {}) {
     paint: { 'line-color': ['get', 'color'], 'line-width': 3, 'line-opacity': 0.9 },
   });
   let popup = null;
-  const enter = () => { map.getCanvas().style.cursor = 'pointer'; };
-  const leave = () => { map.getCanvas().style.cursor = ''; };
-  const click = (event) => {
-    const p = event.features?.[0]?.properties;
-    if (!p) return;
-    popup?.remove();
+  let popupSignature = '';
+  const showPopup = (event) => {
+    const links = uniqueRXTLinkProperties(event.features);
+    if (links.length === 0) return;
+    const signature = JSON.stringify(links);
+    if (!popup) {
+      popup = new maplibregl.Popup({
+        offset: 8,
+        maxWidth: '420px',
+        className: RXT_POPUP_CLASS,
+      }).setLngLat(event.lngLat).addTo(map);
+    } else {
+      popup.setLngLat(event.lngLat);
+    }
+    if (signature === popupSignature) return;
+    popupSignature = signature;
+
     const body = document.createElement('div');
-    const title = document.createElement('strong');
-    title.textContent = `${p.from} → ${p.to}`;
-    const metrics = document.createElement('div');
-    const tth = p.tth_ms == null ? '—' : `${p.tth_ms} ms`;
-    metrics.textContent = `RSSI ${p.rssi_dbm} dBm · SNR ${Number(p.snr_db).toFixed(2)} dB · FO ${p.fo_hz} Hz · TTH ${tth}`;
-    body.append(title, metrics);
-    popup = new maplibregl.Popup({
-      offset: 8,
-      maxWidth: '360px',
-      className: RXT_POPUP_CLASS,
-    })
-      .setLngLat(event.lngLat).setDOMContent(body).addTo(map);
+    body.className = 'rxt-popup-body';
+    if (links.length > 1) {
+      const heading = document.createElement('strong');
+      heading.className = 'rxt-popup-heading';
+      heading.textContent = `${links.length} liaisons superposées`;
+      body.append(heading);
+    }
+    for (const p of links) {
+      const row = document.createElement('div');
+      row.className = 'rxt-popup-row';
+      const title = document.createElement('strong');
+      title.textContent = `${p.from} → ${p.to}`;
+      const metrics = document.createElement('div');
+      metrics.className = 'rxt-popup-metrics';
+      const tth = p.tth_ms == null ? '—' : `${p.tth_ms} ms`;
+      metrics.textContent = `RSSI ${p.rssi_dbm} dBm · SNR ${Number(p.snr_db).toFixed(2)} dB · FO ${p.fo_hz} Hz · TTH ${tth}`;
+      row.append(title, metrics);
+      body.append(row);
+    }
+    popup.setDOMContent(body);
   };
-  map.on('mouseenter', LINES, enter);
-  map.on('mouseleave', LINES, leave);
-  map.on('click', LINES, click);
+  const enter = (event) => {
+    map.getCanvas().style.cursor = 'pointer';
+    showPopup(event);
+  };
+  const move = (event) => { showPopup(event); };
+  const leave = () => {
+    map.getCanvas().style.cursor = '';
+    popup?.remove();
+    popup = null;
+    popupSignature = '';
+  };
+  const click = (event) => { showPopup(event); };
+  map.on('mouseenter', HIT, enter);
+  map.on('mousemove', HIT, move);
+  map.on('mouseleave', HIT, leave);
+  map.on('click', HIT, click);
   return {
     refresh(links) { map.getSource(SOURCE)?.setData(linksToGeoJSON(links)); },
     setVisible(v) {
-      for (const id of [GLOW, LINES]) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', v ? 'visible' : 'none');
+      for (const id of [HIT, GLOW, LINES]) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', v ? 'visible' : 'none');
     },
     destroy() {
       popup?.remove();
@@ -81,11 +130,12 @@ export function mountRXTLinksLayer(map, { visible = true } = {}) {
       // cleared map.style, and getLayer()/getSource() throw instead of simply
       // returning undefined. Cleanup must be idempotent and safe against that
       // lifecycle order or the exception aborts the SPA route transition.
-      try { map.off('mouseenter', LINES, enter); } catch { /* map removed */ }
-      try { map.off('mouseleave', LINES, leave); } catch { /* map removed */ }
-      try { map.off('click', LINES, click); } catch { /* map removed */ }
+      try { map.off('mouseenter', HIT, enter); } catch { /* map removed */ }
+      try { map.off('mousemove', HIT, move); } catch { /* map removed */ }
+      try { map.off('mouseleave', HIT, leave); } catch { /* map removed */ }
+      try { map.off('click', HIT, click); } catch { /* map removed */ }
       if (!map.style) return;
-      for (const id of [LINES, GLOW]) {
+      for (const id of [LINES, GLOW, HIT]) {
         if (map.getLayer(id)) map.removeLayer(id);
       }
       if (map.getSource(SOURCE)) map.removeSource(SOURCE);
