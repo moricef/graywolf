@@ -10,10 +10,9 @@
 // validation is intentionally not attempted here.
 
 // Data type identifiers that mark a Mic-E payload. Kept in sync with the
-// Go decoder's dispatch (pkg/aprs/parse.go), which treats only '`' (current)
-// and '\'' (old) as Mic-E so the inspector's "Mic-E" label matches what the
-// rest of graywolf actually decodes.
-const MICE_TYPE_BYTES = new Set([0x60, 0x27]);
+// Go decoder's dispatch (pkg/aprs/parse.go): printable current/old (` and ')
+// plus the non-printable Rev. 0 beta forms 0x1c and 0x1d.
+const MICE_TYPE_BYTES = new Set([0x60, 0x27, 0x1c, 0x1d]);
 
 // AX.25 control/PID expected for an APRS UI frame.
 const AX25_UI_CONTROL = 0x03;
@@ -218,7 +217,8 @@ function validateControl(result, issues) {
 
 // Mic-E info field: type byte + 3 longitude + 3 speed/course + symbol +
 // symbol-table = 9 bytes minimum (APRS101 ch.10). The longitude/speed bytes
-// are offset-encoded printable ASCII (0x26-0x7f).
+// are offset by 28 and therefore occupy 0x1c-0x7f. Values below printable
+// ASCII are legitimate; zero-speed wrap encodings commonly contain them.
 function validateMicE(result, info, issues) {
   if (info.length < 9) {
     issues.push({
@@ -229,10 +229,10 @@ function validateMicE(result, info, issues) {
   }
   for (let i = 1; i <= 6; i++) {
     const b = info[i];
-    if (b < 0x26 || b > 0x7f) {
+    if (b < 0x1c || b > 0x7f) {
       issues.push({
         severity: 'error',
-        text: `Mic-E longitude/speed byte at info offset ${i} is 0x${hexByte(b)}, outside the encodable range 0x26-0x7F.`,
+        text: `Mic-E longitude/speed byte at info offset ${i} is 0x${hexByte(b)}, outside the encodable range 0x1C-0x7F.`,
       });
       break;
     }

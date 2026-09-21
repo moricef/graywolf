@@ -99,6 +99,13 @@ link age or packet identity. This OTA observation validates the printable
 current Mic-E DTI; the non-printable `0x1c` and `0x1d` forms remain covered by
 the byte-exact automated JSON tests.
 
+The packet inspector applies the same APRS 1.2c Mic-E wire rules as the
+semantic decoder. In particular, the six longitude and speed/course bytes use
+an offset of 28 and may therefore range from `0x1c` through `0x7f`; they are
+not restricted to printable ASCII. A live zero-speed beacon from `F4MLV-7`
+contained the valid speed/course triplet `0x6c 0x20 0x60` (0 kt, 68 degrees),
+which is retained and displayed without a false malformed-packet error.
+
 The source is intentionally receive-only: Graywolf does not use the optional
 JSON TX API. It does handle heartbeat records and reliable history resume.
 When the producer advertises `history_resume`, Graywolf persists the last

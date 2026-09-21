@@ -109,11 +109,42 @@ test('analyzeFrame flags invalid characters in a normal destination', () => {
 
 test('analyzeFrame validates a well-formed Mic-E frame', () => {
   // Dest "T7SUTV" is valid Mic-E (all chars in 0-9 A-L P-Z); info starts with
-  // '`' then 8+ encodable bytes (all in 0x26-0x7F).
+  // '`' then 8+ encodable bytes (all in 0x1C-0x7F).
   const f = frame('T7SUTV', 'NW5W', '`' + 'lmnopq' + 'rst');
   const r = analyzeFrame(f);
   assert.equal(r.isMicE, true);
   assert.equal(r.issues.length, 0);
+});
+
+test('analyzeFrame accepts live Mic-E zero-speed wrap bytes', () => {
+  // F4MLV-7>4R5WV3,TCPIP:`w26l `[/"=I}
+  // The speed/course triplet 0x6c 0x20 0x60 encodes 0 kt / 68 degrees.
+  // 0x20 is below printable-safe 0x26 but is valid Mic-E (offset +28).
+  const f = new Uint8Array([
+    0x68, 0xa4, 0x6a, 0xae, 0xac, 0x66, 0xe0, 0x8c,
+    0x68, 0x9a, 0x98, 0xac, 0x40, 0x6e, 0xa8, 0x86,
+    0xa0, 0x92, 0xa0, 0x40, 0x61, 0x03, 0xf0, 0x60,
+    0x77, 0x32, 0x36, 0x6c, 0x20, 0x60, 0x5b, 0x2f,
+    0x22, 0x3d, 0x49, 0x7d,
+  ]);
+  const r = analyzeFrame(f);
+  assert.equal(r.isMicE, true);
+  assert.deepEqual(r.issues, []);
+});
+
+test('analyzeFrame recognizes all four Mic-E data identifiers', () => {
+  for (const dti of [0x60, 0x27, 0x1c, 0x1d]) {
+    const f = frame('T7SUTV', 'NW5W', [dti, 0x6c, 0x6d, 0x6e, 0x6f, 0x70, 0x71, 0x72, 0x73]);
+    const r = analyzeFrame(f);
+    assert.equal(r.isMicE, true, `DTI 0x${dti.toString(16)}`);
+    assert.deepEqual(r.issues, [], `DTI 0x${dti.toString(16)}`);
+  }
+});
+
+test('analyzeFrame rejects a Mic-E offset byte below 0x1C', () => {
+  const f = frame('T7SUTV', 'NW5W', [0x60, 0x77, 0x32, 0x36, 0x6c, 0x1b, 0x60, 0x5b, 0x2f]);
+  const r = analyzeFrame(f);
+  assert.ok(r.issues.some((i) => /outside the encodable range 0x1C-0x7F/.test(i.text)));
 });
 
 test('analyzeFrame flags malformed Mic-E destination characters', () => {
@@ -139,13 +170,6 @@ test('analyzeFrame handles a frame that ends before its PID', () => {
   assert.equal(r.pid, null); // must stay null (drives the 0x?? render, not 0xundefined)
   assert.equal(r.isMicE, false);
   assert.ok(r.issues.some((i) => i.severity === 'warn' && /PID/.test(i.text)));
-});
-
-test('analyzeFrame does not treat legacy 0x1c/0x1d info bytes as Mic-E', () => {
-  // Matches the Go decoder, which only dispatches '`' and '\'' to Mic-E.
-  const f = frame('T7SUTV', 'NW5W', [0x1c, 0x21, 0x22]);
-  const r = analyzeFrame(f);
-  assert.equal(r.isMicE, false);
 });
 
 test('analyzeFrame warns on unexpected control/PID bytes', () => {
