@@ -85,7 +85,7 @@ export function mountRXTLinksLayer(map, { visible = true } = {}) {
     if (links.length > 1) {
       const heading = document.createElement('strong');
       heading.className = 'rxt-popup-heading';
-      heading.textContent = `${links.length} liaisons superposées`;
+      heading.textContent = `${links.length} overlapping links`;
       body.append(heading);
     }
     for (const p of links) {
