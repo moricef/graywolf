@@ -374,6 +374,8 @@ catches an operator upgrading/rebuilding graywolf while a tab is open.
 `GET /api/version` returns `{version, commit}` (commit added so a
 same-version rebuild is still detected; sourced from `Config.GitCommit`
 via [`pkg/app/wiring.go`](../../pkg/app/wiring.go) → `webapi.Config.Commit`).
+The About page displays the same pair as `v<version>-<commit>`, so an operator
+can verify a branch build without shell access.
 The web client captures that identity at load and re-checks it from
 [`web/src/lib/stores/server-version.svelte.js`](../../web/src/lib/stores/server-version.svelte.js)
 (pure latch/identity logic in

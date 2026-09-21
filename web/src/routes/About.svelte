@@ -6,11 +6,13 @@
   import { updates } from '../lib/updatesStore.svelte.js';
 
   let version = $state('');
+  let commit = $state('');
 
   onMount(async () => {
     try {
       const d = await fetch('/api/version').then(r => r.json());
       version = d.version || '';
+      commit = d.commit || '';
     } catch {}
     // Pull the full changelog for the What's new list below.
     // Re-runs every visit — cheap and keeps the list fresh if another
@@ -26,7 +28,7 @@
 <div class="about-content">
   <section class="about-section" aria-labelledby="install-heading">
     <h2 id="install-heading" class="about-section-heading">This install</h2>
-    <p class="about-version">Graywolf v.{version}</p>
+    <p class="about-version">Graywolf v{version}{#if commit}-{commit}{/if}</p>
     <p class="about-copyright">&copy; 2026 Chris Snell, NW5W</p>
   </section>
 
