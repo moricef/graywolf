@@ -6,20 +6,27 @@ bytes plus local and RXT radio metadata. Graywolf preserves every accepted
 reception, decodes APRS semantics when applicable, and displays measured RF
 links on the map.
 
-## Configure an iGate
+## Configure iGates
 
-Open **Settings -> RXT**, enter the absolute URL of the iGate endpoint, and
+Open **Settings -> RXT**, add the absolute URL of each iGate endpoint, and
 select **Save**. For example:
 
 ```text
 http://192.168.1.161/api/v1/aprs/stream
 ```
 
-Graywolf requests `application/x-ndjson`, reads the connection continuously,
-and reconnects automatically after a disconnect. The same page reports the
-last attempt, last successful record, the latest error, the number of `rx`
-records accepted, and the number of active links. An empty URL disables the
-source. Changing the URL takes effect immediately without restarting Graywolf.
+Graywolf runs every configured source independently. It requests
+`application/x-ndjson`, reads each connection continuously, and reconnects it
+automatically after a disconnect. The same page reports the last attempt,
+last successful record, latest error, accepted `rx` count, active links and
+history cursor separately for every source. Adding or removing a URL takes
+effect immediately without restarting Graywolf. Removing every URL disables
+RXT ingestion.
+
+There is no fixed source-count limit in the application. Each source uses one
+HTTP connection and one lightweight worker; the practical limit is the host's
+network and memory capacity. Source URLs are configuration data: Graywolf does
+not contain site-specific station names, VPN addresses or LAN routes.
 
 The authoritative `packet.raw_tnc2_base64` bytes are first stored in a
 lossless reception model. A separate textual TNC2 model is derived only for a
@@ -106,7 +113,7 @@ not restricted to printable ASCII. A live zero-speed beacon from `F4MLV-7`
 contained the valid speed/course triplet `0x6c 0x20 0x60` (0 kt, 68 degrees),
 which is retained and displayed without a false malformed-packet error.
 
-The source is intentionally receive-only: Graywolf does not use the optional
+Each source is intentionally receive-only: Graywolf does not use the optional
 JSON TX API. It does handle heartbeat records and reliable history resume.
 When the producer advertises `history_resume`, Graywolf persists the last
 preserved `event_id` and reconnects with `after=<event_id>`. A storage/delivery
@@ -165,4 +172,4 @@ the complete archive, keep both executables in the same directory, and start
 does not need to be installed or started separately.
 
 Graywolf stores its configuration and logs under `C:\ProgramData\Graywolf`, so
-replacing an extracted test-build directory does not erase the saved RXT URL.
+replacing an extracted test-build directory does not erase the saved RXT URLs.

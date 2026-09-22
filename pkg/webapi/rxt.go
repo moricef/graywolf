@@ -14,10 +14,10 @@ import (
 
 type RXTLinkSource interface {
 	Enabled() bool
-	Endpoint() string
-	SetEndpoint(string)
+	Endpoints() []string
+	SetSources([]rxttelemetry.SourceConfig)
 	Snapshot(time.Time) []rxttelemetry.Link
-	Status(time.Time) rxttelemetry.Status
+	Statuses(time.Time) []rxttelemetry.Status
 }
 
 type RXTLinkDTO struct {
@@ -32,12 +32,23 @@ type RXTPositionDTO struct {
 }
 
 type rxtConfigDTO struct {
-	Endpoint string `json:"endpoint"`
+	Endpoints []string `json:"endpoints"`
+	Endpoint  string   `json:"endpoint,omitempty"`
+}
+
+type rxtStatusDTO struct {
+	rxttelemetry.Status
+	Sources []rxttelemetry.Status `json:"sources"`
 }
 
 func RegisterRXT(srv *Server, mux *http.ServeMux, source RXTLinkSource, stations StationCache, store *configstore.Store) {
 	mux.HandleFunc("GET /api/rxt/config", func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, http.StatusOK, rxtConfigDTO{Endpoint: source.Endpoint()})
+		endpoints := source.Endpoints()
+		var legacyEndpoint string
+		if len(endpoints) > 0 {
+			legacyEndpoint = endpoints[0]
+		}
+		writeJSON(w, http.StatusOK, rxtConfigDTO{Endpoints: endpoints, Endpoint: legacyEndpoint})
 	})
 	mux.HandleFunc("PUT /api/rxt/config", func(w http.ResponseWriter, r *http.Request) {
 		body, err := decodeJSON[rxtConfigDTO](r)
@@ -45,19 +56,32 @@ func RegisterRXT(srv *Server, mux *http.ServeMux, source RXTLinkSource, stations
 			badRequest(w, err.Error())
 			return
 		}
-		body.Endpoint = strings.TrimSpace(body.Endpoint)
-		if body.Endpoint != "" {
-			u, err := url.ParseRequestURI(body.Endpoint)
+		endpoints := body.Endpoints
+		// Accept the original singleton request shape during upgrades.
+		if len(endpoints) == 0 && strings.TrimSpace(body.Endpoint) != "" {
+			endpoints = []string{body.Endpoint}
+		}
+		clean := make([]string, 0, len(endpoints))
+		seen := make(map[string]bool, len(endpoints))
+		for _, endpoint := range endpoints {
+			endpoint = strings.TrimSpace(endpoint)
+			if endpoint == "" || seen[endpoint] {
+				continue
+			}
+			u, err := url.ParseRequestURI(endpoint)
 			if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 				badRequest(w, "endpoint must be an absolute HTTP or HTTPS URL")
 				return
 			}
+			seen[endpoint] = true
+			clean = append(clean, endpoint)
 		}
 		if store == nil {
 			http.Error(w, "RXT configuration store unavailable", http.StatusServiceUnavailable)
 			return
 		}
-		if err := store.UpsertRXTConfig(r.Context(), configstore.RXTConfig{Endpoint: body.Endpoint}); err != nil {
+		configs, err := store.ReplaceRXTConfigs(r.Context(), clean)
+		if err != nil {
 			if srv != nil {
 				srv.internalError(w, r, "save RXT config", err)
 			} else {
@@ -65,11 +89,31 @@ func RegisterRXT(srv *Server, mux *http.ServeMux, source RXTLinkSource, stations
 			}
 			return
 		}
-		source.SetEndpoint(body.Endpoint)
-		writeJSON(w, http.StatusOK, body)
+		sources := make([]rxttelemetry.SourceConfig, 0, len(configs))
+		for _, config := range configs {
+			sources = append(sources, rxttelemetry.SourceConfig{
+				Endpoint: config.Endpoint, LastEventID: config.LastEventID,
+				LastBootID: config.LastBootID, ResumeSupported: config.ResumeSupported,
+			})
+		}
+		source.SetSources(sources)
+		endpoints = source.Endpoints()
+		var legacyEndpoint string
+		if len(endpoints) > 0 {
+			legacyEndpoint = endpoints[0]
+		}
+		writeJSON(w, http.StatusOK, rxtConfigDTO{Endpoints: endpoints, Endpoint: legacyEndpoint})
 	})
 	mux.HandleFunc("GET /api/rxt/status", func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, http.StatusOK, source.Status(time.Now().UTC()))
+		now := time.Now().UTC()
+		statuses := source.Statuses(now)
+		legacy := rxttelemetry.Status{Enabled: source.Enabled()}
+		if len(statuses) > 0 {
+			legacy = statuses[0]
+		}
+		legacy.Enabled = source.Enabled()
+		legacy.ActiveLinks = len(source.Snapshot(now))
+		writeJSON(w, http.StatusOK, rxtStatusDTO{Status: legacy, Sources: statuses})
 	})
 	var lastCounts atomic.Uint64
 	mux.HandleFunc("GET /api/rxt/links", func(w http.ResponseWriter, _ *http.Request) {

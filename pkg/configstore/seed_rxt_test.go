@@ -55,3 +55,38 @@ func TestRXTConfigRoundTrip(t *testing.T) {
 		t.Fatalf("changed endpoint retained cursor: %+v", got)
 	}
 }
+
+func TestReplaceRXTConfigsPreservesUnchangedResumeState(t *testing.T) {
+	store, err := Open(filepath.Join(t.TempDir(), "graywolf.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	ctx := context.Background()
+
+	configs, err := store.ReplaceRXTConfigs(ctx, []string{
+		"http://local/api/v1/aprs/stream", "http://firmin/rxt.json",
+	})
+	if err != nil || len(configs) != 2 {
+		t.Fatalf("initial configs=%+v err=%v", configs, err)
+	}
+	if err := store.UpdateRXTResume(ctx, "http://local/api/v1/aprs/stream", "boot:8", "boot", true); err != nil {
+		t.Fatal(err)
+	}
+	configs, err = store.ReplaceRXTConfigs(ctx, []string{
+		"http://local/api/v1/aprs/stream", "http://third/api/v1/aprs/stream",
+	})
+	if err != nil || len(configs) != 2 {
+		t.Fatalf("replaced configs=%+v err=%v", configs, err)
+	}
+	byEndpoint := make(map[string]RXTConfig)
+	for _, config := range configs {
+		byEndpoint[config.Endpoint] = config
+	}
+	if byEndpoint["http://local/api/v1/aprs/stream"].LastEventID != "boot:8" {
+		t.Fatalf("unchanged source lost cursor: %+v", byEndpoint)
+	}
+	if _, ok := byEndpoint["http://firmin/rxt.json"]; ok {
+		t.Fatalf("removed source retained: %+v", byEndpoint)
+	}
+}

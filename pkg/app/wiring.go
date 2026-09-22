@@ -708,18 +708,27 @@ func (a *App) wireServicesInner(ctx context.Context) error {
 	// Optional LoRa APRS RXT side-channel. The database is canonical. The
 	// legacy CLI flag seeds/overrides it once so existing deployments migrate
 	// without losing their configured endpoint.
-	rxtCfg, err := a.store.GetRXTConfig(ctx)
+	rxtCfgs, err := a.store.ListRXTConfigs(ctx)
 	if err != nil {
 		return fmt.Errorf("read RXT config: %w", err)
 	}
-	if a.cfg.RXTEndpoint != "" && rxtCfg.ID == 0 {
-		rxtCfg.Endpoint = a.cfg.RXTEndpoint
-		if err := a.store.UpsertRXTConfig(ctx, rxtCfg); err != nil {
+	if a.cfg.RXTEndpoint != "" && len(rxtCfgs) == 0 {
+		if err := a.store.UpsertRXTConfig(ctx, configstore.RXTConfig{Endpoint: a.cfg.RXTEndpoint}); err != nil {
 			return fmt.Errorf("persist CLI RXT endpoint: %w", err)
 		}
+		rxtCfgs, err = a.store.ListRXTConfigs(ctx)
+		if err != nil {
+			return fmt.Errorf("reload RXT config: %w", err)
+		}
 	}
-	a.rxtTelemetry = rxttelemetry.New(rxtCfg.Endpoint, nil, a.logger)
-	a.rxtTelemetry.SetResumeState(rxtCfg.LastEventID, rxtCfg.LastBootID, rxtCfg.ResumeSupported)
+	rxtSources := make([]rxttelemetry.SourceConfig, 0, len(rxtCfgs))
+	for _, cfg := range rxtCfgs {
+		rxtSources = append(rxtSources, rxttelemetry.SourceConfig{
+			Endpoint: cfg.Endpoint, LastEventID: cfg.LastEventID,
+			LastBootID: cfg.LastBootID, ResumeSupported: cfg.ResumeSupported,
+		})
+	}
+	a.rxtTelemetry = rxttelemetry.NewCollection(rxtSources, nil, a.logger)
 	a.rxtTelemetry.SetResumeHandler(func(state rxttelemetry.ResumeState) error {
 		return a.store.UpdateRXTResume(context.Background(), state.Endpoint, state.EventID, state.BootID, state.Supported)
 	})

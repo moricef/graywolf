@@ -141,7 +141,7 @@ type App struct {
 	// via SetUpdatesChecker so GET /api/updates/status can project its
 	// cached Snapshot.
 	updatesChecker *updatescheck.Checker
-	rxtTelemetry   *rxttelemetry.Service
+	rxtTelemetry   *rxttelemetry.Collection
 	rxtWG          sync.WaitGroup
 
 	// Guards reloadIgate's no-op-skip. Owned by the single igateComponent

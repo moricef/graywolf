@@ -507,8 +507,8 @@ type UpdatesConfig struct {
 	UpdatedAt time.Time `json:"-"`
 }
 
-// RXTConfig stores the optional LoRa APRS JSON source URL. Singleton at id=1;
-// an empty endpoint disables stream consumption and legacy RXT polling.
+// RXTConfig stores one optional LoRa APRS JSON source URL. Multiple rows are
+// allowed; each producer keeps an independent history-resume cursor.
 type RXTConfig struct {
 	ID              uint32    `gorm:"primaryKey;autoIncrement" json:"id"`
 	Endpoint        string    `gorm:"not null;default:''" json:"endpoint"`
