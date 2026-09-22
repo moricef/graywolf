@@ -99,6 +99,24 @@ func TestConsumeStreamDeliversPacketAndBuildsRXTAndLocalLinks(t *testing.T) {
 	}
 }
 
+func TestLocalLinkIgnoresRepeatedRoutingAlias(t *testing.T) {
+	tnc2Raw := []byte("F4KOL-4>APLRG1,F1ZDB-10*,F4GCF-4*,WIDE2*:test")
+	rx := fmt.Sprintf(`{"protocol":"lora-aprs-json","protocol_version":"1","schema_version":"1.0","event":"rx","event_id":"boot-alias:1","boot_id":"boot-alias","sequence":1,"receiver":{"station":"F1ZDB-10"},"packet":{"raw_tnc2_base64":%q,"parse_status":"parsed"},"reception":{"local":{"rssi_dbm":-122,"snr_db":-1.5,"frequency_error_hz":460}}}`,
+		base64.StdEncoding.EncodeToString(tnc2Raw))
+
+	s := New("http://igate.invalid/api/v1/aprs/stream", nil, nil)
+	if err := s.consumeStream(context.Background(), strings.NewReader(rx+"\n")); !errors.Is(err, io.ErrUnexpectedEOF) {
+		t.Fatalf("consumeStream error = %v, want unexpected EOF", err)
+	}
+	links := s.Snapshot(time.Now().UTC())
+	if len(links) != 1 {
+		t.Fatalf("got %d links, want one local link: %+v", len(links), links)
+	}
+	if got := links[0]; got.From != "F4GCF-4" || got.To != "F1ZDB-10" {
+		t.Fatalf("local link = %s>%s, want F4GCF-4>F1ZDB-10", got.From, got.To)
+	}
+}
+
 func TestOfficialProtocolConsumerVectors(t *testing.T) {
 	fixture, err := os.Open("testdata/lora-aprs-json-v1-consumer-vectors.ndjson")
 	if err != nil {

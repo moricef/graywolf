@@ -18,6 +18,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/chrissnell/graywolf/pkg/aprs"
 	"github.com/chrissnell/graywolf/pkg/tnc2"
 )
 
@@ -705,7 +706,7 @@ func (s *Service) processStreamRecord(ctx context.Context, event streamRecord) e
 	if event.Reception.Local != nil && reception.Packet != nil {
 		from := reception.Packet.Source.Text
 		for _, address := range reception.Packet.Path {
-			if address.Repeated {
+			if address.Repeated && !aprs.IsGenericPathAlias(address.Text) {
 				from = strings.TrimSuffix(address.Text, "*")
 			}
 		}
