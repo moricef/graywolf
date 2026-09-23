@@ -1,29 +1,35 @@
 # LoRa APRS RXT telemetry
 
-Graywolf can consume the versioned LoRa APRS JSON stream exposed by compatible
-receivers and iGates. Each `rx` event supplies authoritative TNC2-compatible
-bytes plus local and RXT radio metadata. Graywolf preserves every accepted
-reception, decodes APRS semantics when applicable, and displays measured RF
+RXT (Remote Receiver Telemetry) reports measurements made by receivers along
+the RF path. Graywolf consumes the versioned LoRa APRS JSON stream exposed by
+compatible receivers and iGates. Each `rx` event supplies authoritative
+TNC2-compatible bytes, measurements from the local iGate receiver, and any RXT
+measurements made by previous receivers. Graywolf preserves accepted
+receptions, decodes APRS semantics when applicable, and displays measured RF
 links on the map.
 
 ## Configure iGates
 
-Open **Settings -> RXT**, add the absolute URL of each iGate endpoint, and
-select **Save**. For example:
+Open **Settings -> RXT**, add each iGate's stream URL, and select **Save**. For
+example:
 
 ```text
 http://192.168.1.161/api/v1/aprs/stream
 ```
 
+The URL must be reachable from the computer running Graywolf. If an iGate is
+reachable only through a VPN or SSH tunnel on another computer, arrange that
+network path first; enter the URL at the address and port visible to Graywolf.
+For a tunnel terminating on the Graywolf computer, that can be
+`http://127.0.0.1:18102/api/v1/aprs/stream`.
+
 Graywolf runs every configured source independently. It requests
-`application/x-ndjson`, reads each connection continuously, and reconnects it
-automatically after a disconnect. A stream silent for 45 seconds is closed and
-reconnected, even if its TCP connection still appears established. The same
-page reports the last attempt,
-last successful record, latest error, accepted `rx` count, active links and
-history cursor separately for every source. Adding or removing a URL takes
-effect immediately without restarting Graywolf. Removing every URL disables
-RXT ingestion.
+`application/x-ndjson`, reads each connection continuously, and reconnects
+after a disconnect. The settings page reports the last attempt, last successful
+event, latest error, accepted `rx` count, active links and history cursor
+separately for every source. Adding or removing a URL takes effect without
+restarting Graywolf.
+Removing every URL disables RXT ingestion.
 
 There is no fixed source-count limit in the application. Each source uses one
 HTTP connection and one lightweight worker; the practical limit is the host's
@@ -47,11 +53,21 @@ received JSON event. JSON ingress is receive-only by default: representability
 alone never authorizes KISS, digipeater, RF or APRS-IS output, nor an automatic
 action or message response.
 
-The **RXT Telemetry** page lists decoded links and their RSSI, SNR, frequency
-offset, time-to-hop, packet, age, and map-position state. The Live Map draws a
-link only after APRS has supplied positions for both endpoint callsigns. The
-newest observation replaces older data for the same directed link, and links
-expire after 30 minutes.
+The **RXT Telemetry** page lists measured links and their RSSI, SNR, frequency
+offset (FO), time-to-hop (TTH), packet, age, and map-position state. Each
+directed `TX -> RX` pair has one row: its newest observation wins, including
+when multiple sources report the same pair. Links expire after 30 minutes.
+`TTH` is absent for the final local reception because it was not measured as a
+remote RXT hop.
+
+On the **Live Map**, enable **RXT Links** to draw links whose two stations have
+known positions. The **RXT station** selector shows only links involving one
+chosen station, or all links. Green means observed within the last 10 minutes;
+orange means older than 10 minutes. These colors represent age, not RSSI or
+link quality. Hover over a line to see its measurements. When several links
+overlap, the popup lists each directed link separately. **Station Labels**
+controls callsign labels independently of station symbols; clicking overlapping
+station symbols spreads them apart for selection.
 
 ## Versioned NDJSON stream
 
@@ -80,7 +96,7 @@ plus the non-printable Rev. 0 beta forms `0x1c` and `0x1d`. Neither the JSON
 consumer nor the textual TNC2 envelope converts their information bytes to a
 string before decoding or storage.
 
-## Field validation
+## Historical field validation (2026-09-21)
 
 On 2026-09-21 the complete RF-to-map path was verified with a real current
 Mic-E beacon from `F4MLV-7`. The tracker transmitted:
@@ -102,9 +118,10 @@ local RF link `F4MLV-7 -> F4MLV-2` with `-74 dBm`, `13.00 dB` SNR and `459 Hz`
 frequency error. The blank TTH value is intentional: TTH belongs to remote RXT
 hops and is not invented for the final local reception.
 
-The iGate display used UTC (`11:42`) while Graywolf rendered Europe/Paris local
-time (`13:42`). This two-hour display difference did not change event ordering,
-link age or packet identity. This OTA observation validates the printable
+For this observation the iGate displayed UTC (`11:42`) while Graywolf rendered
+Europe/Paris local time (`13:42`). The iGate's GMT offset is configurable; the
+display difference did not change event ordering, link age or packet identity.
+This RF observation validates the printable
 current Mic-E DTI; the non-printable `0x1c` and `0x1d` forms remain covered by
 the byte-exact automated JSON tests.
 
@@ -134,7 +151,9 @@ populated from the continuous stream.
 
 Existing `/rxt.json` URLs remain supported. Graywolf polls these endpoints
 every five seconds and consumes `age_ms`, `packet`, and `rxt_hops` entries
-whose `has_data` value is true:
+whose `has_data` value is true. This compatibility path does not ingest APRS
+packets or create a final local link from the legacy `local` field. Use the
+versioned JSON stream for those functions:
 
 ```json
 [
@@ -165,13 +184,3 @@ whose `has_data` value is true:
 Legacy polling accepts at most 1 MiB per response. The iGate and Graywolf do
 not need to share a timezone because `age_ms`, rather than the wall-clock-only
 `rx_time`, determines the observation time.
-
-## Portable Windows test build
-
-The Windows ZIP contains both `graywolf.exe` and `graywolf-modem.exe`. Extract
-the complete archive, keep both executables in the same directory, and start
-`graywolf.exe`. The modem helper is discovered and launched automatically; it
-does not need to be installed or started separately.
-
-Graywolf stores its configuration and logs under `C:\ProgramData\Graywolf`, so
-replacing an extracted test-build directory does not erase the saved RXT URLs.
