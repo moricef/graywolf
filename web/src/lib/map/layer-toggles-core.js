@@ -11,8 +11,10 @@
 // on; the RF reachability filters start off.
 export const LAYER_TOGGLES_DEFAULTS = {
   stations: true,
+  stationLabels: true,
   trails: true,
   rxtLinks: true,
+  rxtStation: '',
   weather: true,
   myPosition: true,
   fixedPoints: true,

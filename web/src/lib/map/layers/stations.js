@@ -20,6 +20,11 @@
 
 import maplibregl from 'maplibre-gl';
 import { createAprsIconElement } from '../aprs-icon-element.js';
+import {
+  overlappingCluster,
+  spiderOffsets,
+  STATION_OVERLAP_PX,
+} from '../station-spider-core.js';
 
 export function mountStationsLayer(map, getStations, {
   onMarkerEnter = null,
@@ -28,6 +33,56 @@ export function mountStationsLayer(map, getStations, {
 } = {}) {
   // callsign → { marker }
   const markers = new Map();
+  let spiderfied = new Set();
+
+  function collapseSpider() {
+    if (spiderfied.size === 0) return;
+    for (const callsign of spiderfied) {
+      const entry = markers.get(callsign);
+      if (!entry) continue;
+      entry.marker.setOffset([0, 0]);
+      const root = entry.marker.getElement();
+      root.classList.remove('gw-station-spiderfied');
+      root.querySelector('.gw-station-spider-leg')?.remove();
+    }
+    spiderfied = new Set();
+  }
+
+  function addSpiderLeg(root, offset) {
+    const leg = document.createElement('div');
+    leg.className = 'gw-station-spider-leg';
+    const dx = -offset.x;
+    const dy = -offset.y;
+    leg.style.width = `${Math.hypot(dx, dy)}px`;
+    leg.style.transform = `rotate(${Math.atan2(dy, dx)}rad)`;
+    root.prepend(leg);
+  }
+
+  function spiderfyAt(callsign) {
+    if (spiderfied.has(callsign)) return false;
+    collapseSpider();
+
+    const points = [];
+    for (const [id, { marker }] of markers) {
+      if (marker.getElement().style.display === 'none') continue;
+      const point = map.project(marker.getLngLat());
+      points.push({ id, x: point.x, y: point.y });
+    }
+    const cluster = overlappingCluster(points, callsign, STATION_OVERLAP_PX).sort();
+    if (cluster.length < 2) return false;
+
+    const offsets = spiderOffsets(cluster.length);
+    spiderfied = new Set(cluster);
+    cluster.forEach((id, index) => {
+      const entry = markers.get(id);
+      if (!entry) return;
+      const root = entry.marker.getElement();
+      entry.marker.setOffset([offsets[index].x, offsets[index].y]);
+      root.classList.add('gw-station-spiderfied');
+      addSpiderLeg(root, offsets[index]);
+    });
+    return true;
+  }
 
   function createRoot(s) {
     const root = document.createElement('div');
@@ -72,6 +127,7 @@ export function mountStationsLayer(map, getStations, {
     if (onMarkerClick) {
       root.addEventListener('click', (ev) => {
         ev.stopPropagation();
+        if (spiderfyAt(s.callsign)) return;
         const fresh = lookupStation(s.callsign) || s;
         onMarkerClick(fresh);
       });
@@ -122,6 +178,10 @@ export function mountStationsLayer(map, getStations, {
   }
 
   function destroy() {
+    collapseSpider();
+    map.off('movestart', collapseSpider);
+    map.off('zoomstart', collapseSpider);
+    map.off('click', collapseSpider);
     for (const { marker } of markers.values()) marker.remove();
     markers.clear();
   }
@@ -131,6 +191,10 @@ export function mountStationsLayer(map, getStations, {
   // We track the desired state so newly-created markers in subsequent
   // refresh() calls inherit the right visibility.
   let visible = true;
+  // Callsign labels can be hidden independently from station markers. Only
+  // the label itself is affected: the APRS symbol, hover/click target and
+  // optional weather temperature remain available.
+  let labelsVisible = true;
   // Optional per-station predicate. A station with predicate(s)===false
   // is hidden even when the layer is "visible". Used by Direct RX toggle.
   let filter = null;
@@ -147,10 +211,22 @@ export function mountStationsLayer(map, getStations, {
     }
   }
   function setVisible(next) {
+    collapseSpider();
     visible = !!next;
     applyDisplay();
   }
+  function applyLabelDisplay() {
+    for (const { marker } of markers.values()) {
+      const label = marker.getElement().querySelector('.gw-station-label');
+      if (label) label.style.display = labelsVisible ? '' : 'none';
+    }
+  }
+  function setLabelsVisible(next) {
+    labelsVisible = !!next;
+    applyLabelDisplay();
+  }
   function setFilter(pred) {
+    collapseSpider();
     filter = typeof pred === 'function' ? pred : null;
     applyDisplay();
   }
@@ -165,8 +241,14 @@ export function mountStationsLayer(map, getStations, {
 
   const wrappedRefresh = () => {
     refresh();
+    if ([...spiderfied].some((callsign) => !markers.has(callsign))) collapseSpider();
     applyDisplay();
+    applyLabelDisplay();
   };
 
-  return { refresh: wrappedRefresh, destroy, setVisible, setFilter, getTempSlot };
+  map.on('movestart', collapseSpider);
+  map.on('zoomstart', collapseSpider);
+  map.on('click', collapseSpider);
+
+  return { refresh: wrappedRefresh, destroy, setVisible, setLabelsVisible, setFilter, getTempSlot };
 }

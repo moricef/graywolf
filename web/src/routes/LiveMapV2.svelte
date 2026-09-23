@@ -111,10 +111,21 @@
   let fixedPointsLayer = null;
   let rxtLinksLayer = null;
   let rxtLinksTimer = null;
+  let rxtLinkStations = $state([]);
 
   async function refreshRXTLinks() {
     if (!rxtLinksLayer || !layerToggles.rxtLinks) return;
-    try { rxtLinksLayer.refresh(await loadRXTLinks()); } catch { /* next poll retries */ }
+    try {
+      const links = await loadRXTLinks();
+      const stations = new Set();
+      for (const link of links ?? []) {
+        if (link?.from) stations.add(link.from);
+        if (link?.to) stations.add(link.to);
+      }
+      if (layerToggles.rxtStation) stations.add(layerToggles.rxtStation);
+      rxtLinkStations = [...stations].sort((a, b) => a.localeCompare(b));
+      rxtLinksLayer.refresh(links);
+    } catch { /* next poll retries */ }
   }
   function startRXTLinksPolling() {
     if (rxtLinksTimer) return;
@@ -679,7 +690,10 @@
       visible: layerToggles.directRxHeatmap,
       opacity: layerToggles.directRxHeatmapOpacity,
     });
-    rxtLinksLayer = mountRXTLinksLayer(map, { visible: layerToggles.rxtLinks });
+    rxtLinksLayer = mountRXTLinksLayer(map, {
+      visible: layerToggles.rxtLinks,
+      station: layerToggles.rxtStation,
+    });
     if (layerToggles.rxtLinks) startRXTLinksPolling();
     if (layerToggles.directRxHeatmap) {
       refreshHeatmap();
@@ -774,12 +788,14 @@
     // would otherwise be created visible/unfiltered and the saved preference
     // never applied until the operator toggled a checkbox. (graywolf#363)
     stationsLayer.setVisible(layerToggles.stations);
+    stationsLayer.setLabelsVisible(layerToggles.stationLabels);
     trailsLayer.setVisible(layerToggles.trails);
     weatherLayer.setVisible(layerToggles.weather);
     windBarbsLayer.setVisible(layerToggles.weather);
     myPositionLayer.setVisible(layerToggles.myPosition);
     fixedPointsLayer.setVisible(layerToggles.fixedPoints);
     rxtLinksLayer.setVisible(layerToggles.rxtLinks);
+    rxtLinksLayer.setStationFilter(layerToggles.rxtStation);
     // Fronts layer disabled for now.
     // frontsLayer.setVisible(layerToggles.fronts);
     const initialPred = layerToggles.directRxOnly
@@ -983,6 +999,10 @@
     stationsLayer?.setVisible(v);
   });
   $effect(() => {
+    const v = layerToggles.stationLabels;
+    stationsLayer?.setLabelsVisible(v);
+  });
+  $effect(() => {
     const v = layerToggles.trails;
     trailsLayer?.setVisible(v);
   });
@@ -990,6 +1010,10 @@
     const v = layerToggles.rxtLinks;
     rxtLinksLayer?.setVisible(v);
     if (v) startRXTLinksPolling(); else stopRXTLinksPolling();
+  });
+  $effect(() => {
+    const station = layerToggles.rxtStation;
+    rxtLinksLayer?.setStationFilter(station);
   });
   // Wind barbs ride along with the Weather overlay -- they ARE the
   // weather wind display, so one toggle governs both the temp chip and
@@ -1347,6 +1371,14 @@
           />
           <span>Stations</span>
         </label>
+        <label class="toggle-row" title="Show callsigns beside station symbols">
+          <input
+            type="checkbox"
+            checked={layerToggles.stationLabels}
+            onchange={(e) => (layerToggles.stationLabels = e.currentTarget.checked)}
+          />
+          <span>Station Labels</span>
+        </label>
         <label class="toggle-row">
           <input
             type="checkbox"
@@ -1371,6 +1403,21 @@
           />
           <span>RXT Links</span>
         </label>
+        {#if layerToggles.rxtLinks}
+          <div class="rxt-station-filter">
+            <label class="timerange-label" for="rxt-station-select">RXT station</label>
+            <select
+              id="rxt-station-select"
+              class="map-timerange-select"
+              bind:value={layerToggles.rxtStation}
+            >
+              <option value="">All links</option>
+              {#each rxtLinkStations as callsign}
+                <option value={callsign}>{callsign}</option>
+              {/each}
+            </select>
+          </div>
+        {/if}
         <label class="toggle-row">
           <input
             type="checkbox"
@@ -1975,6 +2022,20 @@
   :global(.gw-station-icon) {
     width: 21px;
     height: 21px;
+  }
+  :global(.gw-station-spiderfied) {
+    z-index: 2;
+  }
+  :global(.gw-station-spider-leg) {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    height: 1px;
+    transform-origin: 0 50%;
+    background: var(--color-accent, #4a9eff);
+    opacity: 0.7;
+    pointer-events: none;
+    box-shadow: 0 0 2px rgba(0, 0, 0, 0.8);
   }
   :global(.gw-station-aside) {
     position: absolute;

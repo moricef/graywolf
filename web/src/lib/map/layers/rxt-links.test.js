@@ -4,6 +4,7 @@ import {
   linksToGeoJSON,
   mountRXTLinksLayer,
   RXT_POPUP_CLASS,
+  rxtStationFilter,
   uniqueRXTLinkProperties,
 } from './rxt-links.js';
 
@@ -22,6 +23,16 @@ test('RXT popup retains every overlapping directed link', () => {
     ]),
     [a, b],
   );
+});
+
+test('RXT station filter matches either end of a link', () => {
+  assert.equal(rxtStationFilter(''), null);
+  assert.equal(rxtStationFilter('   '), null);
+  assert.deepEqual(rxtStationFilter('F4MLV-10'), [
+    'any',
+    ['==', ['get', 'from'], 'F4MLV-10'],
+    ['==', ['get', 'to'], 'F4MLV-10'],
+  ]);
 });
 
 test('linksToGeoJSON omits unresolved and expired links and ages colors', () => {
@@ -48,6 +59,7 @@ test('RXT layer teardown is safe after MapLibre has removed its style', () => {
     removeSource(id) { sources.delete(id); },
     addLayer(layer) { layers.set(layer.id, layer); },
     getLayer(id) { return layers.get(id); },
+    setFilter(id, filter) { layers.get(id).filter = filter; },
     removeLayer(id) { layers.delete(id); },
     on() {},
     off() {},
@@ -56,6 +68,8 @@ test('RXT layer teardown is safe after MapLibre has removed its style', () => {
   const mounted = mountRXTLinksLayer(map);
   assert.equal(layers.get('gw-rxt-links-hit')?.paint?.['line-width'], 18);
   assert.equal(layers.get('gw-rxt-links-hit')?.paint?.['line-opacity'], 0);
+  mounted.setStationFilter('F4MLV-10');
+  assert.deepEqual(layers.get('gw-rxt-links-hit')?.filter, rxtStationFilter('F4MLV-10'));
   map.style = undefined;
   map.getLayer = () => { throw new TypeError('style already removed'); };
   assert.doesNotThrow(() => mounted.destroy());

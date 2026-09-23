@@ -5,6 +5,12 @@ const LINES = 'gw-rxt-links-lines';
 const EMPTY = { type: 'FeatureCollection', features: [] };
 export const RXT_POPUP_CLASS = 'gw-station-popup gw-rxt-popup';
 
+export function rxtStationFilter(station) {
+  const callsign = String(station ?? '').trim();
+  if (!callsign) return null;
+  return ['any', ['==', ['get', 'from'], callsign], ['==', ['get', 'to'], callsign]];
+}
+
 export function uniqueRXTLinkProperties(features = []) {
   const links = new Map();
   for (const feature of features) {
@@ -44,23 +50,27 @@ export function linksToGeoJSON(links, now = Date.now()) {
   return { type: 'FeatureCollection', features };
 }
 
-export function mountRXTLinksLayer(map, { visible = true } = {}) {
+export function mountRXTLinksLayer(map, { visible = true, station = '' } = {}) {
   if (!map.getSource(SOURCE)) map.addSource(SOURCE, { type: 'geojson', data: EMPTY });
   const visibility = visible ? 'visible' : 'none';
+  const initialFilter = rxtStationFilter(station);
   if (!map.getLayer(HIT)) map.addLayer({
     id: HIT, type: 'line', source: SOURCE,
     layout: { visibility, 'line-cap': 'round' },
     paint: { 'line-color': '#000000', 'line-width': 18, 'line-opacity': 0 },
+    ...(initialFilter ? { filter: initialFilter } : {}),
   });
   if (!map.getLayer(GLOW)) map.addLayer({
     id: GLOW, type: 'line', source: SOURCE,
     layout: { visibility, 'line-cap': 'round' },
     paint: { 'line-color': ['get', 'color'], 'line-width': 9, 'line-opacity': 0.16 },
+    ...(initialFilter ? { filter: initialFilter } : {}),
   });
   if (!map.getLayer(LINES)) map.addLayer({
     id: LINES, type: 'line', source: SOURCE,
     layout: { visibility, 'line-cap': 'round' },
     paint: { 'line-color': ['get', 'color'], 'line-width': 3, 'line-opacity': 0.9 },
+    ...(initialFilter ? { filter: initialFilter } : {}),
   });
   let popup = null;
   let popupSignature = '';
@@ -122,6 +132,10 @@ export function mountRXTLinksLayer(map, { visible = true } = {}) {
     refresh(links) { map.getSource(SOURCE)?.setData(linksToGeoJSON(links)); },
     setVisible(v) {
       for (const id of [HIT, GLOW, LINES]) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', v ? 'visible' : 'none');
+    },
+    setStationFilter(station) {
+      const filter = rxtStationFilter(station);
+      for (const id of [HIT, GLOW, LINES]) if (map.getLayer(id)) map.setFilter(id, filter);
     },
     destroy() {
       popup?.remove();

@@ -32,8 +32,21 @@ test('parseLayerToggles merges a partial blob over defaults (forward compat)', (
   const raw = JSON.stringify({ stations: true, trails: false });
   const got = parseLayerToggles(raw);
   assert.equal(got.trails, false);
+  assert.equal(got.stationLabels, true);
   assert.equal(got.fixedPoints, LAYER_TOGGLES_DEFAULTS.fixedPoints);
   assert.equal(got.rfOnly, LAYER_TOGGLES_DEFAULTS.rfOnly);
+});
+
+test('station labels default on and preserve an explicit hidden preference', () => {
+  assert.equal(parseLayerToggles(null).stationLabels, true);
+  assert.equal(parseLayerToggles('{"stations":true}').stationLabels, true);
+  assert.equal(parseLayerToggles('{"stations":true,"stationLabels":false}').stationLabels, false);
+});
+
+test('RXT station filter defaults to all links and preserves a callsign', () => {
+  assert.equal(parseLayerToggles(null).rxtStation, '');
+  assert.equal(parseLayerToggles('{"rxtLinks":true}').rxtStation, '');
+  assert.equal(parseLayerToggles('{"rxtStation":"F4MLV-10"}').rxtStation, 'F4MLV-10');
 });
 
 test('parseLayerToggles ignores stale extra keys harmlessly', () => {
