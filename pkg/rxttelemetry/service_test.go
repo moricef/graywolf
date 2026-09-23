@@ -57,6 +57,19 @@ func TestSnapshotExpiresLinks(t *testing.T) {
 	}
 }
 
+func TestSilentStreamReturnsIdleError(t *testing.T) {
+	reader, writer := io.Pipe()
+	defer writer.Close()
+	stream := newIdleStreamBody(reader, 20*time.Millisecond)
+	defer stream.Stop()
+
+	s := New("http://igate.invalid/api/v1/aprs/stream", nil, nil)
+	err := s.consumeStream(context.Background(), stream)
+	if !errors.Is(err, errStreamIdle) {
+		t.Fatalf("silent stream error = %v, want idle timeout", err)
+	}
+}
+
 func TestConsumeStreamDeliversPacketAndBuildsRXTAndLocalLinks(t *testing.T) {
 	tnc2 := []byte("F6ZDD-10>APLRG1,F4MLV-10*,WIDE2-1:!L84^@O(dt# test")
 	hello := `{"protocol":"lora-aprs-json","protocol_version":"1","schema_version":"1.0","event":"hello","boot_id":"boot-1","latest_sequence":12}`

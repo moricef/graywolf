@@ -17,7 +17,9 @@ http://192.168.1.161/api/v1/aprs/stream
 
 Graywolf runs every configured source independently. It requests
 `application/x-ndjson`, reads each connection continuously, and reconnects it
-automatically after a disconnect. The same page reports the last attempt,
+automatically after a disconnect. A stream silent for 45 seconds is closed and
+reconnected, even if its TCP connection still appears established. The same
+page reports the last attempt,
 last successful record, latest error, accepted `rx` count, active links and
 history cursor separately for every source. Adding or removing a URL takes
 effect immediately without restarting Graywolf. Removing every URL disables

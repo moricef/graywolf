@@ -16,6 +16,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/chrissnell/graywolf/pkg/aprs"
@@ -26,10 +27,47 @@ const (
 	DefaultPollInterval = 5 * time.Second
 	DefaultLinkTTL      = 30 * time.Minute
 	responseHeaderWait  = 4 * time.Second
+	streamIdleTimeout   = 45 * time.Second
 	maxResponseBytes    = 1 << 20
 	maxRecordBytes      = 64 << 10
 	reconnectDelay      = time.Second
 )
+
+var errStreamIdle = errors.New("RXT stream idle timeout")
+
+// The producer sends a heartbeat every 15 seconds. Closing a stalled body
+// releases Scanner.Scan so Run can reconnect, including after a radio reboot
+// that leaves an SSH-forwarded TCP connection apparently established.
+type idleStreamBody struct {
+	io.ReadCloser
+	timer    *time.Timer
+	timeout  time.Duration
+	timedOut atomic.Bool
+}
+
+func newIdleStreamBody(body io.ReadCloser, timeout time.Duration) *idleStreamBody {
+	stream := &idleStreamBody{ReadCloser: body, timeout: timeout}
+	stream.timer = time.AfterFunc(timeout, func() {
+		stream.timedOut.Store(true)
+		_ = body.Close()
+	})
+	return stream
+}
+
+func (stream *idleStreamBody) Read(buffer []byte) (int, error) {
+	count, err := stream.ReadCloser.Read(buffer)
+	if count > 0 {
+		stream.timer.Reset(stream.timeout)
+	}
+	if err != nil && stream.timedOut.Load() {
+		return count, errStreamIdle
+	}
+	return count, err
+}
+
+func (stream *idleStreamBody) Stop() {
+	stream.timer.Stop()
+}
 
 type Hop struct {
 	From    string  `json:"from"`
@@ -455,7 +493,9 @@ func (s *Service) consumeOnce(ctx context.Context, endpoint string) (bool, error
 	}
 	mediaType, _, _ := mime.ParseMediaType(resp.Header.Get("Content-Type"))
 	if mediaType == "application/x-ndjson" || mediaType == "application/ndjson" {
-		return true, s.consumeStream(ctx, resp.Body)
+		stream := newIdleStreamBody(resp.Body, streamIdleTimeout)
+		defer stream.Stop()
+		return true, s.consumeStream(ctx, stream)
 	}
 	return false, s.consumeLegacy(resp.Body)
 }
