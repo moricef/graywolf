@@ -4,22 +4,23 @@
 //
 // Only the frame types needed for APRS are implemented:
 //
-//   Client → server:
-//     'R'  query AGW version
-//     'G'  query port information (list of radio ports)
-//     'g'  query port capabilities
-//     'X'  register callsign
-//     'x'  unregister callsign
-//     'm'  start monitoring (enable 'U'-type rx packets)
-//     'k'  transmit raw AX.25 frame
-//     'M'  transmit UNPROTO (UI) frame — server must build the AX.25 header
+//	Client → server:
+//	  'R'  query AGW version
+//	  'G'  query port information (list of radio ports)
+//	  'g'  query port capabilities
+//	  'X'  register callsign
+//	  'x'  unregister callsign
+//	  'm'  start monitoring (enable 'U'-type rx packets)
+//	  'k'  toggle raw AX.25 frame reception (each 'k' flips it on/off)
+//	  'M'  transmit UNPROTO (UI) frame — server must build the AX.25 header
 //
-//   Server → client:
-//     'R'  version response
-//     'G'  port info response
-//     'g'  port capability response
-//     'X'  callsign registered ack
-//     'U'  monitored UI frame from RF
+//	Server → client:
+//	  'R'  version response
+//	  'G'  port info response
+//	  'g'  port capability response
+//	  'X'  callsign registered ack
+//	  'U'  monitored UI frame from RF
+//	  'K'  raw AX.25 frame from RF, for clients that enabled it via 'k'
 //
 // Connected-mode frame types ('C', 'D', 'd', 'v', 'V', 'c', ...) are
 // accepted and logged but not implemented, matching the "AX.25 UI only"
@@ -58,6 +59,7 @@ const (
 	KindSendUnproto        byte = 'M' // client → server: send UI frame
 	KindSendUnprotoVia     byte = 'V' // client → server: send UI frame via digipeaters
 	KindSendRaw            byte = 'K' // both directions: raw AX.25
+	KindToggleRawKISS      byte = 'k' // client → server: toggle raw KISS frame reception
 	KindMonitoredUI        byte = 'U' // server → client: rx UI frame
 )
 

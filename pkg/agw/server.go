@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -50,9 +51,15 @@ type Server struct {
 	// log in its own confetti. Keyed per remote address so a flood on
 	// one client does not mute a separate client hitting the same bug.
 	decodeErrLog *metrics.RateLimitedLogger
-	mu           sync.Mutex
-	ln           net.Listener
-	wg           sync.WaitGroup
+	// channelToPort is the inverse of cfg.PortToChannel, computed once
+	// at construction so outbound frames can announce the AGWPE port a
+	// channel was configured under instead of the channel ID itself.
+	// AGWPE ports are zero-based; graywolf channel IDs are one-based, so
+	// the two must never be used interchangeably (see portFor).
+	channelToPort map[uint32]uint8
+	mu            sync.Mutex
+	ln            net.Listener
+	wg            sync.WaitGroup
 	// shutdownCh is created by ListenAndServe and closed by Shutdown so
 	// callers can tear the server down without having to cancel the
 	// parent context.
@@ -67,6 +74,7 @@ type clientState struct {
 	writeMu   sync.Mutex
 	mu        sync.Mutex
 	monitor   bool
+	rawKISS   bool
 	callsigns map[string]struct{}
 	// viaPath is the digipeater list supplied by the most recent 'V'
 	// message. It is consumed (cleared) by the next 'M' (UNPROTO) send so
@@ -80,11 +88,41 @@ func NewServer(cfg ServerConfig) *Server {
 		cfg.Logger = slog.Default()
 	}
 	return &Server{
-		cfg:          cfg,
-		logger:       cfg.Logger.With("component", "agw"),
-		decodeErrLog: metrics.NewRateLimitedLogger(10 * time.Second),
-		clients:      make(map[*clientState]struct{}),
+		cfg:           cfg,
+		logger:        cfg.Logger.With("component", "agw"),
+		decodeErrLog:  metrics.NewRateLimitedLogger(10 * time.Second),
+		channelToPort: invertPortToChannel(cfg.PortToChannel),
+		clients:       make(map[*clientState]struct{}),
 	}
+}
+
+// invertPortToChannel builds the channel→port inverse of a PortToChannel
+// map. If more than one port maps to the same channel, the lowest port
+// number wins so the result is deterministic.
+func invertPortToChannel(portToChannel map[uint8]uint32) map[uint32]uint8 {
+	inv := make(map[uint32]uint8, len(portToChannel))
+	ports := make([]uint8, 0, len(portToChannel))
+	for port := range portToChannel {
+		ports = append(ports, port)
+	}
+	sort.Slice(ports, func(i, j int) bool { return ports[i] < ports[j] })
+	for _, port := range ports {
+		ch := portToChannel[port]
+		if _, ok := inv[ch]; !ok {
+			inv[ch] = port
+		}
+	}
+	return inv
+}
+
+// portFor returns the AGWPE port number a graywolf channel was configured
+// under, for use in outbound frame headers. AGWPE ports are zero-based; a
+// channel with no explicit entry in cfg.PortToChannel defaults to port 0.
+func (s *Server) portFor(channel uint32) uint8 {
+	if port, ok := s.channelToPort[channel]; ok {
+		return port
+	}
+	return 0
 }
 
 // ActiveClients returns the current client count.
@@ -298,6 +336,12 @@ func (s *Server) dispatch(ctx context.Context, cs *clientState, h *Header, data 
 		cs.mu.Unlock()
 		return nil
 
+	case KindToggleRawKISS:
+		cs.mu.Lock()
+		cs.rawKISS = !cs.rawKISS
+		cs.mu.Unlock()
+		return nil
+
 	case KindSendUnproto:
 		// data layout (direwolf): header.PID is the PID byte; data is the
 		// info field. CallFrom → CallTo. If a prior 'V' frame stashed a
@@ -499,8 +543,11 @@ func (s *Server) removeClient(c *clientState) {
 }
 
 // BroadcastMonitoredUI sends a received UI frame to every connected
-// monitoring client as an AGW 'U' record.
-func (s *Server) BroadcastMonitoredUI(port uint8, f *ax25.Frame) {
+// monitoring client as an AGW 'U' record. channel is the graywolf channel
+// the frame was received on; it is translated to the corresponding
+// (zero-based) AGWPE port for the header.
+func (s *Server) BroadcastMonitoredUI(channel uint32, f *ax25.Frame) {
+	port := s.portFor(channel)
 	text := f.String() + "\r"
 	h := &Header{
 		Port:     port,
@@ -522,6 +569,40 @@ func (s *Server) BroadcastMonitoredUI(port uint8, f *ax25.Frame) {
 	for _, cs := range targets {
 		if err := s.writeFrame(cs, h, []byte(text)); err != nil {
 			s.logger.Debug("agw monitor write failed", "err", err)
+		}
+	}
+}
+
+// BroadcastRawKISS sends raw AX.25 frame data to clients that have enabled
+// raw KISS reception via the 'k' toggle. channel is the graywolf channel
+// the frame was received on; it is translated to the corresponding
+// (zero-based) AGWPE port for both the header and the leading data byte.
+func (s *Server) BroadcastRawKISS(channel uint32, raw []byte) {
+	port := s.portFor(channel)
+	h := &Header{
+		Port:     port,
+		DataKind: KindSendRaw,
+	}
+	// The leading byte is the TNC/port indicator (portIndex << 4), not a
+	// constant — e.g. 0x00 for port 0, 0x10 for port 1.
+	payload := make([]byte, len(raw)+1)
+	payload[0] = port << 4
+	copy(payload[1:], raw)
+
+	s.mu.Lock()
+	targets := make([]*clientState, 0, len(s.clients))
+	for c := range s.clients {
+		c.mu.Lock()
+		if c.rawKISS {
+			targets = append(targets, c)
+		}
+		c.mu.Unlock()
+	}
+	s.mu.Unlock()
+
+	for _, cs := range targets {
+		if err := s.writeFrame(cs, h, payload); err != nil {
+			s.logger.Debug("agw raw write failed", "err", err)
 		}
 	}
 }

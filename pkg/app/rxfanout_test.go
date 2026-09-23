@@ -1,10 +1,13 @@
 package app
 
 import (
+	"context"
 	"fmt"
+	"net"
 	"testing"
 	"time"
 
+	"github.com/chrissnell/graywolf/pkg/agw"
 	"github.com/chrissnell/graywolf/pkg/app/ingress"
 	pb "github.com/chrissnell/graywolf/pkg/ipcproto"
 	"github.com/chrissnell/graywolf/pkg/packetlog"
@@ -213,5 +216,66 @@ func TestDispatchRxFrameAudioLevelGating(t *testing.T) {
 	}
 	if tnc.AudioLevel != nil {
 		t.Errorf("kiss-tnc entry: AudioLevel = %+v, want nil (no soundcard level)", tnc.AudioLevel)
+	}
+}
+
+// TestDispatchRxFrameBroadcastsRawKISSOnDecodeFailure proves that a raw
+// KISS client still receives a frame graywolf itself cannot decode. This is
+// the case raw mode exists for (a client doing its own decoding), and
+// dispatchRxFrame used to broadcast raw KISS only after the ax25.Decode
+// early-return, so it never ran for undecodable frames.
+func TestDispatchRxFrameBroadcastsRawKISSOnDecodeFailure(t *testing.T) {
+	h := newKissTncHarness(t)
+	defer h.stop()
+
+	srv := agw.NewServer(agw.ServerConfig{
+		ListenAddr: "127.0.0.1:0",
+		Logger:     quietLogger(),
+	})
+	h.app.agwServer = srv
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = srv.ListenAndServe(ctx) }()
+
+	var conn net.Conn
+	for i := 0; i < 50; i++ {
+		if addr := srv.LocalAddr(); addr != nil {
+			if c, err := net.Dial("tcp", addr.String()); err == nil {
+				conn = c
+				break
+			}
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if conn == nil {
+		t.Fatal("could not connect to agw server")
+	}
+	defer conn.Close()
+
+	if err := agw.WriteFrame(conn, &agw.Header{DataKind: agw.KindToggleRawKISS}, nil); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(50 * time.Millisecond) // let the toggle land server-side
+
+	// Too short to pass ax25.DecodeAddressBlock's 14-byte minimum, so
+	// ax25.Decode fails and dispatchRxFrame takes its early-return path.
+	undecodable := []byte{0x01, 0x02, 0x03}
+	h.app.rxFanout <- rxFanoutItem{
+		rf:  &pb.ReceivedFrame{Channel: 1, Data: undecodable},
+		src: ingress.Modem(),
+	}
+	h.waitDispatched(1, 2*time.Second)
+
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	hdr, data, err := agw.ReadFrame(conn)
+	if err != nil {
+		t.Fatalf("expected a raw KISS frame for the undecodable packet, got error: %v", err)
+	}
+	if hdr.DataKind != agw.KindSendRaw {
+		t.Errorf("kind = %c, want %c", hdr.DataKind, agw.KindSendRaw)
+	}
+	if len(data) != len(undecodable)+1 || string(data[1:]) != string(undecodable) {
+		t.Errorf("payload = %v, want leading byte followed by %v", data, undecodable)
 	}
 }
