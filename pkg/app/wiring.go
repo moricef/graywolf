@@ -45,6 +45,7 @@ import (
 	"github.com/chrissnell/graywolf/pkg/remoteactions"
 	"github.com/chrissnell/graywolf/pkg/rxttelemetry"
 	"github.com/chrissnell/graywolf/pkg/stationcache"
+	"github.com/chrissnell/graywolf/pkg/tnc2"
 	"github.com/chrissnell/graywolf/pkg/txgovernor"
 	"github.com/chrissnell/graywolf/pkg/updatescheck"
 	"github.com/chrissnell/graywolf/pkg/webapi"
@@ -609,6 +610,7 @@ func (a *App) wireServicesInner(ctx context.Context) error {
 	// --- Beacon scheduler ----------------------------------------------
 	beaconSched, err := beacon.New(beacon.Options{
 		Sink:         a.gov,
+		TextRF:       tnc2MessageRF{app: a},
 		Cache:        a.gpsCache,
 		Logger:       a.logger,
 		Observer:     &beaconObserver{m: a.metrics},
@@ -629,6 +631,20 @@ func (a *App) wireServicesInner(ctx context.Context) error {
 			}
 			pkt.Channel = int(channel)
 			if entries := stationcache.ExtractEntry(pkt, "beacon", "TX", channel); len(entries) > 0 {
+				a.stationCache.Update(entries)
+			}
+		},
+		OnISTextSent: func(raw []byte, channel uint32) {
+			packet, err := tnc2.Parse(raw)
+			if err != nil {
+				return
+			}
+			decoded, err := aprs.ParseTNC2Packet(packet)
+			if err != nil || decoded == nil {
+				return
+			}
+			decoded.Channel = int(channel)
+			if entries := stationcache.ExtractEntry(decoded, "beacon", "TX", channel); len(entries) > 0 {
 				a.stationCache.Update(entries)
 			}
 		},
@@ -1467,6 +1483,7 @@ func (a *App) wireHTTP(ctx context.Context) error {
 	apiSrv.SetBeaconReload(a.beaconReload)
 	apiSrv.SetSmartBeaconReload(a.smartBeaconReload)
 	apiSrv.SetBeaconSendNow(a.beaconSched.SendNow)
+	apiSrv.SetBeaconTextRFEnabled((tnc2MessageRF{app: a}).Enabled)
 	apiSrv.SetDigipeaterReload(a.digipeaterReload)
 	apiSrv.SetAgwReload(a.agwReload)
 	apiSrv.SetTxBackendReload(a.txBackendReload)
@@ -2662,7 +2679,7 @@ func (a *App) loadBeaconConfigs(ctx context.Context, source string) []beacon.Con
 	stationCall, _ := a.store.ResolveStationCallsign(ctx)
 	var configs []beacon.Config
 	for _, b := range stored {
-		bc, err := beaconConfigFromStore(b, smart, stationCall)
+		bc, err := beaconConfigFromStoreWithMode(b, smart, stationCall, (tnc2MessageRF{app: a}).Enabled(b.Channel))
 		if err != nil {
 			a.logger.Warn("beacon config", "id", b.ID, "err", err)
 			continue

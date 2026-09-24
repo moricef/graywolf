@@ -140,8 +140,15 @@ func (a *App) tnc2Sent(source string, raw []byte) {
 		Source: source, Display: string(raw), TNC2: packet,
 	}
 	if decoded, err := aprs.ParseTNC2Packet(packet); err == nil {
+		decoded.Channel = int(entry.Channel)
+		decoded.Direction = aprs.DirectionRF
 		entry.Type = string(decoded.Type)
 		entry.Decoded = decoded
+		if a.stationCache != nil {
+			if entries := stationcache.ExtractEntry(decoded, "tnc2", "TX", entry.Channel); len(entries) > 0 {
+				a.stationCache.Update(entries)
+			}
+		}
 	}
 	a.plog.Record(entry)
 }
@@ -206,6 +213,12 @@ func (a *App) updateTNC2Config(ctx context.Context, cfg configstore.TNC2Config) 
 		return err
 	}
 	a.applyTNC2Config(cfg)
+	if a.beaconReload != nil {
+		select {
+		case a.beaconReload <- struct{}{}:
+		default:
+		}
+	}
 	return nil
 }
 

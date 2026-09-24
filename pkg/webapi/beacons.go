@@ -5,12 +5,70 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
+	"github.com/chrissnell/graywolf/pkg/aprs"
 	"github.com/chrissnell/graywolf/pkg/beacon"
 	"github.com/chrissnell/graywolf/pkg/configstore"
+	"github.com/chrissnell/graywolf/pkg/tnc2"
 	"github.com/chrissnell/graywolf/pkg/webapi/dto"
 	"github.com/chrissnell/graywolf/pkg/webtypes"
 )
+
+// The generic CRUD helper validates before it knows the configured channel.
+// Defer only address validation until the handler can distinguish the direct
+// textual TNC2 channel from classic AX.25/KISS channels.
+type beaconRequest struct{ dto.BeaconRequest }
+
+func (r beaconRequest) Validate() error {
+	base := r.BeaconRequest
+	base.Callsign, base.Destination, base.Path = nil, "", ""
+	return base.Validate()
+}
+
+func (s *Server) beaconUsesTextRF(channel uint32) bool {
+	return s.beaconTextRFEnabled != nil && s.beaconTextRFEnabled(channel)
+}
+
+func (s *Server) validateBeaconAddresses(req dto.BeaconRequest) error {
+	if !s.beaconUsesTextRF(req.Channel) {
+		return req.Validate()
+	}
+	source := "TEST"
+	if req.Callsign != nil && strings.TrimSpace(*req.Callsign) != "" {
+		source = strings.TrimSpace(*req.Callsign)
+	}
+	dest := strings.TrimSpace(req.Destination)
+	path := make([]string, 0)
+	for _, element := range strings.Split(req.Path, ",") {
+		element = strings.TrimSpace(element)
+		if element == "" {
+			continue
+		}
+		if strings.HasSuffix(element, "*") {
+			return fmt.Errorf("outgoing path %q must not be repeated", element)
+		}
+		path = append(path, element)
+	}
+	raw := []byte(aprs.FormatTNC2(source, dest, path, []byte(">")))
+	packet, err := tnc2.Parse(raw)
+	if err != nil || strings.ContainsAny(string(raw), "\r\n") || packet.Source.Text != source || packet.Destination.Text != dest || len(packet.Path) != len(path) {
+		return fmt.Errorf("invalid textual beacon address or path")
+	}
+	for i, element := range path {
+		if packet.Path[i].Text != element {
+			return fmt.Errorf("invalid textual path %q", element)
+		}
+	}
+	return nil
+}
+
+func (s *Server) requireBeaconTxCapableChannel(ctx context.Context, channel uint32) error {
+	if s.beaconUsesTextRF(channel) {
+		return nil
+	}
+	return s.requireTxCapableChannel(ctx, "channel", channel)
+}
 
 // registerBeacons installs the /api/beacons route tree on mux using
 // Go 1.22+ method-scoped patterns. See channels.go for the reference.
@@ -53,12 +111,16 @@ func (s *Server) listBeacons(w http.ResponseWriter, r *http.Request) {
 // @Security CookieAuth
 // @Router   /beacons [post]
 func (s *Server) createBeacon(w http.ResponseWriter, r *http.Request) {
-	handleCreate[dto.BeaconRequest](s, w, r, "create beacon",
-		func(ctx context.Context, req dto.BeaconRequest) (configstore.Beacon, error) {
+	handleCreate[beaconRequest](s, w, r, "create beacon",
+		func(ctx context.Context, wrapped beaconRequest) (configstore.Beacon, error) {
+			req := wrapped.BeaconRequest
+			if err := s.validateBeaconAddresses(req); err != nil {
+				return configstore.Beacon{}, validationError(err)
+			}
 			if err := dto.ValidateChannelRef(ctx, s.store, "channel", req.Channel); err != nil {
 				return configstore.Beacon{}, validationError(err)
 			}
-			if err := s.requireTxCapableChannel(ctx, "channel", req.Channel); err != nil {
+			if err := s.requireBeaconTxCapableChannel(ctx, req.Channel); err != nil {
 				return configstore.Beacon{}, validationError(err)
 			}
 			m := req.ToModel()
@@ -117,12 +179,13 @@ func (s *Server) updateBeacon(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, "invalid id")
 		return
 	}
-	handleUpdate[dto.BeaconRequest](s, w, r, "update beacon", id,
-		func(ctx context.Context, id uint32, req dto.BeaconRequest) (configstore.Beacon, error) {
+	handleUpdate[beaconRequest](s, w, r, "update beacon", id,
+		func(ctx context.Context, id uint32, wrapped beaconRequest) (configstore.Beacon, error) {
+			req := wrapped.BeaconRequest
 			if err := dto.ValidateChannelRef(ctx, s.store, "channel", req.Channel); err != nil {
 				return configstore.Beacon{}, validationError(err)
 			}
-			if err := s.requireTxCapableChannel(ctx, "channel", req.Channel); err != nil {
+			if err := s.requireBeaconTxCapableChannel(ctx, req.Channel); err != nil {
 				return configstore.Beacon{}, validationError(err)
 			}
 			// Merge the request onto the existing row so a nil
@@ -139,6 +202,11 @@ func (s *Server) updateBeacon(w http.ResponseWriter, r *http.Request) {
 				m = req.ApplyToUpdate(id, *existing)
 			} else {
 				m = req.ToUpdate(id)
+			}
+			effective := req
+			effective.Callsign = &m.Callsign
+			if err := s.validateBeaconAddresses(effective); err != nil {
+				return configstore.Beacon{}, validationError(err)
 			}
 			if err := s.store.UpdateBeacon(ctx, &m); err != nil {
 				return configstore.Beacon{}, err

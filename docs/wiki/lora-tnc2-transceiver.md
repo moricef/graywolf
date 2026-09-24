@@ -52,14 +52,22 @@ before queueing. A normal receive connection does not authorize transmission.
 
 The message composer uses this textual output for RF sends on the authorized
 channel, including retries. Incoming TNC2 APRS messages reach the normal
-Graywolf inbox. By default, the connected iGate/TNC owns their auto-ACKs;
+Graywolf inbox. Beacons configured on the same authorized channel also use
+the textual TNC2 output. This includes position, tracker, object, iGate and
+custom beacons, with the existing schedule and **Send now** action. Textual
+identities such as `F4MLV-16` and `F4MLV-GS` are preserved on that channel;
+other channels retain AX.25/KISS validation and cannot encode them. A beacon
+whose source differs from the configured TNC2 TX source is refused at send
+time. A beacon set to **RF + APRS-IS** sends the RF copy through TNC2 and an
+independent APRS-IS line with `TCPIP*`.
+
+By default, the connected iGate/TNC owns message auto-ACKs;
 Graywolf does not send a second ACK. Only use `-tnc2-autoack` when the
 connected device does not generate ACKs itself. This option requires explicit
 TNC2 TX authorization. The configured station callsign must exactly match
 `-tnc2-tx-source`; a different source is refused rather than converted to
 AX.25. Other channels retain their existing AX.25/KISS behavior. APRS message
-addressees still have their standard nine-character limit. Beacon TX is not
-yet routed through this textual output.
+addressees still have their standard nine-character limit.
 
 The iGate must have its TNC port configured for TNC2 input and LoRa TX
 enabled. If the submitted source

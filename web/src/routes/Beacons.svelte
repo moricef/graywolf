@@ -68,6 +68,11 @@
   // channelName() and the modal channel-defaulting code paths keep
   // working without changes.
   let channels = $derived(channelsStore.list);
+  let tnc2TxChannel = $state(0);
+  function beaconTxPredicate(channel) {
+    if (channel?.id === tnc2TxChannel && tnc2TxChannel > 0) return { ok: true, reason: '' };
+    return txPredicate(channel);
+  }
   // Map<id, channel> for O(1) list-card lookups via channelRefStatus.
   // Rebuilt on every channelsStore poll, which is the desired
   // behaviour -- the pill tracks the last polled state (plan D4 /
@@ -131,9 +136,9 @@
     if (!needsChannel) return null;
     const c = selectedChannelObj;
     if (!c) return null;
-    const cap = c.backing?.tx;
-    if (cap?.capable) return null;
-    return { reason: cap?.reason || TX_REASON_FALLBACK };
+    const cap = beaconTxPredicate(c);
+    if (cap.ok) return null;
+    return { reason: cap.reason || TX_REASON_FALLBACK };
   });
   // Escape hatch: editing an existing beacon that is being saved
   // disabled means the broken channel won't be used until the
@@ -249,6 +254,13 @@
   }
 
   onMount(async () => {
+    try {
+      const response = await fetch('/api/tnc2/config');
+      if (response.ok) {
+        const cfg = await response.json();
+        tnc2TxChannel = cfg.tx_transport ? Number(cfg.tx_channel) : 0;
+      }
+    } catch { /* The existing AX.25 channel list remains usable. */ }
     beacons = await api.get('/beacons') || [];
     const sb = await api.get('/smart-beacon');
     if (sb) smartBeacon = {
@@ -602,7 +614,7 @@
     {#each beacons as b}
       {@const isOnly = b.send_path === 'is_only'}
       {@const refStatus = channelRefStatus(b.channel, channelsById)}
-      {@const broken = !isOnly && refStatus.status !== STATUS_OK}
+      {@const broken = !isOnly && refStatus.status !== STATUS_OK && !(b.channel === tnc2TxChannel && refStatus.status !== STATUS_DELETED)}
       {@const pillAriaLabel = broken
         ? (refStatus.status === STATUS_DELETED
             ? `Channel #${b.channel} deleted`
@@ -839,7 +851,7 @@
               bind:value={form.channel}
               valueType="string"
               channels={channels}
-              capabilityFilter={txPredicate}
+              capabilityFilter={beaconTxPredicate}
             />
           </FormField>
         {/if}

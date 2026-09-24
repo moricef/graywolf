@@ -1,9 +1,11 @@
 package beacon
 
 import (
+	"context"
 	"time"
 
 	"github.com/chrissnell/graywolf/pkg/ax25"
+	"github.com/chrissnell/graywolf/pkg/txgovernor"
 )
 
 // Type enumerates the supported beacon kinds.
@@ -20,12 +22,17 @@ const (
 // Config describes one beacon entry from the beacons table. Fields match
 // the SQL schema in .context/graywolf-implementation-plan.md §beacons.
 type Config struct {
-	ID          uint32
-	Type        Type
-	Channel     uint32 // send_to parsed as channel number (IG/APP handled by caller)
-	Source      ax25.Address
-	Dest        ax25.Address
-	Path        []ax25.Address
+	ID      uint32
+	Type    Type
+	Channel uint32 // send_to parsed as channel number (IG/APP handled by caller)
+	Source  ax25.Address
+	Dest    ax25.Address
+	Path    []ax25.Address
+	// Textual addresses are authoritative on an explicitly configured TNC2
+	// channel. The AX.25 fields above remain the legacy KISS/modem adapter.
+	SourceText  string
+	DestText    string
+	PathText    []string
 	Delay       time.Duration // initial delay
 	Every       time.Duration // periodic interval
 	Slot        int           // seconds past the hour; -1 means unset
@@ -49,7 +56,7 @@ type Config struct {
 	PHGHeightFt    int // feet above average terrain
 	PHGGainDB      int // dBi
 	PHGDirectivity int // 0 = omni, 1..8 = 45° × d compass direction
-	Enabled  bool
+	Enabled        bool
 	// SendPath selects the transmission destination. Empty is treated as
 	// SendPathRF for safety. SendPathISOnly skips RF entirely so a station
 	// with no radio can beacon to APRS-IS.
@@ -68,6 +75,13 @@ const (
 // is_only), the scheduler sends a TNC-2 formatted copy to APRS-IS.
 type ISSink interface {
 	SendLine(line string) error
+}
+
+// TextRF is an explicitly authorized textual RF output. Enabled is checked
+// at each fire so changing the operator's TNC2 setting takes effect live.
+type TextRF interface {
+	Enabled(channel uint32) bool
+	Submit(ctx context.Context, channel uint32, raw []byte, source txgovernor.SubmitSource) error
 }
 
 // Observer is an optional hook for metrics. Scheduler calls these on

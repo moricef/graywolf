@@ -12,6 +12,7 @@
 package beacon
 
 import (
+	"bytes"
 	"container/heap"
 	"context"
 	"errors"
@@ -24,6 +25,7 @@ import (
 	"github.com/chrissnell/graywolf/pkg/ax25"
 	"github.com/chrissnell/graywolf/pkg/configstore"
 	"github.com/chrissnell/graywolf/pkg/gps"
+	"github.com/chrissnell/graywolf/pkg/tnc2"
 	"github.com/chrissnell/graywolf/pkg/txgovernor"
 )
 
@@ -54,6 +56,8 @@ type Scheduler struct {
 	workers      chan struct{} // counting semaphore sized to maxFires
 	channelModes configstore.ChannelModeLookup
 	onISSent     func(frame *ax25.Frame, channel uint32)
+	onISTextSent func(raw []byte, channel uint32)
+	textRF       TextRF
 
 	mu       sync.Mutex
 	beacons  []Config
@@ -88,6 +92,10 @@ type Options struct {
 	// station is invisible on the map even though aprs.fi shows it
 	// (graywolf#438). nil = no-op.
 	OnISSent func(frame *ax25.Frame, channel uint32)
+	// TextRF selects the direct TNC2 route only on its explicitly authorized
+	// channel; all other channels retain the AX.25/KISS route.
+	TextRF       TextRF
+	OnISTextSent func(raw []byte, channel uint32)
 }
 
 // New constructs a Scheduler.
@@ -120,6 +128,8 @@ func New(opts Options) (*Scheduler, error) {
 		reloadCh:     make(chan struct{}, 1),
 		channelModes: opts.ChannelModes,
 		onISSent:     opts.OnISSent,
+		onISTextSent: opts.OnISTextSent,
+		textRF:       opts.TextRF,
 	}, nil
 }
 
@@ -403,6 +413,10 @@ func (s *Scheduler) sendBeaconWith(ctx context.Context, b Config, skipDedup bool
 	// the same lat/lon the info-field encoder used. Override b.Dest
 	// here so the configured destination (e.g. APGRWO) is replaced.
 	dest := b.Dest
+	destText := b.DestText
+	if destText == "" {
+		destText = dest.String()
+	}
 	if b.Format == "mic_e" && (b.Type == TypePosition || b.Type == TypeIGate || b.Type == TypeTracker) {
 		lat, lon := b.Lat, b.Lon
 		if b.UseGps && s.cache != nil {
@@ -420,8 +434,40 @@ func (s *Scheduler) sendBeaconWith(ctx context.Context, b Config, skipDedup bool
 			return &SendNowError{Kind: SendNowErrorEncode, Err: perr}
 		}
 		dest = parsed
+		destText = micEDestCall
 	}
-	frame, err := ax25.NewUIFrame(b.Source, dest, b.Path, []byte(info))
+	// A direct TNC2 channel uses the textual identities as received/configured.
+	// Only the legacy KISS/modem route constructs an AX.25 UI frame.
+	textMode := s.textRF != nil && s.textRF.Enabled(b.Channel)
+	if !textMode {
+		destText = dest.String()
+	}
+	var frame *ax25.Frame
+	var textRaw []byte
+	if textMode {
+		sourceText := b.SourceText
+		if sourceText == "" {
+			sourceText = b.Source.String()
+		}
+		pathText := b.PathText
+		if pathText == nil {
+			for _, address := range b.Path {
+				pathText = append(pathText, address.String())
+			}
+		}
+		textRaw = []byte(aprs.FormatTNC2(sourceText, destText, pathText, []byte(info)))
+		_, err = tnc2.Parse(textRaw)
+		if err == nil && bytes.IndexAny(textRaw, "\r\n") >= 0 {
+			err = errors.New("TNC2 beacon contains a line separator")
+		}
+	} else {
+		frame, err = ax25.NewUIFrame(b.Source, dest, b.Path, []byte(info))
+		if err == nil {
+			// NewUIFrame only allocates; address representability is checked
+			// by Encode. Fail here, before queueing a bogus legacy frame.
+			_, err = frame.Encode()
+		}
+	}
 	if err != nil {
 		// AX.25 encode failure (almost always a malformed callsign).
 		// Warn-level because the operator needs to fix the config;
@@ -448,7 +494,13 @@ func (s *Scheduler) sendBeaconWith(ctx context.Context, b Config, skipDedup bool
 	// still beacon.
 	sent := false
 	if sendRF {
-		if err := s.sink.Submit(ctx, b.Channel, frame, src); err != nil {
+		var submitErr error
+		if textMode {
+			submitErr = s.textRF.Submit(ctx, b.Channel, textRaw, src)
+		} else {
+			submitErr = s.sink.Submit(ctx, b.Channel, frame, src)
+		}
+		if err := submitErr; err != nil {
 			reason := classifySubmitError(err)
 			s.logger.Warn("beacon submit", "id", b.ID, "name", name, "reason", reason, "err", err)
 			if eo, ok := s.observer.(ErrorObserver); ok && eo != nil {
@@ -475,7 +527,14 @@ func (s *Scheduler) sendBeaconWith(ctx context.Context, b Config, skipDedup bool
 			// (WIDE1-1 etc.) gets the packet silently dropped by APRS-IS
 			// servers, so it never reaches aprs.fi. Matches the messages
 			// sender's buildMessageTNC2.
-			line := aprs.FormatTNC2(b.Source.String(), dest.String(), []string{"TCPIP*"}, []byte(info))
+			sourceText := b.Source.String()
+			if textMode {
+				sourceText = b.SourceText
+				if sourceText == "" {
+					sourceText = b.Source.String()
+				}
+			}
+			line := aprs.FormatTNC2(sourceText, destText, []string{"TCPIP*"}, []byte(info))
 			if err := s.isSink.SendLine(line); err != nil {
 				s.logger.Warn("beacon aprs-is send", "id", b.ID, "name", name, "err", err)
 				if !sendRF {
@@ -487,7 +546,9 @@ func (s *Scheduler) sendBeaconWith(ctx context.Context, b Config, skipDedup bool
 				// Feed our own position into the station cache so an
 				// APRS-IS-only beacon plots on the local map, mirroring the
 				// RF leg's governor TX hook (graywolf#438).
-				if s.onISSent != nil {
+				if textMode && s.onISTextSent != nil {
+					s.onISTextSent([]byte(line), b.Channel)
+				} else if s.onISSent != nil && frame != nil {
 					s.onISSent(frame, b.Channel)
 				}
 			}

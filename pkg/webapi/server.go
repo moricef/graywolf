@@ -85,8 +85,9 @@ type Server struct {
 	// map (kiss interface add/remove/mode/allow_tx flip, channel
 	// add/remove, audio device add/remove). Buffered size 1 +
 	// non-blocking send coalesces bursts.
-	txBackendReload chan struct{}
-	beaconSendNow   func(ctx context.Context, id uint32) error // triggers an immediate beacon send
+	txBackendReload     chan struct{}
+	beaconSendNow       func(ctx context.Context, id uint32) error // triggers an immediate beacon send
+	beaconTextRFEnabled func(channel uint32) bool
 
 	// messages-service is late-bound: it exists only after the Phase 5
 	// app wiring has constructed the configstore + txgovernor + igate,
@@ -348,6 +349,12 @@ func (s *Server) SetBeaconReload(ch chan struct{}) { s.beaconReload = ch }
 // to trigger an immediate one-shot transmission of a beacon.
 func (s *Server) SetBeaconSendNow(fn func(ctx context.Context, id uint32) error) {
 	s.beaconSendNow = fn
+}
+
+// SetBeaconTextRFEnabled identifies the explicitly authorized direct TNC2
+// channel for beacon validation, without making other API TX paths textual.
+func (s *Server) SetBeaconTextRFEnabled(fn func(uint32) bool) {
+	s.beaconTextRFEnabled = fn
 }
 
 // SetDigipeaterReload installs the channel signalled after successful

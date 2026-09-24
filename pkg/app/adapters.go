@@ -6,12 +6,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/chrissnell/graywolf/pkg/aprs"
 	"github.com/chrissnell/graywolf/pkg/ax25"
 	"github.com/chrissnell/graywolf/pkg/beacon"
 	"github.com/chrissnell/graywolf/pkg/callsign"
 	"github.com/chrissnell/graywolf/pkg/configstore"
 	"github.com/chrissnell/graywolf/pkg/metrics"
 	"github.com/chrissnell/graywolf/pkg/packetlog"
+	"github.com/chrissnell/graywolf/pkg/tnc2"
+	"github.com/chrissnell/graywolf/pkg/tnc2ax25"
 )
 
 // --- Beacon observer for metrics -----------------------------------------
@@ -114,29 +117,77 @@ func (o *beaconObserver) OnBeaconSkipped(beaconName string, reason string) {
 // (configstore.SmartBeaconConfig). See
 // .context/2026-04-18-smart-beacon-implementation.md.
 func beaconConfigFromStore(b configstore.Beacon, smart *configstore.SmartBeaconConfig, stationCall string) (beacon.Config, error) {
+	return beaconConfigFromStoreWithMode(b, smart, stationCall, false)
+}
+
+func beaconConfigFromStoreWithMode(b configstore.Beacon, smart *configstore.SmartBeaconConfig, stationCall string, textual bool) (beacon.Config, error) {
 	resolved, err := callsign.Resolve(b.Callsign, stationCall)
 	if err != nil {
 		return beacon.Config{}, fmt.Errorf("resolve callsign (override %q, station %q): %w", b.Callsign, stationCall, err)
 	}
-	src, err := ax25.ParseAddress(resolved)
-	if err != nil {
-		return beacon.Config{}, fmt.Errorf("parse callsign %q: %w", resolved, err)
-	}
-	dest, err := ax25.ParseAddress(b.Destination)
-	if err != nil {
-		return beacon.Config{}, fmt.Errorf("parse destination %q: %w", b.Destination, err)
-	}
+	var src, dest ax25.Address
 	var path []ax25.Address
-	for _, p := range strings.Split(b.Path, ",") {
-		p = strings.TrimSpace(p)
-		if p == "" {
-			continue
+	var sourceText, destText string
+	var pathText []string
+	if textual {
+		// Resolve checks empty/N0CALL, but textual identity must not be
+		// canonicalized through AX.25 (nor uppercased by Resolve).
+		sourceText = strings.TrimSpace(b.Callsign)
+		if sourceText == "" {
+			sourceText = strings.TrimSpace(stationCall)
 		}
-		a, err := ax25.ParseAddress(p)
+		destText = strings.TrimSpace(b.Destination)
+		for _, element := range strings.Split(b.Path, ",") {
+			element = strings.TrimSpace(element)
+			if element == "" {
+				continue
+			}
+			if strings.HasSuffix(element, "*") {
+				return beacon.Config{}, fmt.Errorf("outgoing path %q must not be repeated", element)
+			}
+			pathText = append(pathText, element)
+		}
+		raw := []byte(aprs.FormatTNC2(sourceText, destText, pathText, []byte(">")))
+		packet, parseErr := tnc2.Parse(raw)
+		if parseErr != nil || packet.Source.Text != sourceText || packet.Destination.Text != destText || len(packet.Path) != len(pathText) {
+			return beacon.Config{}, fmt.Errorf("invalid textual beacon address or path: %q", raw)
+		}
+		for i, element := range pathText {
+			if packet.Path[i].Text != element {
+				return beacon.Config{}, fmt.Errorf("invalid textual path %q", element)
+			}
+		}
+		// Preserve the checked adapter for a later switch back to KISS.
+		// Extended addresses deliberately leave AX.25 fields empty.
+		if frame, convertErr := tnc2ax25.ToFrame(packet); convertErr == nil {
+			src, dest, path = frame.Source, frame.Dest, frame.Path
+		}
+	} else {
+		sourceText = strings.TrimSpace(b.Callsign)
+		if sourceText == "" {
+			sourceText = strings.TrimSpace(stationCall)
+		}
+		destText = strings.TrimSpace(b.Destination)
+		src, err = ax25.ParseAddress(resolved)
 		if err != nil {
-			return beacon.Config{}, fmt.Errorf("parse path %q: %w", p, err)
+			return beacon.Config{}, fmt.Errorf("parse callsign %q: %w", resolved, err)
 		}
-		path = append(path, a)
+		dest, err = ax25.ParseAddress(b.Destination)
+		if err != nil {
+			return beacon.Config{}, fmt.Errorf("parse destination %q: %w", b.Destination, err)
+		}
+		for _, p := range strings.Split(b.Path, ",") {
+			p = strings.TrimSpace(p)
+			if p == "" {
+				continue
+			}
+			a, err := ax25.ParseAddress(p)
+			if err != nil {
+				return beacon.Config{}, fmt.Errorf("parse path %q: %w", p, err)
+			}
+			path = append(path, a)
+			pathText = append(pathText, p)
+		}
 	}
 
 	var commentCmd []string
@@ -173,6 +224,9 @@ func beaconConfigFromStore(b configstore.Beacon, smart *configstore.SmartBeaconC
 		Source:         src,
 		Dest:           dest,
 		Path:           path,
+		SourceText:     sourceText,
+		DestText:       destText,
+		PathText:       pathText,
 		Delay:          time.Duration(b.DelaySeconds) * time.Second,
 		Every:          time.Duration(b.EverySeconds) * time.Second,
 		Slot:           int(b.SlotSeconds),
