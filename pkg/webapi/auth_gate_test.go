@@ -70,6 +70,7 @@ func TestAuthGate_EveryRoute(t *testing.T) {
 		{http.MethodPut, "/api/beacons/1", `{}`},
 		{http.MethodDelete, "/api/beacons/1", ""},
 		{http.MethodPost, "/api/beacons/1/send", ""},
+		{http.MethodPost, "/api/tnc2/tx", `{}`},
 
 		// PTT + TX timing
 		{http.MethodGet, "/api/ptt", ""},

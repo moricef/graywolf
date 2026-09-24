@@ -40,9 +40,12 @@ type ServiceConfig struct {
 	ConfigStore   ServiceConfigReader
 	TxSink        txgovernor.TxSink
 	TxHookReg     txgovernor.TxHookRegistry
-	IGate         IGateLineSender // may be nil (no iGate configured)
-	Bridge        RFAvailability  // may be nil in tests (alwaysRF)
-	StationCache  stationcache.StationStore // optional — Phase 4 autocomplete
+	TextTxHookReg txgovernor.TextTxHookRegistry // optional for direct TNC2
+	TextRF        TextRF                        // optional direct textual RF transmitter
+	TextAutoAck   bool                          // let Graywolf ACK direct TNC2 input; off by default
+	IGate         IGateLineSender               // may be nil (no iGate configured)
+	Bridge        RFAvailability                // may be nil in tests (alwaysRF)
+	StationCache  stationcache.StationStore     // optional — Phase 4 autocomplete
 	Logger        *slog.Logger
 	Clock         SenderClock
 	// TxChannel is the RF channel used for outbound messages.
@@ -101,7 +104,8 @@ type Service struct {
 	preflight *Preflight
 
 	// TxHook unregister closure — nil before Start, set in Start.
-	unregTxHook func()
+	unregTxHook     func()
+	unregTextTxHook func()
 
 	startOnce sync.Once
 	stopOnce  sync.Once
@@ -165,12 +169,14 @@ func NewService(cfg ServiceConfig) (*Service, error) {
 	}
 
 	pf, err := NewPreflight(PreflightConfig{
-		OurCall:        cfg.OurCall,
-		TxSink:         cfg.TxSink,
-		IGateSender:    cfg.IGate,
-		Logger:         logger.With("component", "messages-preflight"),
-		Clock:          clock,
-		AutoAckChannel: autoAckCh,
+		OurCall:             cfg.OurCall,
+		TxSink:              cfg.TxSink,
+		TextRF:              cfg.TextRF,
+		SuppressTextAutoAck: !cfg.TextAutoAck,
+		IGateSender:         cfg.IGate,
+		Logger:              logger.With("component", "messages-preflight"),
+		Clock:               clock,
+		AutoAckChannel:      autoAckCh,
 	})
 	if err != nil {
 		return nil, err
@@ -179,6 +185,7 @@ func NewService(cfg ServiceConfig) (*Service, error) {
 	sender, err := NewSender(SenderConfig{
 		Store:         cfg.Store,
 		TxSink:        cfg.TxSink,
+		TextRF:        cfg.TextRF,
 		IGateSender:   cfg.IGate,
 		Bridge:        cfg.Bridge,
 		LocalTxRing:   ring,
@@ -262,6 +269,9 @@ func (s *Service) Start(ctx context.Context) error {
 		}
 		_, unreg := s.cfg.TxHookReg.AddTxHook(s.sender.onTxComplete)
 		s.unregTxHook = unreg
+		if s.cfg.TextTxHookReg != nil {
+			_, s.unregTextTxHook = s.cfg.TextTxHookReg.AddTextTxHook(s.sender.onTextTxComplete)
+		}
 
 		s.router.Start(ctx)
 		s.retry.Start(ctx)
@@ -276,6 +286,10 @@ func (s *Service) Stop() {
 		if s.unregTxHook != nil {
 			s.unregTxHook()
 			s.unregTxHook = nil
+		}
+		if s.unregTextTxHook != nil {
+			s.unregTextTxHook()
+			s.unregTextTxHook = nil
 		}
 		s.retry.Stop()
 		s.router.Stop()

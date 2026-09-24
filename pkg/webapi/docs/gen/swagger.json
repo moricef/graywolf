@@ -11848,6 +11848,212 @@
                 }
             }
         },
+        "rxttelemetry.LocalMetrics": {
+            "type": "object",
+            "properties": {
+                "frequency_error_hz": {
+                    "type": "number"
+                },
+                "rssi_dbm": {
+                    "type": "number"
+                },
+                "snr_db": {
+                    "type": "number"
+                }
+            }
+        },
+        "rxttelemetry.RXTHop": {
+            "type": "object",
+            "properties": {
+                "frequency_error_clipped": {
+                    "type": "boolean"
+                },
+                "frequency_error_hz": {
+                    "type": "integer"
+                },
+                "has_data": {
+                    "type": "boolean"
+                },
+                "identity_status": {
+                    "type": "string"
+                },
+                "ordinal": {
+                    "type": "integer"
+                },
+                "rssi_clipped": {
+                    "type": "boolean"
+                },
+                "rssi_dbm": {
+                    "type": "number"
+                },
+                "rx": {
+                    "type": "string"
+                },
+                "snr_clipped": {
+                    "type": "boolean"
+                },
+                "snr_db": {
+                    "type": "number"
+                },
+                "tth_ms": {
+                    "type": "integer"
+                },
+                "tx": {
+                    "type": "string"
+                }
+            }
+        },
+        "rxttelemetry.RXTTelemetry": {
+            "type": "object",
+            "properties": {
+                "encoding": {
+                    "type": "string"
+                },
+                "hops": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/rxttelemetry.RXTHop"
+                    }
+                },
+                "raw": {
+                    "type": "string"
+                }
+            }
+        },
+        "rxttelemetry.RadioParameters": {
+            "type": "object",
+            "properties": {
+                "bandwidth_hz": {
+                    "type": "integer"
+                },
+                "coding_rate": {
+                    "type": "string"
+                },
+                "frequency_hz": {
+                    "type": "integer"
+                },
+                "spreading_factor": {
+                    "type": "integer"
+                }
+            }
+        },
+        "rxttelemetry.RawReception": {
+            "type": "object",
+            "properties": {
+                "boot_id": {
+                    "type": "string"
+                },
+                "crc_valid": {
+                    "type": "boolean"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "event_id": {
+                    "type": "string"
+                },
+                "local": {
+                    "$ref": "#/definitions/rxttelemetry.LocalMetrics"
+                },
+                "packet": {
+                    "$ref": "#/definitions/tnc2.TNC2Packet"
+                },
+                "parse_status": {
+                    "type": "string"
+                },
+                "radio": {
+                    "$ref": "#/definitions/rxttelemetry.RadioParameters"
+                },
+                "raw_event": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "raw_tnc2": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "receiver": {
+                    "type": "string"
+                },
+                "receiver_interface": {
+                    "type": "string"
+                },
+                "rf_tnc2": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "rxt": {
+                    "$ref": "#/definitions/rxttelemetry.RXTTelemetry"
+                },
+                "sequence": {
+                    "type": "integer"
+                },
+                "tnc2": {
+                    "type": "string"
+                },
+                "uptime_ms": {
+                    "type": "integer"
+                },
+                "warnings": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "tnc2.PacketAddress": {
+            "type": "object",
+            "properties": {
+                "call": {
+                    "type": "string"
+                },
+                "repeated": {
+                    "type": "boolean"
+                },
+                "suffix": {
+                    "type": "string"
+                },
+                "text": {
+                    "type": "string"
+                }
+            }
+        },
+        "tnc2.TNC2Packet": {
+            "type": "object",
+            "properties": {
+                "destination": {
+                    "$ref": "#/definitions/tnc2.PacketAddress"
+                },
+                "information": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "path": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/tnc2.PacketAddress"
+                    }
+                },
+                "raw": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "source": {
+                    "$ref": "#/definitions/tnc2.PacketAddress"
+                }
+            }
+        },
         "webapi.AvailableUsbSerialDevice": {
             "type": "object",
             "properties": {
@@ -12432,6 +12638,14 @@
         "webapi.packetDTO": {
             "type": "object",
             "properties": {
+                "aprs_json": {
+                    "description": "APRSJSON preserves the complete LoRa APRS JSON reception independently\nof TNC2 parsing, APRS decoding and classic AX.25 representability.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/rxttelemetry.RawReception"
+                        }
+                    ]
+                },
                 "audio_level": {
                     "description": "AudioLevel is the demodulator's per-packet received audio level (dBFS,\nplus legacy linear mark/space). Present only for frames heard off-air via\nthe modem; nil for TX, APRS-IS, and hardware KISS-TNC entries, which carry\nno soundcard-domain level.",
                     "allOf": [
@@ -12505,6 +12719,14 @@
                 "timestamp": {
                     "description": "Timestamp is the UTC RFC3339 time the packet was recorded.",
                     "type": "string"
+                },
+                "tnc2": {
+                    "description": "TNC2 preserves the exact bytes received on a direct textual TNC link.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/tnc2.TNC2Packet"
+                        }
+                    ]
                 },
                 "type": {
                     "description": "Type is the APRS packet type (position, message, status, ...) when the payload decoded successfully.",

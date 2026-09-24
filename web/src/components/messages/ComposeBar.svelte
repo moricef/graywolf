@@ -26,9 +26,10 @@
   //   - Send icon swaps to radio-tower.
 
   import { onMount } from 'svelte';
-  import { Icon } from '@chrissnell/chonky-ui';
+  import { Icon, Select } from '@chrissnell/chonky-ui';
   import { Platform } from '../../lib/platform.js';
   import CallsignAutocomplete from './CallsignAutocomplete.svelte';
+  import { channelsStore, start as startChannels } from '../../lib/stores/channels.svelte.js';
   import {
     messagesPreferencesState,
     DEFAULT_MAX_MESSAGE_TEXT,
@@ -89,6 +90,8 @@
    *    onPickTo?: (call: string) => void,
    *    autoFocus?: boolean,
    *    embedded?: boolean,
+   *    txChannel?: number,
+   *    onChannelChange?: (channel: number) => void,
    *  }}
    */
   let {
@@ -102,7 +105,20 @@
     onPickTo,
     autoFocus = true,
     embedded = false,
+    txChannel = 0,
+    onChannelChange,
   } = $props();
+
+  $effect(() => {
+    if (onChannelChange) startChannels();
+  });
+
+  const channelOptions = $derived([
+    { value: 0, label: 'Default TX channel' },
+    ...channelsStore.list
+      .filter((channel) => channel.mode !== 'packet')
+      .map((channel) => ({ value: channel.id, label: channel.name })),
+  ]);
 
   let text = $state('');
   let toInput = $state('');
@@ -344,6 +360,20 @@
     </div>
   {/if}
 
+  {#if onChannelChange}
+    <div class="tx-channel-row">
+      <span class="tx-channel-label">Transmit channel</span>
+      <div class="tx-channel-picker">
+        <Select
+          value={txChannel}
+          onValueChange={(value) => onChannelChange(Number(value))}
+          options={channelOptions}
+          aria-label="Conversation transmit channel"
+        />
+      </div>
+    </div>
+  {/if}
+
   <div class="input-row">
     <textarea
       bind:this={textareaEl}
@@ -446,6 +476,24 @@
     border-radius: var(--radius);
   }
   .banner-dismiss:hover { background: rgba(0, 0, 0, 0.2); }
+
+  .tx-channel-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+  .tx-channel-label {
+    flex-shrink: 0;
+    color: var(--color-text-dim);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+  .tx-channel-picker {
+    width: min(260px, 100%);
+  }
 
   .to-row {
     display: flex;

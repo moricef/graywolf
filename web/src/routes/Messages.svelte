@@ -29,6 +29,7 @@
   import EmptyStates from '../components/messages/EmptyStates.svelte';
   import { messages as store } from '../lib/messagesStore.svelte.js';
   import { sendMessage } from '../api/messages.js';
+  import { setThreadChannel } from '../lib/messagesChannelPreference.js';
   import { DEFAULT_MAX_MESSAGE_TEXT } from '../lib/settings/messages-preferences-store.svelte.js';
   import { refreshNow } from '../lib/messagesTransport.js';
   import { toasts } from '../lib/stores.js';
@@ -353,8 +354,8 @@
     }
   }
 
-  async function handleThreadSend(text, to) {
-    await optimisticSend(text, to);
+  async function handleThreadSend(text, to, channel) {
+    await optimisticSend(text, to, channel);
     refreshNow();
   }
 
@@ -364,6 +365,7 @@
     // Navigate to the thread we just opened.
     const threadKind = store.tacticals.has(to.toUpperCase()) ? 'tactical' : 'dm';
     const threadId = `${threadKind}:${to.toUpperCase()}`;
+    setThreadChannel(threadId, channel);
     push(`/messages?thread=${encodeURIComponent(threadId)}`);
     return res;
   }

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -77,6 +78,14 @@ type RFAvailability interface {
 	IsRunningForChannel(channel uint32) bool
 }
 
+// TextRF selects an explicitly configured direct TNC2 transmitter.
+// Enabled selects the channel even while disconnected: failure must not
+// silently reroute a textual identity through an AX.25 backend.
+type TextRF interface {
+	Enabled(channel uint32) bool
+	Submit(ctx context.Context, channel uint32, raw []byte, source txgovernor.SubmitSource) error
+}
+
 // alwaysRF is the no-op RFAvailability used when the caller doesn't
 // inject a bridge (e.g. tests that never exercise the RF fallback).
 type alwaysRF struct{}
@@ -88,6 +97,7 @@ func (alwaysRF) IsRunningForChannel(uint32) bool { return true }
 type SenderConfig struct {
 	Store       *Store
 	TxSink      txgovernor.TxSink
+	TextRF      TextRF
 	IGateSender IGateLineSender // may be nil when operator runs no igate
 	Bridge      RFAvailability  // may be nil in tests
 	LocalTxRing *LocalTxRing
@@ -303,6 +313,9 @@ func (s *Sender) sendRF(ctx context.Context, row *configstore.Message, rfAvailab
 		err := errors.New("messages: RF unavailable")
 		return s.finalizeRFFailure(ctx, row, "rf unavailable", err)
 	}
+	if s.cfg.TextRF != nil && s.cfg.TextRF.Enabled(ch) {
+		return s.sendTextRF(ctx, row, ch)
+	}
 	frame, err := s.buildFrame(row)
 	if err != nil {
 		row.FailureReason = truncReason(fmt.Sprintf("encode: %v", err))
@@ -382,6 +395,40 @@ func (s *Sender) sendRF(ctx context.Context, row *configstore.Message, rfAvailab
 			"kind", row.ThreadKind, "channel", ch, "error", submitErr)
 		return SendResult{Path: SendPathRF, Err: submitErr, Retryable: row.ThreadKind == ThreadKindDM}
 	}
+}
+
+func (s *Sender) sendTextRF(ctx context.Context, row *configstore.Message, ch uint32) SendResult {
+	info, err := aprs.EncodeMessage(row.ToCall, row.Text, row.MsgID)
+	if err != nil {
+		row.FailureReason = truncReason("encode: " + err.Error())
+		_ = s.cfg.Store.Update(ctx, row)
+		return SendResult{Path: SendPathRF, Err: err}
+	}
+	var path []string
+	for _, part := range strings.Split(s.cfg.Preferences.Current().DefaultPath, ",") {
+		if part = strings.TrimSpace(part); part != "" {
+			path = append(path, part)
+		}
+	}
+	raw := []byte(aprs.FormatTNC2(row.FromCall, "APGRWO", path, info))
+	s.cfg.LocalTxRing.Add(row.FromCall, row.MsgID)
+	err = s.cfg.TextRF.Submit(ctx, ch, raw, txgovernor.SubmitSource{
+		Kind: SubmitKindMessages, Detail: fmt.Sprintf("%d", row.ID),
+		Priority: txgovernor.PriorityIGateMsg, SkipDedup: true,
+	})
+	if err != nil {
+		if errors.Is(err, txgovernor.ErrQueueFull) {
+			row.FailureReason = truncReason("governor queue full")
+			_ = s.cfg.Store.Update(ctx, row)
+			return SendResult{Path: SendPathRF, Err: err, Retryable: true}
+		}
+		return s.finalizeRFFailure(ctx, row, "textual submit failed", err)
+	}
+	row.FailureReason = ""
+	if err := s.cfg.Store.ClearFailureReason(ctx, row.ID); err != nil {
+		s.logger.Warn("messages sender clear-reason after queue failed", "error", err, "id", row.ID)
+	}
+	return SendResult{Path: SendPathRF, Retryable: row.ThreadKind == ThreadKindDM}
 }
 
 // finalizeRFFailure records a terminal RF failure on row. The caller
@@ -666,7 +713,21 @@ func (s *Sender) onTxComplete(channel uint32, frame *ax25.Frame, src txgovernor.
 		// Not our frame, or the row-update race already consumed it.
 		return
 	}
+	s.finishRFSend(channel, pf.RowID)
+}
 
+func (s *Sender) onTextTxComplete(channel uint32, _ []byte, src txgovernor.SubmitSource) {
+	if src.Kind != SubmitKindMessages {
+		return
+	}
+	id, err := strconv.ParseUint(src.Detail, 10, 64)
+	if err != nil || id == 0 {
+		return
+	}
+	s.finishRFSend(channel, id)
+}
+
+func (s *Sender) finishRFSend(channel uint32, rowID uint64) {
 	ctx := context.Background()
 	// Look up the row to learn ThreadKind for the event publish (and
 	// to decide whether to flip ack_state to "broadcast" for tactical).
@@ -674,10 +735,10 @@ func (s *Sender) onTxComplete(channel uint32, frame *ax25.Frame, src txgovernor.
 	// clobber concurrent writes — scheduleNext is racing us to set
 	// next_retry_at on this same row, and a whole-row Save on either
 	// side would overwrite the other's field.
-	row, err := s.cfg.Store.GetByID(ctx, pf.RowID)
+	row, err := s.cfg.Store.GetByID(ctx, rowID)
 	if err != nil {
 		s.logger.Warn("messages sender tx-hook row lookup failed",
-			"error", err, "id", pf.RowID)
+			"error", err, "id", rowID)
 		return
 	}
 	now := s.clock.Now()

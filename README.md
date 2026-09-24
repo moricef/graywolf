@@ -49,6 +49,8 @@ Reproduce with `./bench.sh`.
 
 - **LoRa APRS JSON/RXT input** - Consume a compatible receiver's continuous NDJSON stream, preserve malformed, non-APRS and extended textual identities without AX.25 truncation, decode applicable APRS semantics, inspect local/per-hop radio measurements, and draw recent RF links. Legacy `/rxt.json` polling remains supported. See [`docs/wiki/rxt-telemetry.md`](docs/wiki/rxt-telemetry.md).
 
+- **Direct LoRa TNC2 transceiver** - Receive TNC2 packets over TCP or serial, and optionally authorize textual TX and APRS messaging on a selected channel without converting extended identities to AX.25. See [`docs/wiki/lora-tnc2-transceiver.md`](docs/wiki/lora-tnc2-transceiver.md).
+
 - **Messages** - SMS-style APRS messaging with delivery status and unread badges
 
   - Direct messages with auto-ACK and retry

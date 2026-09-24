@@ -26,6 +26,7 @@ roles.
 - [`actions.md`](actions.md) -- the `@@`-prefixed APRS Actions subsystem: trigger surface, classifier topology, source-aware reply, lifecycle, schema.
 - [`remote-actions.md`](remote-actions.md) -- outbound Actions: macro + remote-OTP credential CRUD; the Messages drawer that fires `@@<otp>#<action>` at remote stations.
 - [`rxt-telemetry.md`](rxt-telemetry.md) -- lossless LoRa APRS NDJSON/RXT input, extended textual identities, receive-only policy, configuration, health status, link lifetime, and portable Windows setup.
+- [`lora-tnc2-transceiver.md`](lora-tnc2-transceiver.md) -- direct LoRa TNC2 reception and explicitly authorized TCP/serial transmission, including messaging and ACK ownership.
 
 ## Maintenance
 

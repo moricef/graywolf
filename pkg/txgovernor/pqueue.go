@@ -9,6 +9,7 @@ import (
 type queueItem struct {
 	channel  uint32
 	frame    *ax25.Frame
+	textRaw  []byte // textual TNC2 TX; mutually exclusive with frame
 	source   SubmitSource
 	priority int
 	seq      uint64 // monotonic tie-breaker for stable FIFO within priority

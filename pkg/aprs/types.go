@@ -207,6 +207,9 @@ type DecodedAPRSPacket struct {
 	// the packet is synthesized (e.g. inner third-party decode, tests) or
 	// constructed before ingress provenance is known.
 	Direction Direction
+	// TextualIngress marks packets heard on a direct TNC2 transceiver.
+	// It selects textual auto-ACK without changing other RF ingress.
+	TextualIngress bool `json:"-"`
 }
 
 // FromAX25 populates the Source/Dest/Path fields of a DecodedAPRSPacket

@@ -3665,6 +3665,69 @@ export interface components {
              */
             used?: boolean;
         };
+        "rxttelemetry.LocalMetrics": {
+            frequency_error_hz?: number;
+            rssi_dbm?: number;
+            snr_db?: number;
+        };
+        "rxttelemetry.RXTHop": {
+            frequency_error_clipped?: boolean;
+            frequency_error_hz?: number;
+            has_data?: boolean;
+            identity_status?: string;
+            ordinal?: number;
+            rssi_clipped?: boolean;
+            rssi_dbm?: number;
+            rx?: string;
+            snr_clipped?: boolean;
+            snr_db?: number;
+            tth_ms?: number;
+            tx?: string;
+        };
+        "rxttelemetry.RXTTelemetry": {
+            encoding?: string;
+            hops?: components["schemas"]["rxttelemetry.RXTHop"][];
+            raw?: string;
+        };
+        "rxttelemetry.RadioParameters": {
+            bandwidth_hz?: number;
+            coding_rate?: string;
+            frequency_hz?: number;
+            spreading_factor?: number;
+        };
+        "rxttelemetry.RawReception": {
+            boot_id?: string;
+            crc_valid?: boolean;
+            created_at?: string;
+            event_id?: string;
+            local?: components["schemas"]["rxttelemetry.LocalMetrics"];
+            packet?: components["schemas"]["tnc2.TNC2Packet"];
+            parse_status?: string;
+            radio?: components["schemas"]["rxttelemetry.RadioParameters"];
+            raw_event?: number[];
+            raw_tnc2?: number[];
+            receiver?: string;
+            receiver_interface?: string;
+            rf_tnc2?: number[];
+            rxt?: components["schemas"]["rxttelemetry.RXTTelemetry"];
+            sequence?: number;
+            tnc2?: string;
+            uptime_ms?: number;
+            warnings?: string[];
+        };
+        "tnc2.PacketAddress": {
+            call?: string;
+            repeated?: boolean;
+            suffix?: string;
+            text?: string;
+        };
+        "tnc2.TNC2Packet": {
+            destination?: components["schemas"]["tnc2.PacketAddress"];
+            information?: number[];
+            path?: components["schemas"]["tnc2.PacketAddress"][];
+            raw?: number[];
+            source?: components["schemas"]["tnc2.PacketAddress"];
+        };
         "webapi.AvailableUsbSerialDevice": {
             has_permission?: boolean;
             manufacturer?: string;
@@ -3913,6 +3976,11 @@ export interface components {
         };
         "webapi.packetDTO": {
             /**
+             * @description APRSJSON preserves the complete LoRa APRS JSON reception independently
+             *     of TNC2 parsing, APRS decoding and classic AX.25 representability.
+             */
+            aprs_json?: components["schemas"]["rxttelemetry.RawReception"];
+            /**
              * @description AudioLevel is the demodulator's per-packet received audio level (dBFS,
              *     plus legacy linear mark/space). Present only for frames heard off-air via
              *     the modem; nil for TX, APRS-IS, and hardware KISS-TNC entries, which carry
@@ -3955,6 +4023,8 @@ export interface components {
             source?: string;
             /** @description Timestamp is the UTC RFC3339 time the packet was recorded. */
             timestamp?: string;
+            /** @description TNC2 preserves the exact bytes received on a direct textual TNC link. */
+            tnc2?: components["schemas"]["tnc2.TNC2Packet"];
             /** @description Type is the APRS packet type (position, message, status, ...) when the payload decoded successfully. */
             type?: string;
             /** @description Via is the callsign of the last digipeater that forwarded this packet (H-bit set); empty string for direct packets. */

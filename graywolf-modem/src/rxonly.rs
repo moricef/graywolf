@@ -176,7 +176,12 @@ mod tests {
     #[test]
     fn feed_chunk_decodes_at_least_one_frame_from_reference_track() {
         use claxon::FlacReader;
-        let path = "aprs-test-tracks/01_40-Mins-Traffic -on-144.39.flac";
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("aprs-test-tracks/01_40-Mins-Traffic -on-144.39.flac");
+        if !path.exists() {
+            eprintln!("skipping: optional APRS reference FLAC not present");
+            return;
+        }
         let mut reader = FlacReader::open(path).expect("open reference flac");
         let info = reader.streaminfo();
         let sr = info.sample_rate;

@@ -28,6 +28,7 @@ import (
 	"github.com/chrissnell/graywolf/pkg/remoteactions"
 	"github.com/chrissnell/graywolf/pkg/rxttelemetry"
 	"github.com/chrissnell/graywolf/pkg/stationcache"
+	"github.com/chrissnell/graywolf/pkg/tnc2link"
 	"github.com/chrissnell/graywolf/pkg/txgovernor"
 	"github.com/chrissnell/graywolf/pkg/updatescheck"
 	"github.com/chrissnell/graywolf/pkg/webapi"
@@ -140,9 +141,13 @@ type App struct {
 	// closure needs a handle to call Run on; also installed into apiSrv
 	// via SetUpdatesChecker so GET /api/updates/status can project its
 	// cached Snapshot.
-	updatesChecker *updatescheck.Checker
-	rxtTelemetry   *rxttelemetry.Collection
-	rxtWG          sync.WaitGroup
+	updatesChecker  *updatescheck.Checker
+	rxtTelemetry    *rxttelemetry.Collection
+	rxtWG           sync.WaitGroup
+	tnc2Clients     []*tnc2link.Client
+	tnc2WG          sync.WaitGroup
+	tnc2Mu          sync.RWMutex
+	tnc2ByTransport map[string]*tnc2link.Client
 
 	// Guards reloadIgate's no-op-skip. Owned by the single igateComponent
 	// reload goroutine, so no mutex is needed.

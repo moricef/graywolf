@@ -344,7 +344,7 @@
   {:else}
     <PacketLogViewer
       {packets}
-      height="400px"
+      height="750px"
       live={logPrefsState.autoRefresh}
       autoscroll={logPrefsState.autoScroll}
       {toolbarToggles}

@@ -65,6 +65,14 @@ func parseFlagsTo(args []string, w io.Writer) (Config, error) {
 		"directory for offline PMTiles cache (created on startup if missing)")
 	fs.StringVar(&cfg.HTTPAddr, "http", cfg.HTTPAddr, "HTTP listen address")
 	fs.StringVar(&cfg.RXTEndpoint, "rxt-endpoint", "", "LoRa APRS JSON stream endpoint (for example http://192.168.1.161/api/v1/aprs/stream)")
+	fs.StringVar(&cfg.TNC2TCP, "tnc2-tcp", "", "direct TNC2 transceiver host:port (receive-only until TX is explicitly configured)")
+	fs.StringVar(&cfg.TNC2SerialDevice, "tnc2-serial", "", "direct TNC2 transceiver serial device")
+	fs.UintVar(&cfg.TNC2SerialBaud, "tnc2-baud", 115200, "baud rate for -tnc2-serial")
+	fs.StringVar(&cfg.TNC2TXTransport, "tnc2-tx-transport", "", "explicitly enable textual TNC2 TX on tcp or serial")
+	fs.StringVar(&cfg.TNC2TXSource, "tnc2-tx-source", "", "exact textual callsign authorized for TNC2 TX")
+	fs.UintVar(&cfg.TNC2TXChannel, "tnc2-tx-channel", 1, "Graywolf channel used for TNC2 TX policy")
+	fs.UintVar(&cfg.TNC2MaxTXBytes, "tnc2-max-tx-bytes", 255, "peer TNC2 input limit in bytes (CA2RXU: 255)")
+	fs.BoolVar(&cfg.TNC2AutoAck, "tnc2-autoack", false, "Graywolf sends APRS ACKs on direct TNC2 (disable when iGate/TNC already ACKs)")
 	fs.StringVar(&cfg.PprofAddr, "pprof", "",
 		"optional pprof debug listen address (e.g. 127.0.0.1:6060); empty disables pprof")
 	fs.DurationVar(&cfg.ShutdownTimeout, "shutdown-timeout", cfg.ShutdownTimeout,

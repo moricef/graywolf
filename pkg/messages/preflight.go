@@ -47,6 +47,9 @@ type PreflightConfig struct {
 	OurCall func() string
 	// TxSink is the governor used to submit RF auto-ACK frames. Required.
 	TxSink txgovernor.TxSink
+	TextRF TextRF
+	// SuppressTextAutoAck leaves ACK ownership with the connected TNC/iGate.
+	SuppressTextAutoAck bool
 	// IGateSender is the IS-side line sender used to mirror auto-ACKs
 	// when the inbound was IS-sourced. Optional — IS auto-ACKs are
 	// skipped when nil.
@@ -203,6 +206,30 @@ func (p *Preflight) SendAutoAck(
 		if err := p.cfg.IGateSender.SendLine(line); err != nil {
 			p.logger.Debug("preflight auto-ACK IS mirror failed",
 				"error", err, "peer", peerCall, "msgid", msgID)
+			return
+		}
+		p.mAutoAckSent.Inc()
+		return
+	}
+	if pkt.TextualIngress {
+		if p.cfg.SuppressTextAutoAck {
+			return
+		}
+		if p.cfg.TextRF == nil || !p.cfg.TextRF.Enabled(uint32(pkt.Channel)) {
+			p.logger.Warn("preflight textual auto-ACK has no authorized transmitter", "peer", peerCall)
+			return
+		}
+		info, err := aprs.EncodeMessageAck(peerCall, msgID)
+		if err != nil {
+			p.logger.Warn("preflight textual auto-ACK encode failed", "error", err)
+			return
+		}
+		raw := []byte(aprs.FormatTNC2(ourCall, "APGRWO", nil, info))
+		err = p.cfg.TextRF.Submit(ctx, uint32(pkt.Channel), raw, txgovernor.SubmitSource{
+			Kind: SubmitKindMessagesAutoAck, Priority: txgovernor.PriorityIGateMsg, SkipDedup: true,
+		})
+		if err != nil {
+			p.logger.Warn("preflight textual auto-ACK submit failed", "error", err)
 			return
 		}
 		p.mAutoAckSent.Inc()

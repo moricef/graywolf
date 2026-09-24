@@ -114,6 +114,14 @@ func buildService(t *testing.T) (*Service, *senderRig, *fakeHookRegistry, func()
 	return svc, rig, hookReg, cleanup
 }
 
+func TestServiceLeavesDirectTNC2AutoAckToTransceiverByDefault(t *testing.T) {
+	svc, _, _, cleanup := buildService(t)
+	defer cleanup()
+	if !svc.preflight.cfg.SuppressTextAutoAck {
+		t.Fatal("direct TNC2 auto-ACK unexpectedly enabled by default")
+	}
+}
+
 func TestService_StartRegistersHookAndStopUnregisters(t *testing.T) {
 	svc, _, hookReg, cleanup := buildService(t)
 	defer cleanup()

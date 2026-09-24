@@ -17,6 +17,11 @@ func TestConfigValidate(t *testing.T) {
 			cfg:  DefaultConfig(),
 		},
 		{
+			name:    "TNC2 auto-ACK requires authorized TX",
+			cfg:     func() Config { c := DefaultConfig(); c.TNC2AutoAck = true; return c }(),
+			wantErr: "TNC2 auto-ACK requires",
+		},
+		{
 			name:    "empty DBPath",
 			cfg:     Config{HTTPAddr: "127.0.0.1:8080", ShutdownTimeout: time.Second},
 			wantErr: "DBPath",

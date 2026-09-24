@@ -10,6 +10,8 @@ package app
 import (
 	"errors"
 	"fmt"
+	"net"
+	"strings"
 	"time"
 
 	"github.com/chrissnell/graywolf/pkg/logbuffer"
@@ -25,6 +27,17 @@ type Config struct {
 	// APRS packets and radio metadata from it; legacy /rxt.json URLs remain
 	// supported for link telemetry only.
 	RXTEndpoint string
+	// Optional direct TNC2 transceiver connection. TCP and serial may both
+	// be configured; they use the same textual packet parser. No RF output
+	// is enabled merely by setting either receive connection.
+	TNC2TCP          string
+	TNC2SerialDevice string
+	TNC2SerialBaud   uint
+	TNC2TXTransport  string // "tcp" or "serial"; empty disables direct text TX
+	TNC2TXSource     string // exact textual source identity authorized for TX
+	TNC2TXChannel    uint
+	TNC2MaxTXBytes   uint // peer input limit; 255 for current CA2RXU firmware
+	TNC2AutoAck      bool // opt in only when the transceiver does not ACK messages itself
 
 	// DBPath is the path to the SQLite config database (-config).
 	DBPath string
@@ -138,6 +151,40 @@ func DefaultConfig() Config {
 // readable) are deferred to the actual Start path so that a programmer
 // can construct a Config in a test without having the real paths present.
 func (c Config) Validate() error {
+	if c.TNC2TCP != "" {
+		if _, _, err := net.SplitHostPort(c.TNC2TCP); err != nil {
+			return fmt.Errorf("TNC2TCP must be host:port: %w", err)
+		}
+	}
+	if c.TNC2SerialDevice != "" && c.TNC2SerialBaud == 0 {
+		return errors.New("TNC2SerialBaud must be nonzero when TNC2SerialDevice is set")
+	}
+	if c.TNC2TXTransport != "" {
+		if c.TNC2MaxTXBytes == 0 {
+			return errors.New("TNC2 TX requires a nonzero peer input byte limit")
+		}
+		if c.TNC2TXSource == "" || c.TNC2TXChannel == 0 {
+			return errors.New("TNC2 TX requires an exact source identity and channel")
+		}
+		if strings.ContainsAny(c.TNC2TXSource, ">,:* \r\n") {
+			return errors.New("TNC2 TX source is not a textual address")
+		}
+		switch c.TNC2TXTransport {
+		case "tcp":
+			if c.TNC2TCP == "" {
+				return errors.New("TNC2 TX transport tcp requires TNC2TCP")
+			}
+		case "serial":
+			if c.TNC2SerialDevice == "" {
+				return errors.New("TNC2 TX transport serial requires TNC2SerialDevice")
+			}
+		default:
+			return fmt.Errorf("invalid TNC2 TX transport %q", c.TNC2TXTransport)
+		}
+	}
+	if c.TNC2AutoAck && c.TNC2TXTransport == "" {
+		return errors.New("TNC2 auto-ACK requires an authorized TNC2 TX transport")
+	}
 	if c.DBPath == "" {
 		return errors.New("DBPath is required")
 	}

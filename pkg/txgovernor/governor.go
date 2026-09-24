@@ -13,6 +13,7 @@
 package txgovernor
 
 import (
+	"bytes"
 	"container/heap"
 	"context"
 	"errors"
@@ -26,6 +27,7 @@ import (
 	"github.com/chrissnell/graywolf/pkg/internal/dedup"
 	"github.com/chrissnell/graywolf/pkg/internal/ratelimit"
 	pb "github.com/chrissnell/graywolf/pkg/ipcproto"
+	"github.com/chrissnell/graywolf/pkg/tnc2"
 )
 
 // Priority levels. Higher value = sent sooner. These re-export the
@@ -55,21 +57,27 @@ var (
 	ErrStopped = errors.New("txgovernor: closed")
 	// ErrNilFrame is returned when Submit is called with a nil *Frame.
 	// Caller bug; should never happen at runtime.
-	ErrNilFrame = errors.New("txgovernor: nil frame")
+	ErrNilFrame     = errors.New("txgovernor: nil frame")
+	ErrNoTextSender = errors.New("txgovernor: textual TNC2 sender unavailable")
 )
 
 // SubmitSource describes the origin of a TX request for logging, dedup
 // scoping, and metrics.
 type SubmitSource struct {
-	Kind       string // "kiss" | "agw" | "beacon" | "digipeater" | "igate"
-	Detail     string
-	Priority   int
-	SkipDedup  bool // bypass dedup window (e.g. operator-triggered send-now)
+	Kind      string // "kiss" | "agw" | "beacon" | "digipeater" | "igate"
+	Detail    string
+	Priority  int
+	SkipDedup bool // bypass dedup window (e.g. operator-triggered send-now)
 }
 
 // Sender transmits one frame to the Rust modem. In production this is
 // modembridge.Bridge.SendTransmitFrame; in tests, a fake.
 type Sender func(*pb.TransmitFrame) error
+
+// TextSender accepts one already-governed textual TNC2 record. Implementations
+// must enqueue without blocking on a slow TCP or serial peer. There is no
+// implicit conversion to AX.25, and the caller chooses the target channel.
+type TextSender func(channel uint32, raw []byte, source SubmitSource) error
 
 // ChannelTiming holds the CSMA parameters for one radio channel. Values
 // mirror the tx_timing SQLite row (ms units). TX delay and tail live in
@@ -83,7 +91,8 @@ type ChannelTiming struct {
 // Config is the Governor's static configuration.
 type Config struct {
 	// Sender is the downstream TransmitFrame consumer. Required.
-	Sender Sender
+	Sender     Sender
+	TextSender TextSender
 	// DcdEvents is an optional channel of per-channel DCD state changes
 	// from modembridge. If nil, CSMA falls back to "always clear".
 	DcdEvents <-chan *pb.DcdChange
@@ -148,11 +157,19 @@ func (c *Config) timingFor(channel uint32) ChannelTiming {
 // invoked in registration order on each successful send.
 type TxHook func(channel uint32, frame *ax25.Frame, source SubmitSource)
 
+// TextTxHook observes a textual packet after the configured sender accepted it.
+type TextTxHook func(channel uint32, raw []byte, source SubmitSource)
+
 // txHookEntry pairs a registered hook with its assigned id so
 // AddTxHook's unregister closure can locate and remove it.
 type txHookEntry struct {
 	id uint64
 	fn TxHook
+}
+
+type textTxHookEntry struct {
+	id uint64
+	fn TextTxHook
 }
 
 // Stats exposes counters for metrics.
@@ -177,12 +194,12 @@ type Governor struct {
 	cfg    Config
 	logger *slog.Logger
 
-	mu     sync.Mutex
-	q      pqueue
-	seq    uint64
-	dedup  *dedup.Window[string, struct{}]
-	rates  map[uint32]*channelRate // per-channel send rate trackers
-	dcd    map[uint32]bool         // current DCD per channel
+	mu    sync.Mutex
+	q     pqueue
+	seq   uint64
+	dedup *dedup.Window[string, struct{}]
+	rates map[uint32]*channelRate // per-channel send rate trackers
+	dcd   map[uint32]bool         // current DCD per channel
 
 	wake   chan struct{}
 	stats  Stats
@@ -191,6 +208,7 @@ type Governor struct {
 	// path snapshots the slice under the lock and invokes each entry
 	// without holding the lock.
 	hooks      []txHookEntry
+	textHooks  []textTxHookEntry
 	nextHookID uint64
 	// nextFrameID monotonically assigns per-frame correlation IDs
 	// stamped onto pb.TransmitFrame.FrameId at send time. Starts at 1
@@ -241,6 +259,31 @@ func (g *Governor) AddTxHook(h TxHook) (id uint64, unregister func()) {
 		})
 	}
 	return id, unregister
+}
+
+// AddTextTxHook registers a callback for successful textual submissions.
+func (g *Governor) AddTextTxHook(h TextTxHook) (id uint64, unregister func()) {
+	if h == nil {
+		return 0, func() {}
+	}
+	g.mu.Lock()
+	g.nextHookID++
+	id = g.nextHookID
+	g.textHooks = append(g.textHooks, textTxHookEntry{id: id, fn: h})
+	g.mu.Unlock()
+	var once sync.Once
+	return id, func() {
+		once.Do(func() {
+			g.mu.Lock()
+			for i := range g.textHooks {
+				if g.textHooks[i].id == id {
+					g.textHooks = append(g.textHooks[:i], g.textHooks[i+1:]...)
+					break
+				}
+			}
+			g.mu.Unlock()
+		})
+	}
 }
 
 // SetSkipCSMA installs a predicate consulted per frame to decide
@@ -337,6 +380,58 @@ func (g *Governor) Submit(ctx context.Context, channel uint32, frame *ax25.Frame
 	g.stats.Enqueued++
 	g.mu.Unlock()
 
+	select {
+	case g.wake <- struct{}{}:
+	default:
+	}
+	return nil
+}
+
+// SubmitTNC2 schedules a textual packet under the same deduplication, rate
+// limits, priority and channel policy as ordinary AX.25 submissions. Its
+// identity remains textual; it is never passed through ax25.ParseAddress.
+func (g *Governor) SubmitTNC2(ctx context.Context, channel uint32, raw []byte, src SubmitSource) error {
+	if g.cfg.TextSender == nil {
+		return ErrNoTextSender
+	}
+	if ctx != nil {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+	}
+	if bytes.IndexAny(raw, "\r\n") >= 0 {
+		return errors.New("txgovernor: TNC2 record contains line separator")
+	}
+	packet, err := tnc2.Parse(raw)
+	if err != nil {
+		return err
+	}
+	// Path changes do not make an otherwise identical APRS transmission
+	// distinct. Delimit the textual identities to avoid key collisions.
+	key := "tnc2\x00" + packet.Destination.Text + "\x00" + packet.Source.Text + "\x00" + string(packet.Information)
+	g.mu.Lock()
+	if g.closed {
+		g.mu.Unlock()
+		return ErrStopped
+	}
+	if !src.SkipDedup && g.dedup.Has(key) {
+		g.stats.Deduped++
+		g.mu.Unlock()
+		return nil
+	}
+	if len(g.q) >= g.cfg.QueueCapacity {
+		g.stats.QueueDropped++
+		g.mu.Unlock()
+		return ErrQueueFull
+	}
+	g.dedup.Record(key, struct{}{})
+	g.seq++
+	heap.Push(&g.q, &queueItem{
+		channel: channel, textRaw: bytes.Clone(raw), source: src,
+		priority: src.Priority, seq: g.seq, enqueued: time.Now(),
+	})
+	g.stats.Enqueued++
+	g.mu.Unlock()
 	select {
 	case g.wake <- struct{}{}:
 	default:
@@ -465,6 +560,19 @@ func (g *Governor) processOne(ctx context.Context) {
 	// outcomes live on graywolf_tx_backend_submits_total instead.
 	g.stats.Sent++
 	g.mu.Unlock()
+	if top.textRaw != nil {
+		if err := g.cfg.TextSender(top.channel, top.textRaw, top.source); err != nil {
+			g.logger.Warn("send textual TNC2 packet", "err", err, "channel", top.channel)
+		} else {
+			g.mu.Lock()
+			snap := append([]textTxHookEntry(nil), g.textHooks...)
+			g.mu.Unlock()
+			for _, h := range snap {
+				h.fn(top.channel, top.textRaw, top.source)
+			}
+		}
+		return
+	}
 
 	raw, err := top.frame.Encode()
 	if err != nil {

@@ -36,12 +36,13 @@
     listMessages, markRead, markUnread, resendMessage,
   } from '../../api/messages.js';
   import { refreshNow } from '../../lib/messagesTransport.js';
+  import { getThreadChannel, setThreadChannel } from '../../lib/messagesChannelPreference.js';
 
   /** @type {{
    *    thread: any | null,
    *    onBack?: () => void,
    *    onOpenDm?: (call: string) => void,
-   *    onCompose?: (text: string, to: string) => Promise<any>,
+   *    onCompose?: (text: string, to: string, channel: number) => Promise<any>,
    *    isMobile?: boolean,
    *  }}
    */
@@ -55,6 +56,16 @@
 
   const isTactical = $derived(thread?.kind === 'tactical');
   const threadId = $derived(thread?.threadId || '');
+  let txChannel = $state(0);
+
+  $effect(() => {
+    txChannel = getThreadChannel(threadId);
+  });
+
+  function chooseTxChannel(value) {
+    txChannel = Number(value) || 0;
+    setThreadChannel(threadId, txChannel);
+  }
 
   // Stable, unique key for {#each}. Persisted rows use their DB primary
   // key (unique); optimistic bubbles use the client-generated msg_id
@@ -303,7 +314,7 @@
 
   // --- Send flow (wired to parent).
   async function handleSend(body, to) {
-    await onCompose?.(body, to);
+    await onCompose?.(body, to, txChannel);
     // Refresh local msgs from server shortly after 202 lands —
     // the optimistic bubble already appears via store.pendingByClientId.
     refreshNow();
@@ -451,6 +462,8 @@
       dmPeer={!isTactical ? thread.key : ''}
       threadHasMessages={allBubbles.length > 0}
       onSend={handleSend}
+      txChannel={txChannel}
+      onChannelChange={chooseTxChannel}
       autoFocus={true}
     />
   </section>

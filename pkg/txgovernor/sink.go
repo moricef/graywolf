@@ -35,3 +35,13 @@ type TxHookRegistry interface {
 
 // Compile-time assertion that *Governor implements TxHookRegistry.
 var _ TxHookRegistry = (*Governor)(nil)
+
+// TextTxSink schedules textual TNC2 without converting it to AX.25.
+type TextTxSink interface {
+	SubmitTNC2(ctx context.Context, channel uint32, raw []byte, src SubmitSource) error
+}
+
+// TextTxHookRegistry observes accepted textual submissions.
+type TextTxHookRegistry interface {
+	AddTextTxHook(h TextTxHook) (id uint64, unregister func())
+}

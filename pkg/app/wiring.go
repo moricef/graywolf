@@ -451,6 +451,7 @@ func (a *App) wireServicesInner(ctx context.Context) error {
 
 	a.gov = txgovernor.New(txgovernor.Config{
 		Sender:        txSender,
+		TextSender:    a.sendTNC2Text,
 		DcdEvents:     a.bridge.DcdEvents(),
 		Rate1MinLimit: rate1,
 		Rate5MinLimit: rate5,
@@ -461,7 +462,9 @@ func (a *App) wireServicesInner(ctx context.Context) error {
 	// D3.4: governor consults the dispatcher's per-channel CSMA-skip
 	// flag to bypass p-persistence / slot-time / DCD waits for
 	// KISS-only channels.
-	a.gov.SetSkipCSMA(a.txDispatcher.SkipCSMA)
+	a.gov.SetSkipCSMA(func(channel uint32) bool {
+		return (a.cfg.TNC2TXTransport != "" && channel == uint32(a.cfg.TNC2TXChannel)) || a.txDispatcher.SkipCSMA(channel)
+	})
 
 	// TX hook: record transmitted frames into the packet log and
 	// update the station cache for beacon transmissions.
@@ -759,6 +762,7 @@ func (a *App) wireServicesInner(ctx context.Context) error {
 		a.backgroundStatsComponent(),
 		a.updatesCheckComponent(),
 		a.kissComponent(),
+		a.tnc2Component(),
 		a.digipeaterComponent(),
 		a.gpsComponent(),
 		a.beaconComponent(),
@@ -1056,8 +1060,9 @@ func (a *App) onIGateIsRxPacket(pkt *aprs.DecodedAPRSPacket, line string) {
 // #81: a KISS-only channel (no audio device) was permanently refused
 // by the sender because the modem bridge was never running.
 type rfAvailabilityAdapter struct {
-	bridge *modembridge.Bridge
-	reg    *txbackend.Registry
+	bridge        *modembridge.Bridge
+	reg           *txbackend.Registry
+	textAvailable func(uint32) bool
 }
 
 // IsRunningForChannel reports whether the channel has any usable TX
@@ -1068,6 +1073,9 @@ type rfAvailabilityAdapter struct {
 // to skip RF entirely when neither the modem nor any KISS-TNC backend
 // could possibly carry the frame, so the IS fallback fires immediately.
 func (r rfAvailabilityAdapter) IsRunningForChannel(ch uint32) bool {
+	if r.textAvailable != nil && r.textAvailable(ch) {
+		return true
+	}
 	if r.bridge != nil && r.bridge.IsRunning() {
 		return true
 	}
@@ -1087,7 +1095,16 @@ func (a *App) rfAvailability() messages.RFAvailability {
 	if a.txDispatcher != nil {
 		reg = a.txDispatcher.Registry()
 	}
-	return rfAvailabilityAdapter{bridge: a.bridge, reg: reg}
+	return rfAvailabilityAdapter{bridge: a.bridge, reg: reg, textAvailable: func(ch uint32) bool {
+		if !(tnc2MessageRF{app: a}).Enabled(ch) {
+			return false
+		}
+		a.tnc2Mu.RLock()
+		client := a.tnc2ByTransport[a.cfg.TNC2TXTransport]
+		connected := client != nil && client.Connected()
+		a.tnc2Mu.RUnlock()
+		return connected
+	}}
 }
 
 func (a *App) wireMessages(ctx context.Context) error {
@@ -1140,15 +1157,18 @@ func (a *App) wireMessages(ctx context.Context) error {
 	var igSender messages.IGateLineSender = a.igateLineSender
 
 	svc, err := messages.NewService(messages.ServiceConfig{
-		Store:        a.msgStore,
-		ConfigStore:  a.store,
-		TxSink:       a.gov,
-		TxHookReg:    a.gov,
-		IGate:        igSender,
-		Bridge:       a.rfAvailability(),
-		StationCache: a.stationCache,
-		Logger:       a.logger.With("component", "messages"),
-		TxChannel:    txChannel,
+		Store:         a.msgStore,
+		ConfigStore:   a.store,
+		TxSink:        a.gov,
+		TxHookReg:     a.gov,
+		TextTxHookReg: a.gov,
+		TextRF:        tnc2MessageRF{app: a},
+		TextAutoAck:   a.cfg.TNC2AutoAck,
+		IGate:         igSender,
+		Bridge:        a.rfAvailability(),
+		StationCache:  a.stationCache,
+		Logger:        a.logger.With("component", "messages"),
+		TxChannel:     txChannel,
 		TxChannelResolver: func(rctx context.Context) uint32 {
 			var configured uint32
 			if mc, _ := a.store.GetMessagesConfig(rctx); mc != nil {
@@ -1561,6 +1581,7 @@ func (a *App) wireHTTP(ctx context.Context) error {
 	webapi.RegisterHeatmap(apiSrv, apiMux, a.stationCache)
 	webapi.RegisterPosition(apiSrv, apiMux, a.stationPos)
 	webapi.RegisterRXT(apiSrv, apiMux, a.rxtTelemetry, a.stationCache, a.store)
+	webapi.RegisterTNC2TX(apiSrv, apiMux, a.submitTNC2TX)
 	// /api/system-logs reads the slog ring buffer. a.cfg.LogBuffer is a
 	// concrete *logbuffer.DB that may be nil; assign through a typed
 	// interface variable so a nil DB arrives as a true nil interface
@@ -2366,6 +2387,12 @@ func (a *App) disabledChannelSet(ctx context.Context) map[uint32]bool {
 // reloadIgate / Service.ReloadConfig on iGate-config saves so a
 // runtime channel renumbering propagates without a service restart.
 func (a *App) resolveTxChannel(ctx context.Context, configured uint32) uint32 {
+	// An explicitly authorized textual transmitter is a real TX backend,
+	// even though it does not register an AX.25 modem/KISS backend.
+	textChannel := uint32(a.cfg.TNC2TXChannel)
+	if a.cfg.TNC2TXTransport != "" && textChannel != 0 && (configured == 0 || configured == textChannel) {
+		return textChannel
+	}
 	kissTx := a.kissTxChannelSet(ctx)
 
 	// A configured KISS-TNC channel is a legitimate egress target even

@@ -12,6 +12,7 @@ import (
 
 	"github.com/chrissnell/graywolf/pkg/aprs"
 	"github.com/chrissnell/graywolf/pkg/rxttelemetry"
+	"github.com/chrissnell/graywolf/pkg/tnc2"
 )
 
 // Direction labels a packet's flow.
@@ -44,6 +45,8 @@ type Entry struct {
 	// APRSJSON preserves the complete LoRa APRS JSON reception independently
 	// of TNC2 parsing, APRS decoding and classic AX.25 representability.
 	APRSJSON *rxttelemetry.RawReception `json:"aprs_json,omitempty"`
+	// TNC2 preserves the exact bytes received on a direct textual TNC link.
+	TNC2 *tnc2.TNC2Packet `json:"tnc2,omitempty"`
 	// Notes is a short annotation describing how this entry was handled (e.g. "deduped", "rate-limited", "digi consumed WIDE1-1").
 	Notes string `json:"notes,omitempty"`
 	// AudioLevel is the demodulator's per-packet received audio level (dBFS,

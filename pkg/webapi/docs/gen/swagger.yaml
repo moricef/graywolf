@@ -2720,6 +2720,141 @@ definitions:
           UART, or a previously-running graywolf process).
         type: boolean
     type: object
+  rxttelemetry.LocalMetrics:
+    properties:
+      frequency_error_hz:
+        type: number
+      rssi_dbm:
+        type: number
+      snr_db:
+        type: number
+    type: object
+  rxttelemetry.RXTHop:
+    properties:
+      frequency_error_clipped:
+        type: boolean
+      frequency_error_hz:
+        type: integer
+      has_data:
+        type: boolean
+      identity_status:
+        type: string
+      ordinal:
+        type: integer
+      rssi_clipped:
+        type: boolean
+      rssi_dbm:
+        type: number
+      rx:
+        type: string
+      snr_clipped:
+        type: boolean
+      snr_db:
+        type: number
+      tth_ms:
+        type: integer
+      tx:
+        type: string
+    type: object
+  rxttelemetry.RXTTelemetry:
+    properties:
+      encoding:
+        type: string
+      hops:
+        items:
+          $ref: '#/definitions/rxttelemetry.RXTHop'
+        type: array
+      raw:
+        type: string
+    type: object
+  rxttelemetry.RadioParameters:
+    properties:
+      bandwidth_hz:
+        type: integer
+      coding_rate:
+        type: string
+      frequency_hz:
+        type: integer
+      spreading_factor:
+        type: integer
+    type: object
+  rxttelemetry.RawReception:
+    properties:
+      boot_id:
+        type: string
+      crc_valid:
+        type: boolean
+      created_at:
+        type: string
+      event_id:
+        type: string
+      local:
+        $ref: '#/definitions/rxttelemetry.LocalMetrics'
+      packet:
+        $ref: '#/definitions/tnc2.TNC2Packet'
+      parse_status:
+        type: string
+      radio:
+        $ref: '#/definitions/rxttelemetry.RadioParameters'
+      raw_event:
+        items:
+          type: integer
+        type: array
+      raw_tnc2:
+        items:
+          type: integer
+        type: array
+      receiver:
+        type: string
+      receiver_interface:
+        type: string
+      rf_tnc2:
+        items:
+          type: integer
+        type: array
+      rxt:
+        $ref: '#/definitions/rxttelemetry.RXTTelemetry'
+      sequence:
+        type: integer
+      tnc2:
+        type: string
+      uptime_ms:
+        type: integer
+      warnings:
+        items:
+          type: string
+        type: array
+    type: object
+  tnc2.PacketAddress:
+    properties:
+      call:
+        type: string
+      repeated:
+        type: boolean
+      suffix:
+        type: string
+      text:
+        type: string
+    type: object
+  tnc2.TNC2Packet:
+    properties:
+      destination:
+        $ref: '#/definitions/tnc2.PacketAddress'
+      information:
+        items:
+          type: integer
+        type: array
+      path:
+        items:
+          $ref: '#/definitions/tnc2.PacketAddress'
+        type: array
+      raw:
+        items:
+          type: integer
+        type: array
+      source:
+        $ref: '#/definitions/tnc2.PacketAddress'
+    type: object
   webapi.AvailableUsbSerialDevice:
     properties:
       has_permission:
@@ -3134,6 +3269,12 @@ definitions:
     type: object
   webapi.packetDTO:
     properties:
+      aprs_json:
+        allOf:
+          - $ref: '#/definitions/rxttelemetry.RawReception'
+        description: |-
+          APRSJSON preserves the complete LoRa APRS JSON reception independently
+          of TNC2 parsing, APRS decoding and classic AX.25 representability.
       audio_level:
         allOf:
           - $ref: '#/definitions/packetlog.AudioLevel'
@@ -3194,6 +3335,10 @@ definitions:
       timestamp:
         description: Timestamp is the UTC RFC3339 time the packet was recorded.
         type: string
+      tnc2:
+        allOf:
+          - $ref: '#/definitions/tnc2.TNC2Packet'
+        description: TNC2 preserves the exact bytes received on a direct textual TNC link.
       type:
         description: Type is the APRS packet type (position, message, status, ...) when the payload decoded successfully.
         type: string
