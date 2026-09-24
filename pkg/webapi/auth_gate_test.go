@@ -71,6 +71,8 @@ func TestAuthGate_EveryRoute(t *testing.T) {
 		{http.MethodDelete, "/api/beacons/1", ""},
 		{http.MethodPost, "/api/beacons/1/send", ""},
 		{http.MethodPost, "/api/tnc2/tx", `{}`},
+		{http.MethodGet, "/api/tnc2/config", ""},
+		{http.MethodPut, "/api/tnc2/config", `{}`},
 
 		// PTT + TX timing
 		{http.MethodGet, "/api/ptt", ""},
@@ -292,6 +294,7 @@ func newAuthGateServer(t *testing.T) *authGateServer {
 	// Protected routes live on an inner mux wrapped with RequireAuth.
 	apiMux := http.NewServeMux()
 	apiSrv.RegisterRoutes(apiMux)
+	RegisterTNC2Config(apiMux, func() TNC2ConfigStatus { return TNC2ConfigStatus{} }, func(context.Context, configstore.TNC2Config) error { return nil })
 	RegisterReleaseNotes(apiSrv, apiMux, "test", authStore)
 
 	outer.Handle("/api/", webauth.RequireAuth(authStore)(apiMux))

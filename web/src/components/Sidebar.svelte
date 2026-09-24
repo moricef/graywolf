@@ -53,6 +53,7 @@
     { path: '/simulation', label: 'Simulation' },
     { path: '/callsign', label: 'Station Callsign' },
     { path: '/preferences/storage', label: 'Storage' },
+    { path: '/preferences/tnc2', label: 'TNC2' },
   ];
   // mainItems carries the icon'd top section; it's filtered by the
   // same HIDDEN_ON_ANDROID set as the settings group so an entry like

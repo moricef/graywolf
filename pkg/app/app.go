@@ -144,9 +144,12 @@ type App struct {
 	updatesChecker  *updatescheck.Checker
 	rxtTelemetry    *rxttelemetry.Collection
 	rxtWG           sync.WaitGroup
-	tnc2Clients     []*tnc2link.Client
 	tnc2WG          sync.WaitGroup
 	tnc2Mu          sync.RWMutex
+	tnc2Cfg         configstore.TNC2Config
+	tnc2CfgLoaded   bool
+	tnc2Ctx         context.Context
+	tnc2Cancel      context.CancelFunc
 	tnc2ByTransport map[string]*tnc2link.Client
 
 	// Guards reloadIgate's no-op-skip. Owned by the single igateComponent

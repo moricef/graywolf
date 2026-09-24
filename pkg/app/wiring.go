@@ -155,6 +155,14 @@ func (a *App) wireServices(ctx context.Context) error {
 // with a single defer-like cleanup. Any error here means the outer
 // function closes the store before returning.
 func (a *App) wireServicesInner(ctx context.Context) error {
+	if persisted, exists, err := a.store.GetTNC2Config(ctx); err != nil {
+		return fmt.Errorf("load TNC2 configuration: %w", err)
+	} else if exists {
+		if err := persisted.Validate(); err != nil {
+			return fmt.Errorf("stored TNC2 configuration: %w", err)
+		}
+		a.applyTNC2Config(persisted)
+	}
 	// --- FLAC override (optional, mutates the store) -------------------
 	if err := a.applyFlacOverride(ctx); err != nil {
 		return fmt.Errorf("apply flac override: %w", err)
@@ -463,7 +471,8 @@ func (a *App) wireServicesInner(ctx context.Context) error {
 	// flag to bypass p-persistence / slot-time / DCD waits for
 	// KISS-only channels.
 	a.gov.SetSkipCSMA(func(channel uint32) bool {
-		return (a.cfg.TNC2TXTransport != "" && channel == uint32(a.cfg.TNC2TXChannel)) || a.txDispatcher.SkipCSMA(channel)
+		cfg := a.currentTNC2Config()
+		return (cfg.TXTransport != "" && channel == cfg.TXChannel) || a.txDispatcher.SkipCSMA(channel)
 	})
 
 	// TX hook: record transmitted frames into the packet log and
@@ -1099,8 +1108,9 @@ func (a *App) rfAvailability() messages.RFAvailability {
 		if !(tnc2MessageRF{app: a}).Enabled(ch) {
 			return false
 		}
+		cfg := a.currentTNC2Config()
 		a.tnc2Mu.RLock()
-		client := a.tnc2ByTransport[a.cfg.TNC2TXTransport]
+		client := a.tnc2ByTransport[cfg.TXTransport]
 		connected := client != nil && client.Connected()
 		a.tnc2Mu.RUnlock()
 		return connected
@@ -1582,6 +1592,10 @@ func (a *App) wireHTTP(ctx context.Context) error {
 	webapi.RegisterPosition(apiSrv, apiMux, a.stationPos)
 	webapi.RegisterRXT(apiSrv, apiMux, a.rxtTelemetry, a.stationCache, a.store)
 	webapi.RegisterTNC2TX(apiSrv, apiMux, a.submitTNC2TX)
+	webapi.RegisterTNC2Config(apiMux, func() webapi.TNC2ConfigStatus {
+		cfg, tcp, serial := a.tnc2Settings()
+		return webapi.TNC2ConfigStatus{TNC2Config: cfg, TCPConnected: tcp, SerialConnected: serial}
+	}, a.updateTNC2Config)
 	// /api/system-logs reads the slog ring buffer. a.cfg.LogBuffer is a
 	// concrete *logbuffer.DB that may be nil; assign through a typed
 	// interface variable so a nil DB arrives as a true nil interface
@@ -2389,8 +2403,9 @@ func (a *App) disabledChannelSet(ctx context.Context) map[uint32]bool {
 func (a *App) resolveTxChannel(ctx context.Context, configured uint32) uint32 {
 	// An explicitly authorized textual transmitter is a real TX backend,
 	// even though it does not register an AX.25 modem/KISS backend.
-	textChannel := uint32(a.cfg.TNC2TXChannel)
-	if a.cfg.TNC2TXTransport != "" && textChannel != 0 && (configured == 0 || configured == textChannel) {
+	textCfg := a.currentTNC2Config()
+	textChannel := textCfg.TXChannel
+	if textCfg.TXTransport != "" && textChannel != 0 && (configured == 0 || configured == textChannel) {
 		return textChannel
 	}
 	kissTx := a.kissTxChannelSet(ctx)

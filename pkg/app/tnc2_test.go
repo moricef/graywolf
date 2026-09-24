@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/chrissnell/graywolf/pkg/aprs"
+	"github.com/chrissnell/graywolf/pkg/configstore"
 	pb "github.com/chrissnell/graywolf/pkg/ipcproto"
 	"github.com/chrissnell/graywolf/pkg/messages"
 	"github.com/chrissnell/graywolf/pkg/packetlog"
@@ -19,6 +20,69 @@ import (
 	"github.com/chrissnell/graywolf/pkg/tnc2link"
 	"github.com/chrissnell/graywolf/pkg/txgovernor"
 )
+
+func TestTNC2SettingsSwitchTCPConnectionWithoutRestart(t *testing.T) {
+	first, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer first.Close()
+	second, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer second.Close()
+	accept := func(listener net.Listener) <-chan net.Conn {
+		out := make(chan net.Conn, 1)
+		go func() {
+			conn, err := listener.Accept()
+			if err == nil {
+				out <- conn
+			}
+		}()
+		return out
+	}
+	firstConn, secondConn := accept(first), accept(second)
+	a := &App{}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	component := a.tnc2Component()
+	if err := component.start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		cancel()
+		if err := component.stop(context.Background()); err != nil {
+			t.Error(err)
+		}
+	}()
+	cfg := configstore.TNC2Config{TCPAddress: first.Addr().String(), SerialBaud: 115200, TXChannel: 1, MaxTXBytes: 255}
+	a.applyTNC2Config(cfg)
+	select {
+	case conn := <-firstConn:
+		defer conn.Close()
+	case <-time.After(3 * time.Second):
+		t.Fatal("first TNC2 connection not opened")
+	}
+	cfg.TCPAddress = second.Addr().String()
+	a.applyTNC2Config(cfg)
+	select {
+	case conn := <-secondConn:
+		defer conn.Close()
+	case <-time.After(3 * time.Second):
+		t.Fatal("updated TNC2 connection not opened")
+	}
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		got, connected, _ := a.tnc2Settings()
+		if got.TCPAddress == cfg.TCPAddress && connected {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	got, connected, _ := a.tnc2Settings()
+	t.Fatalf("live status=%+v connected=%v", got, connected)
+}
 
 func TestDirectTNC2MicEReceptionIsLosslessAndReceiveOnly(t *testing.T) {
 	h := newKissTncHarness(t)

@@ -168,6 +168,7 @@ func (s *Store) Migrate() error {
 		&StationConfig{},
 		&UpdatesConfig{},
 		&RXTConfig{},
+		&TNC2Config{},
 		&UnitsConfig{},
 		&ThemeConfig{},
 		&MapsConfig{},

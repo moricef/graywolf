@@ -6,14 +6,23 @@ JSON/RXT source and from KISS. It keeps extended textual identities such as
 `F4MLV-16` or `F4MLV-GS` and binary Mic-E information without AX.25 address
 conversion.
 
-Use `-tnc2-tcp HOST:PORT` or `-tnc2-serial DEVICE -tnc2-baud 115200` for
-reception. Both may be configured at once. Incoming TNC2 packets are decoded
+Open **Settings → TNC2** to configure a TCP host/port, a serial device and
+baud rate, and the explicitly authorized transmit transport, source, channel
+and byte limit. **Save** persists the settings in `graywolf.db` and applies
+them immediately; they survive a restart. Both receive connections may be
+configured at once. Leave either connection blank to disable it. The status
+panel reports whether each configured connection is currently connected.
+
+The `-tnc2-tcp HOST:PORT` and `-tnc2-serial DEVICE -tnc2-baud 115200` flags
+remain available for initial or headless configuration. Once settings have
+been saved in the WebUI, the database settings take precedence over these
+flags. Incoming TNC2 packets are decoded
 for Graywolf's packet log and station map; they are not automatically forwarded
 to KISS, the digipeater, APRS-IS, or RF. Non-packet console and RXT diagnostic
 lines on the same port are ignored. RXT measurements still come from the
 separate JSON/RXT source.
 
-Transmission is disabled by default. To authorize it, additionally configure
+Transmission is disabled by default. To authorize it, configure
 exactly one output transport, one textual source identity, and one Graywolf
 channel. For example:
 
@@ -25,8 +34,9 @@ channel. For example:
 -tnc2-max-tx-bytes 255
 ```
 
-For a serial-connected transceiver, select `-tnc2-tx-transport serial` and
-provide `-tnc2-serial DEVICE -tnc2-baud BAUD` instead. The configured source
+For a serial-connected transceiver, select **Serial** as the transmit
+transport and enter its device and baud rate in Settings → TNC2 (or use the
+equivalent flags in a headless deployment). The configured source
 must match the source in each submitted packet exactly. The byte limit is the
 peer's input-record limit; 255 is the current CA2RXU TNC2 buffer limit.
 Packets containing CR or LF are rejected because either byte would split the

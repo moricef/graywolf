@@ -40,6 +40,7 @@
   import Actions from './routes/Actions.svelte';
   import RxtTelemetry from './routes/RxtTelemetry.svelte';
   import RxtSettings from './routes/RxtSettings.svelte';
+  import Tnc2Settings from './routes/Tnc2Settings.svelte';
 
   const baseRoutes = {
     '/login': Login,
@@ -70,6 +71,7 @@
     '/preferences/storage': StorageSettings,
     '/preferences/messages': MessagesSettings,
     '/preferences/rxt': RxtSettings,
+    '/preferences/tnc2': Tnc2Settings,
     '/about': About,
   };
   const routes = (() => {
