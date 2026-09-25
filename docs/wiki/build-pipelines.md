@@ -24,7 +24,7 @@ Release pipeline definition: [`../../.goreleaser.yml`](../../.goreleaser.yml).
 | Release commit + tag | `make bump-point` / `make bump-minor` / `make bump-beta` | All of the above | git commit + `git tag vX.Y.Z` + push | Manual |
 | Goreleaser archives | `.goreleaser.yml` `archives:` | Go binary (built per OS/arch by goreleaser) + `rust-bin/<os>_<arch>/graywolf-modem*` (pre-built outside goreleaser, supplied as `extra_files`) | Tarball / zip in goreleaser dist | Tag push (`release.yml`) |
 | `.deb`, `.rpm` | goreleaser `nfpms:` | Go binary + rust-bin + systemd unit + udev rules + post/pre scripts | `.deb` / `.rpm` artifacts | Tag push |
-| OCI image | goreleaser `dockers:` + [`../../Dockerfile.goreleaser`](../../Dockerfile.goreleaser), [`../../Dockerfile.goreleaser.arm64`](../../Dockerfile.goreleaser.arm64) | Go binary + `graywolf-modem-{amd64,arm64}` | `ghcr.io/chrissnell/graywolf:<tag>-{amd64,arm64}`, manifest list `:<tag>` and `:latest` | Tag push |
+| OCI image | goreleaser `dockers:` + [`../../Dockerfile.goreleaser`](../../Dockerfile.goreleaser), [`../../Dockerfile.goreleaser.arm64`](../../Dockerfile.goreleaser.arm64) | Go binary + `graywolf-modem-{amd64,arm64}` | On this fork: `ghcr.io/moricef/graywolf:<tag>-{amd64,arm64}`, manifest list `:<tag>` and `:latest` | Versioned `v*` tag push |
 | Arch AUR | [`../../packaging/aur/PKGBUILD`](../../packaging/aur/PKGBUILD) (pkgname `graywolf-aprs`) | github archive of the tag, `.service`, `.sysusers` | AUR (off-repo upload by maintainer) | `make bump-*` rewrites `pkgver` in `PKGBUILD` and `.SRCINFO` |
 | Windows NSIS installer | [`../../packaging/nsis/graywolf.nsi`](../../packaging/nsis/graywolf.nsi) (`makensis`) | `BINARY_PATH`, `MODEM_PATH`, `APP_VERSION`, `APP_VERSION_NUMERIC` | `graywolf_<ver>_Windows_x86_64.exe` | Manual; outside goreleaser |
 | Pre-built rust-bin (CI) | rust-build matrix in `.github/workflows/release.yml` | Per-target `cargo build --release` (Linux amd64, arm64, armv6, armv7; macOS amd64, arm64; Windows amd64) | `rust-bin/<os>_<arch>/graywolf-modem[.exe]` -- note the two 32-bit ARM modems land in distinct dirs `linux_arm` (armv6) and `linux_armv7` (NEON); plus top-level `graywolf-modem-{amd64,arm64}` for the docker context (no 32-bit ARM docker image) | Tag push |
@@ -40,6 +40,25 @@ Release pipeline definition: [`../../.goreleaser.yml`](../../.goreleaser.yml).
 The pre-commit hook in [`../../.githooks/`](../../.githooks/) (wired via
 `make install-hooks`) runs the same `docs-check` / `api-client-check`
 guards locally.
+
+## RXT fork test builds
+
+RXT builds from `moricef/graywolf` are GitHub pre-releases identified by the
+exact packaged commit. Their tag is `rxt-<sha8>` and their title is
+`Graywolf RXT test build <sha8>`. They retain the current base version in the
+package filenames and do not use a `make bump-*` target or add an in-app
+versioned release note.
+
+Run `release.yml` with `workflow_dispatch` on the RXT branch, confirm its
+`headSha`, wait for all jobs to pass, download `snapshot-packages`, and verify
+`sha256sum -c checksums.txt`. Only then tag that same commit and attach those
+verified artifacts to a GitHub pre-release. An `rxt-*` tag intentionally does
+not trigger `release.yml`: the workflow's publication trigger is limited to
+`v*` tags.
+
+RXT test builds do not publish OCI images and do not move the GHCR `latest`
+tag. Full operational rules and the required user approval checkpoint are in
+[`../../AGENTS.md`](../../AGENTS.md).
 
 ## Rust modem uses the pure-Rust HID backend (no system libhidapi/libudev)
 
