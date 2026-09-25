@@ -132,6 +132,43 @@ not restricted to printable ASCII. A live zero-speed beacon from `F4MLV-7`
 contained the valid speed/course triplet `0x6c 0x20 0x60` (0 kt, 68 degrees),
 which is retained and displayed without a false malformed-packet error.
 
+## Extended identity field validation (2026-09-25)
+
+The extended textual identity model was validated over RF with the tracker
+identity `F4MLV-MC`. Graywolf received message `test etendu 2` with APRS
+message ID `165`, kept `F4MLV-MC` as the peer and source, and classified it as
+RF input. The same reception appeared in the versioned JSON stream as event
+`f490c9bf:51`:
+
+```text
+F4MLV-MC>APLRT1,WIDE1-1,WIDE2-1::F4MLV-2  :test etendu 2{165
+```
+
+Its local receiver measurements were `-73 dBm` RSSI, `12 dB` SNR and `676 Hz`
+frequency error. This observation validates extended-identity message
+reception through both the native TNC2 path and the JSON reception model.
+
+After adding every participating RXT digi to the receiver's exact-identity
+whitelist, a second tracker beacon produced JSON events `5b689892:2` for the
+direct reception and `5b689892:3` for the RXT relay. The clean relayed packet
+was:
+
+```text
+F4MLV-MC>TRUWV3,F4MLV-10*,WIDE2-1:`w25l#X</"=C}
+```
+
+The relay carried the RXT tuple `Pu+G`, resolved without an unknown identity
+as `F4MLV-MC -> F4MLV-10`. Its remote measurements were `-83 dBm` RSSI,
+`12 dB` SNR, `-1512 Hz` frequency error and `5775 ms` TTH. Graywolf advanced
+the source cursor through event `5b689892:3`, confirming consumption from the
+continuous JSON stream.
+
+Together with the automated extended-identity and AX.25-boundary tests, these
+on-air observations validate 100% of the extended textual identity model in
+Graywolf's supported LoRa APRS/RXT scope: message reception, beacon reception,
+exact identity preservation, JSON ingestion, RXT decoding and named RF-hop
+resolution.
+
 Each source is intentionally receive-only: Graywolf does not use the optional
 JSON TX API. It does handle heartbeat records and reliable history resume.
 When the producer advertises `history_resume`, Graywolf persists the last

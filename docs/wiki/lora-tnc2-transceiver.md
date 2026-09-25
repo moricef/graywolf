@@ -76,3 +76,39 @@ setting; otherwise it deliberately ignores the frame. CA2RXU currently trims
 the incoming text record, so Graywolf's exact bytes-to-port guarantee does not
 imply byte-for-byte identity after the firmware's input processing for records
 with leading or trailing whitespace.
+
+## Extended identity model
+
+The [LoRa APRS JSON protocol, section 3](https://github.com/moricef/LoRa_APRS_JSON_Protocol/blob/main/LORA_APRS_JSON_PROTOCOL.md#3-representation)
+defines the source model for extended textual identities: received address
+text is authoritative, a suffix after `-` is an opaque string, and an
+optional numeric `ssid` is only a derived view. The authoritative packet
+copy is `packet.raw_tnc2_base64`, including binary information bytes.
+Graywolf preserves these properties in its TNC2 packet model and checks
+classic AX.25 representability only when crossing an AX.25 output boundary.
+Automated tests cover identities such as `F4JJE-16`, `NN7LE-GS` and
+`F4MLV-GS` on the JSON and direct TNC2 paths.
+
+## On-air validation (2026-09-24)
+
+The direct TNC2 path was verified with the station `F4MLV-2` on Graywolf
+channel 1. These observations pair Graywolf's service journal with packets
+seen on aprs.fi after reception by other iGates (times are CEST):
+
+| Graywolf RF send | aprs.fi reception | Evidence |
+| --- | --- | --- |
+| 20:51:51, message ID `010` to `F4MLV-7` on channel 1 | 20:52:03, `F4MLV-2>APGRWO,F4MLV-10*,WIDE2-1,qAR,F4BPJ-10::F4MLV-7  :test{010` | Same message ID and text; repeated RF hop `F4MLV-10*`; `qAR` identifies RF-to-APRS-IS gating by `F4BPJ-10`. |
+| 23:32:10, position beacon ID 1 with `send_path=rf` on channel 1 | 23:32:20, `F4MLV-2>APGRWO,F4MLV-10*,WIDE2-1,qAO,F6DEV-10:!L8gjuNmQaa  C/A=002789Graywolf/0.14.13{bq&I}` | Same beacon information prefix; repeated RF hop `F4MLV-10*`; received and uploaded by `F6DEV-10` with an RXT trailer. |
+
+`qAR` identifies RF-to-APRS-IS gating; `qAO` is used by receive-only iGates
+for RF traffic (see the [APRS-IS q construct
+specification](https://aprs-is.net/q.aspx)). These paired
+observations validate RF transmission of a message and a beacon through the
+native TNC2 path. Other `F4MLV-2` entries in the same aprs.fi history carry
+`TCPIP*,qAC`; those are direct APRS-IS submissions and are not used as RF
+evidence here. The observed source in these two RF examples is the canonical
+`F4MLV-2`; they validate native TNC2 RF transmission, while the extended
+identity examples above have automated coverage. On 2026-09-25, the tracker
+identity `F4MLV-MC` was also validated over RF through native TNC2 message
+reception and the complete JSON/RXT beacon path. The observations and measured
+hop are recorded in [RXT telemetry](rxt-telemetry.md#extended-identity-field-validation-2026-09-25).
