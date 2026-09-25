@@ -166,6 +166,19 @@ func TestBeaconRequest_Validate_WeatherSource(t *testing.T) {
 	if err := davis.Validate(); err == nil || !strings.Contains(err.Error(), "weather_bucket") {
 		t.Fatalf("invalid Davis bucket accepted: %v", err)
 	}
+	peet := valid
+	peet.WeatherSource = "peet_serial"
+	peet.WeatherPath = ""
+	peet.WeatherDevice = "/dev/ttyUSB1"
+	peet.WeatherBaud = 2400
+	peet.WeatherBucket = "0.1mm"
+	if err := peet.Validate(); err != nil {
+		t.Fatalf("valid Peet Bros source rejected: %v", err)
+	}
+	peet.WeatherBucket = "0.2mm"
+	if err := peet.Validate(); err == nil || !strings.Contains(err.Error(), "weather_bucket") {
+		t.Fatalf("invalid Peet Bros rain unit accepted: %v", err)
+	}
 }
 
 func strPtr(s string) *string { return &s }

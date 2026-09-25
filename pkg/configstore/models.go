@@ -660,11 +660,11 @@ type Beacon struct {
 	Comment        string  `json:"comment"`
 	CommentCmd     string  `json:"comment_cmd"`                               // shell command whose stdout is appended as comment
 	CustomInfo     string  `json:"custom_info"`                               // raw info field override for Type=="custom"
-	WeatherSource  string  `gorm:"not null;default:''" json:"weather_source"` // wxnow_file | davis_serial
+	WeatherSource  string  `gorm:"not null;default:''" json:"weather_source"` // wxnow_file | davis_serial | peet_serial
 	WeatherPath    string  `gorm:"not null;default:''" json:"weather_path"`   // path to WxNow.txt
-	WeatherDevice  string  `gorm:"not null;default:''" json:"weather_device"` // Davis serial device
+	WeatherDevice  string  `gorm:"not null;default:''" json:"weather_device"` // Davis or Peet Bros serial device
 	WeatherBaud    uint32  `gorm:"not null;default:19200" json:"weather_baud"`
-	WeatherBucket  string  `gorm:"not null;default:'0.2mm'" json:"weather_bucket"` // 0.2mm | 0.01in
+	WeatherBucket  string  `gorm:"not null;default:'0.2mm'" json:"weather_bucket"` // Davis: 0.2mm|0.01in; Peet: 0.1mm|0.01in
 	ObjectName     string  `json:"object_name"`                                    // for Type=="object"
 	Power          uint32  `gorm:"not null;default:0" json:"power"`                // watts for PHG
 	Height         uint32  `gorm:"not null;default:0" json:"height"`               // feet HAAT for PHG

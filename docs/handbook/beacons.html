@@ -158,6 +158,28 @@
       aborts that beacon fire rather than transmitting stale measurements.
     </p>
 
+    <h3>Peet Bros Ultimeter serial</h3>
+
+    <p>
+      The native Peet Bros source reads the console&rsquo;s continuous serial
+      output at the normal <code>2400 8N1</code> settings. It accepts both
+      Data Logger records beginning with <code>!!</code> and Packet Mode
+      records beginning with <code>$ULTW</code>. Data Logger mode is preferable
+      for scheduled beacons because records arrive continuously; Packet Mode
+      emits only once every five minutes and may therefore miss Graywolf&rsquo;s
+      bounded serial-read window.
+    </p>
+
+    <p>
+      Select the serial device, baud rate, and the rain-counter unit configured
+      on the Ultimeter: <code>0.01 inch</code> for the normal imperial counter
+      or <code>0.1 mm</code> for a console using the metric collector setting.
+      Graywolf validates the fixed-width hexadecimal record, converts its
+      temperature, pressure, humidity, wind, gust, and daily-rain fields into
+      the common observation, and then uses the same APRS Weather encoder as
+      Davis and WxNow.txt.
+    </p>
+
     <h3>WxNow.txt</h3>
 
     <p>
@@ -196,7 +218,7 @@
           <tbody>
             <tr>
               <td><code>weather_source</code></td>
-              <td><code>davis_serial</code> or <code>wxnow_file</code></td>
+              <td><code>davis_serial</code>, <code>peet_serial</code>, or <code>wxnow_file</code></td>
               <td>Observation source adapter.</td>
             </tr>
             <tr>
@@ -207,17 +229,17 @@
             <tr>
               <td><code>weather_device</code></td>
               <td>&mdash;</td>
-              <td>Davis serial device, for example <code>/dev/ttyUSB0</code>.</td>
+              <td>Davis or Peet Bros serial device, for example <code>/dev/ttyUSB0</code>.</td>
             </tr>
             <tr>
               <td><code>weather_baud</code></td>
-              <td><code>19200</code></td>
-              <td>Davis console serial speed.</td>
+              <td><code>19200</code> or <code>2400</code></td>
+              <td>Davis and Peet Bros console serial speeds, respectively.</td>
             </tr>
             <tr>
               <td><code>weather_bucket</code></td>
-              <td><code>0.2mm</code></td>
-              <td>Davis rain collector size: <code>0.2mm</code> or <code>0.01in</code>.</td>
+              <td><code>0.2mm</code>, <code>0.1mm</code>, or <code>0.01in</code></td>
+              <td>Davis collector size or Peet Bros rain-counter unit.</td>
             </tr>
           </tbody>
         </table>

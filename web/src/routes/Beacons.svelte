@@ -775,6 +775,8 @@
               <span class="detail-value detail-comment">
                 {b.weather_source === 'davis_serial'
                   ? `Davis serial — ${b.weather_device} @ ${b.weather_baud || 19200}`
+                  : b.weather_source === 'peet_serial'
+                    ? `Peet Bros serial — ${b.weather_device} @ ${b.weather_baud || 2400}`
                   : `WxNow.txt — ${b.weather_path}`}
               </span>
             </div>
@@ -1046,10 +1048,11 @@
       {/if}
       {#if isWeather}
         <FormField label="Weather source" id="bcn-weather-source"
-          hint="Davis talks directly to a Vantage console. WxNow.txt remains available for weather software and other hardware.">
+          hint="Native serial sources support Davis Vantage and Peet Bros Ultimeter consoles. WxNow.txt remains available for weather software and other hardware.">
           <RadioGroup bind:value={form.weather_source}>
             <div class="pos-source-row">
               <Radio value="davis_serial" label="Davis serial" />
+              <Radio value="peet_serial" label="Peet Bros serial" />
               <Radio value="wxnow_file" label="WxNow.txt file" />
             </div>
           </RadioGroup>
@@ -1071,6 +1074,26 @@
               <div class="pos-source-row">
                 <Radio value="0.2mm" label="0.2 mm per tip" />
                 <Radio value="0.01in" label="0.01 inch per tip" />
+              </div>
+            </RadioGroup>
+          </FormField>
+        {:else if form.weather_source === 'peet_serial'}
+          <FormField label="Serial device" id="bcn-weather-device"
+            error={weatherPathError}
+            hint="Device connected to the Peet Bros Ultimeter serial output.">
+            <Input id="bcn-weather-device" bind:value={form.weather_device}
+              placeholder="/dev/ttyUSB0" oninput={() => weatherPathError = ''} />
+          </FormField>
+          <FormField label="Serial baud" id="bcn-weather-baud"
+            hint="Peet Bros Ultimeter consoles normally use 2400 baud, 8N1.">
+            <Input id="bcn-weather-baud" bind:value={form.weather_baud} type="number" placeholder="2400" />
+          </FormField>
+          <FormField label="Rain counter unit" id="bcn-weather-bucket"
+            hint="Must match the rain gauge selection configured on the Ultimeter console.">
+            <RadioGroup bind:value={form.weather_bucket}>
+              <div class="pos-source-row">
+                <Radio value="0.1mm" label="0.1 mm per count" />
+                <Radio value="0.01in" label="0.01 inch per count" />
               </div>
             </RadioGroup>
           </FormField>

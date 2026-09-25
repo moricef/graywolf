@@ -135,8 +135,18 @@ func (r BeaconRequest) Validate() error {
 				if r.WeatherBucket != "0.2mm" && r.WeatherBucket != "0.01in" {
 					return fmt.Errorf("weather_bucket must be 0.2mm or 0.01in")
 				}
+			case "peet_serial":
+				if strings.TrimSpace(r.WeatherDevice) == "" {
+					return fmt.Errorf("weather_device is required for a Peet Bros weather beacon")
+				}
+				if r.WeatherBaud == 0 {
+					return fmt.Errorf("weather_baud is required for a Peet Bros weather beacon")
+				}
+				if r.WeatherBucket != "0.1mm" && r.WeatherBucket != "0.01in" {
+					return fmt.Errorf("weather_bucket must be 0.1mm or 0.01in for Peet Bros")
+				}
 			default:
-				return fmt.Errorf("weather_source must be wxnow_file or davis_serial")
+				return fmt.Errorf("weather_source must be wxnow_file, davis_serial, or peet_serial")
 			}
 		}
 	case "custom":

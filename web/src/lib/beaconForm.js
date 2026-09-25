@@ -42,7 +42,9 @@ export function beaconExtraFields(row = {}) {
     weather_baud: Number.isFinite(Number(row.weather_baud)) && Number(row.weather_baud) > 0
       ? String(row.weather_baud)
       : '19200',
-    weather_bucket: row.weather_bucket === '0.01in' ? '0.01in' : '0.2mm',
+    weather_bucket: ['0.2mm', '0.1mm', '0.01in'].includes(row.weather_bucket)
+      ? row.weather_bucket
+      : '0.2mm',
   };
 }
 
@@ -63,6 +65,18 @@ export function validateWeatherBeacon(form) {
     }
     if (form.weather_bucket !== '0.2mm' && form.weather_bucket !== '0.01in') {
       return 'Select the Davis rain collector size';
+    }
+    return '';
+  }
+  if (form.weather_source === 'peet_serial') {
+    if (typeof form.weather_device !== 'string' || form.weather_device.trim() === '') {
+      return 'Serial device is required for a Peet Bros weather beacon';
+    }
+    if (!Number.isInteger(Number(form.weather_baud)) || Number(form.weather_baud) <= 0) {
+      return 'Serial baud must be a positive integer';
+    }
+    if (form.weather_bucket !== '0.1mm' && form.weather_bucket !== '0.01in') {
+      return 'Select the Peet Bros rain counter unit';
     }
     return '';
   }

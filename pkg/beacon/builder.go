@@ -159,6 +159,12 @@ func (s *Scheduler) buildInfo(ctx context.Context, b Config) (string, error) {
 				Baud:   int(b.WeatherBaud),
 				Bucket: davis.Bucket(b.WeatherBucket),
 			}
+		case "peet_serial":
+			source = weatherobs.PeetSerialConfig{
+				Device:   b.WeatherDevice,
+				Baud:     int(b.WeatherBaud),
+				RainUnit: weatherobs.PeetRainUnit(b.WeatherBucket),
+			}
 		default:
 			return "", fmt.Errorf("weather beacon: unsupported source %q", b.WeatherSource)
 		}

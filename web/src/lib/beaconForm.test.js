@@ -41,7 +41,7 @@ test('custom info and comment command survive edit-form hydration', () => {
   });
 });
 
-test('weather beacons validate WxNow.txt and Davis source settings', () => {
+test('weather beacons validate WxNow.txt, Davis, and Peet Bros source settings', () => {
   assert.match(validateWeatherBeacon({
     type: 'weather', weather_source: 'wxnow_file', weather_path: '   ',
   }), /path is required/);
@@ -55,6 +55,14 @@ test('weather beacons validate WxNow.txt and Davis source settings', () => {
   assert.equal(validateWeatherBeacon({
     type: 'weather', weather_source: 'davis_serial', weather_device: '/dev/ttyUSB0',
     weather_baud: '19200', weather_bucket: '0.2mm',
+  }), '');
+  assert.match(validateWeatherBeacon({
+    type: 'weather', weather_source: 'peet_serial', weather_device: '',
+    weather_baud: '2400', weather_bucket: '0.01in',
+  }), /Serial device/);
+  assert.equal(validateWeatherBeacon({
+    type: 'weather', weather_source: 'peet_serial', weather_device: '/dev/ttyUSB1',
+    weather_baud: '2400', weather_bucket: '0.1mm',
   }), '');
   assert.equal(validateWeatherBeacon({ type: 'position' }), '');
 });
