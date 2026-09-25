@@ -41,6 +41,8 @@ type BeaconRequest struct {
 	Comment        string  `json:"comment"`
 	CommentCmd     string  `json:"comment_cmd"`
 	CustomInfo     string  `json:"custom_info"`
+	WeatherSource  string  `json:"weather_source"`
+	WeatherPath    string  `json:"weather_path"`
 	ObjectName     string  `json:"object_name"`
 	Power          uint32  `json:"power"`
 	Height         uint32  `json:"height"`
@@ -110,9 +112,17 @@ func (r BeaconRequest) Validate() error {
 		}
 	}
 	switch r.Type {
-	case "position", "igate":
+	case "position", "igate", "weather":
 		if !r.UseGps && r.Latitude == 0 && r.Longitude == 0 {
 			return fmt.Errorf("latitude/longitude required when use_gps is false")
+		}
+		if r.Type == "weather" {
+			if r.WeatherSource != "wxnow_file" {
+				return fmt.Errorf("weather_source must be wxnow_file")
+			}
+			if strings.TrimSpace(r.WeatherPath) == "" {
+				return fmt.Errorf("weather_path is required for a weather beacon")
+			}
 		}
 	case "custom":
 		if strings.TrimSpace(r.CustomInfo) == "" {
@@ -155,12 +165,43 @@ func (r BeaconRequest) normalizedSendPath() string {
 // helper only papers over the empty-string default the form may emit
 // before client-side defaults bind.
 func (r BeaconRequest) normalizedFormat() string {
+	if r.Type == "weather" {
+		return "uncompressed"
+	}
 	switch r.PositionFormat {
 	case "compressed", "uncompressed", "mic_e":
 		return r.PositionFormat
 	default:
 		return "compressed"
 	}
+}
+
+func (r BeaconRequest) normalizedSymbolTable() string {
+	if r.Type == "weather" {
+		return "/"
+	}
+	return r.SymbolTable
+}
+
+func (r BeaconRequest) normalizedSymbol() string {
+	if r.Type == "weather" {
+		return "_"
+	}
+	return r.Symbol
+}
+
+func (r BeaconRequest) normalizedComment() string {
+	if r.Type == "weather" {
+		return ""
+	}
+	return r.Comment
+}
+
+func (r BeaconRequest) normalizedCommentCmd() string {
+	if r.Type == "weather" {
+		return ""
+	}
+	return r.CommentCmd
 }
 
 // callsignValue resolves the request's pointer callsign into the
@@ -186,14 +227,16 @@ func (r BeaconRequest) ToModel() configstore.Beacon {
 		Longitude:      r.Longitude,
 		AltFt:          r.AltFt,
 		Ambiguity:      r.Ambiguity,
-		SymbolTable:    r.SymbolTable,
-		Symbol:         r.Symbol,
+		SymbolTable:    r.normalizedSymbolTable(),
+		Symbol:         r.normalizedSymbol(),
 		Overlay:        r.Overlay,
 		PositionFormat: r.normalizedFormat(),
 		Messaging:      r.Messaging,
-		Comment:        r.Comment,
-		CommentCmd:     r.CommentCmd,
+		Comment:        r.normalizedComment(),
+		CommentCmd:     r.normalizedCommentCmd(),
 		CustomInfo:     r.CustomInfo,
+		WeatherSource:  r.WeatherSource,
+		WeatherPath:    r.WeatherPath,
 		ObjectName:     r.ObjectName,
 		Power:          r.Power,
 		Height:         r.Height,
@@ -245,14 +288,16 @@ func (r BeaconRequest) ApplyToUpdate(id uint32, existing configstore.Beacon) con
 		Longitude:      r.Longitude,
 		AltFt:          r.AltFt,
 		Ambiguity:      r.Ambiguity,
-		SymbolTable:    r.SymbolTable,
-		Symbol:         r.Symbol,
+		SymbolTable:    r.normalizedSymbolTable(),
+		Symbol:         r.normalizedSymbol(),
 		Overlay:        r.Overlay,
 		PositionFormat: r.normalizedFormat(),
 		Messaging:      r.Messaging,
-		Comment:        r.Comment,
-		CommentCmd:     r.CommentCmd,
+		Comment:        r.normalizedComment(),
+		CommentCmd:     r.normalizedCommentCmd(),
 		CustomInfo:     r.CustomInfo,
+		WeatherSource:  r.WeatherSource,
+		WeatherPath:    r.WeatherPath,
 		ObjectName:     r.ObjectName,
 		Power:          r.Power,
 		Height:         r.Height,
@@ -300,6 +345,8 @@ type BeaconResponse struct {
 	Comment        string  `json:"comment"`
 	CommentCmd     string  `json:"comment_cmd"`
 	CustomInfo     string  `json:"custom_info"`
+	WeatherSource  string  `json:"weather_source"`
+	WeatherPath    string  `json:"weather_path"`
 	ObjectName     string  `json:"object_name"`
 	Power          uint32  `json:"power"`
 	Height         uint32  `json:"height"`
@@ -344,6 +391,8 @@ func BeaconFromModel(m configstore.Beacon) BeaconResponse {
 		Comment:        m.Comment,
 		CommentCmd:     m.CommentCmd,
 		CustomInfo:     m.CustomInfo,
+		WeatherSource:  m.WeatherSource,
+		WeatherPath:    m.WeatherPath,
 		ObjectName:     m.ObjectName,
 		Power:          m.Power,
 		Height:         m.Height,

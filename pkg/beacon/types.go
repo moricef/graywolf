@@ -15,6 +15,7 @@ const (
 	TypePosition Type = "position"
 	TypeObject   Type = "object"
 	TypeTracker  Type = "tracker"
+	TypeWeather  Type = "weather"
 	TypeCustom   Type = "custom"
 	TypeIGate    Type = "igate"
 )
@@ -30,25 +31,27 @@ type Config struct {
 	Path    []ax25.Address
 	// Textual addresses are authoritative on an explicitly configured TNC2
 	// channel. The AX.25 fields above remain the legacy KISS/modem adapter.
-	SourceText  string
-	DestText    string
-	PathText    []string
-	Delay       time.Duration // initial delay
-	Every       time.Duration // periodic interval
-	Slot        int           // seconds past the hour; -1 means unset
-	UseGps      bool          // if true, source lat/lon/alt from the GPS cache instead of Lat/Lon/AltFt
-	Lat, Lon    float64       // fixed position
-	AltFt       float64
-	SymbolTable byte
-	SymbolCode  byte
-	Comment     string
-	CommentCmd  []string // already-split argv; empty = static comment
-	Format      string   // "compressed" | "uncompressed" | "mic_e" (APRS101 ch 9/6/10)
-	Ambiguity   int      // 0..4; trailing position digits blanked per APRS101 ch 6 table 8
-	Messaging   bool
-	ObjectName  string             // for TypeObject
-	CustomInfo  string             // for TypeCustom (raw info field override)
-	SmartBeacon *SmartBeaconConfig // non-nil + .Enabled → use for tracker
+	SourceText    string
+	DestText      string
+	PathText      []string
+	Delay         time.Duration // initial delay
+	Every         time.Duration // periodic interval
+	Slot          int           // seconds past the hour; -1 means unset
+	UseGps        bool          // if true, source lat/lon/alt from the GPS cache instead of Lat/Lon/AltFt
+	Lat, Lon      float64       // fixed position
+	AltFt         float64
+	SymbolTable   byte
+	SymbolCode    byte
+	Comment       string
+	CommentCmd    []string // already-split argv; empty = static comment
+	Format        string   // "compressed" | "uncompressed" | "mic_e" (APRS101 ch 9/6/10)
+	Ambiguity     int      // 0..4; trailing position digits blanked per APRS101 ch 6 table 8
+	Messaging     bool
+	ObjectName    string             // for TypeObject
+	CustomInfo    string             // for TypeCustom (raw info field override)
+	WeatherSource string             // for TypeWeather; currently "wxnow_file"
+	WeatherPath   string             // path to the WxNow.txt source file
+	SmartBeacon   *SmartBeaconConfig // non-nil + .Enabled → use for tracker
 	// PHG radio-capability extension (APRS101 ch 7) for fixed-station
 	// position, igate, and object beacons. Emitted only when PHGPower
 	// > 0. Not valid for trackers (CSE/SPD occupies the same slot).

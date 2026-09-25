@@ -846,6 +846,10 @@ definitions:
         type: string
       use_gps:
         type: boolean
+      weather_path:
+        type: string
+      weather_source:
+        type: string
     type: object
   dto.BeaconResponse:
     properties:
@@ -934,6 +938,10 @@ definitions:
         type: string
       use_gps:
         type: boolean
+      weather_path:
+        type: string
+      weather_source:
+        type: string
     type: object
   dto.BeaconSendResponse:
     properties:

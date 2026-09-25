@@ -246,6 +246,8 @@ func beaconConfigFromStoreWithMode(b configstore.Beacon, smart *configstore.Smar
 		Messaging:      b.Messaging,
 		ObjectName:     b.ObjectName,
 		CustomInfo:     b.CustomInfo,
+		WeatherSource:  b.WeatherSource,
+		WeatherPath:    b.WeatherPath,
 		PHGPower:       int(b.Power),
 		PHGHeightFt:    int(b.Height),
 		PHGGainDB:      int(b.Gain),

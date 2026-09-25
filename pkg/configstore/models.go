@@ -642,7 +642,7 @@ type GPSConfig struct {
 // Beacon is a scheduled beacon. Type selects the payload builder.
 type Beacon struct {
 	ID             uint32  `gorm:"primaryKey;autoIncrement" json:"id"`
-	Type           string  `gorm:"not null;default:'position'" json:"type"` // position|object|tracker|custom|igate
+	Type           string  `gorm:"not null;default:'position'" json:"type"` // position|object|tracker|weather|custom|igate
 	Channel        uint32  `gorm:"not null;default:1" json:"channel"`
 	Callsign       string  `gorm:"not null" json:"callsign"`
 	Destination    string  `gorm:"not null;default:'APGRWO'" json:"destination"`
@@ -658,16 +658,18 @@ type Beacon struct {
 	PositionFormat string  `gorm:"not null;default:'compressed'" json:"position_format"` // compressed | uncompressed | mic_e (APRS101 ch 9/6/10)
 	Messaging      bool    `gorm:"not null;default:false" json:"messaging"`              // '=' instead of '!' prefix
 	Comment        string  `json:"comment"`
-	CommentCmd     string  `json:"comment_cmd"`                      // shell command whose stdout is appended as comment
-	CustomInfo     string  `json:"custom_info"`                      // raw info field override for Type=="custom"
-	ObjectName     string  `json:"object_name"`                      // for Type=="object"
-	Power          uint32  `gorm:"not null;default:0" json:"power"`  // watts for PHG
-	Height         uint32  `gorm:"not null;default:0" json:"height"` // feet HAAT for PHG
-	Gain           uint32  `gorm:"not null;default:0" json:"gain"`   // dBi for PHG
-	Dir            uint32  `gorm:"not null;default:0" json:"dir"`    // antenna direction 0..8 for PHG
-	Freq           string  `json:"freq"`                             // frequency string for freq info
-	Tone           string  `json:"tone"`                             // CTCSS/DCS tone
-	FreqOffset     string  `json:"freq_offset"`                      // repeater offset
+	CommentCmd     string  `json:"comment_cmd"`                               // shell command whose stdout is appended as comment
+	CustomInfo     string  `json:"custom_info"`                               // raw info field override for Type=="custom"
+	WeatherSource  string  `gorm:"not null;default:''" json:"weather_source"` // wxnow_file for Type=="weather"
+	WeatherPath    string  `gorm:"not null;default:''" json:"weather_path"`   // path to WxNow.txt
+	ObjectName     string  `json:"object_name"`                               // for Type=="object"
+	Power          uint32  `gorm:"not null;default:0" json:"power"`           // watts for PHG
+	Height         uint32  `gorm:"not null;default:0" json:"height"`          // feet HAAT for PHG
+	Gain           uint32  `gorm:"not null;default:0" json:"gain"`            // dBi for PHG
+	Dir            uint32  `gorm:"not null;default:0" json:"dir"`             // antenna direction 0..8 for PHG
+	Freq           string  `json:"freq"`                                      // frequency string for freq info
+	Tone           string  `json:"tone"`                                      // CTCSS/DCS tone
+	FreqOffset     string  `json:"freq_offset"`                               // repeater offset
 	DelaySeconds   uint32  `gorm:"not null;default:30" json:"delay_seconds"`
 	EverySeconds   uint32  `gorm:"not null;default:1800" json:"interval"`
 	SlotSeconds    int32   `gorm:"not null;default:-1" json:"slot_seconds"`

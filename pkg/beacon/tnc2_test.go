@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/chrissnell/graywolf/pkg/aprs"
@@ -73,6 +75,47 @@ func TestTextBeaconKeepsBinaryInformation(t *testing.T) {
 	want := append([]byte("F4MLV-16>425WV3:"), []byte(info+"WX")...)
 	if len(textSink.raw) != 1 || !bytes.Equal(textSink.raw[0], want) {
 		t.Fatalf("binary text beacon=%q want=%q", textSink.raw, want)
+	}
+}
+
+func TestWeatherBeaconUsesWxNowOnNativeTNC2(t *testing.T) {
+	textSink := &textBeaconSink{enabled: true}
+	ax25Sink := testtx.NewRecorder()
+	s, err := New(Options{Sink: ax25Sink, TextRF: textSink})
+	if err != nil {
+		t.Fatal(err)
+	}
+	weatherPath := writeWxNowTestFile(t,
+		"Feb 01 2009 12:34\n272/010g006t069r010p030P020h61b10150\n")
+	commentMarker := filepath.Join(t.TempDir(), "comment-command-ran")
+	s.SetBeacons([]Config{{
+		ID: 4, Type: TypeWeather, Channel: 1,
+		SourceText: "F4JJE-16", DestText: "APGRWO", PathText: []string{"NN7LE-GS"},
+		Lat: 42.9, Lon: 1.2, WeatherSource: "wxnow_file", WeatherPath: weatherPath,
+		Comment: "must-not-be-inserted", CommentCmd: []string{"touch", commentMarker},
+	}})
+	if err := s.SendNow(context.Background(), 4); err != nil {
+		t.Fatal(err)
+	}
+	if ax25Sink.Len() != 0 {
+		t.Fatal("Native TNC2 weather beacon leaked into AX.25 TX")
+	}
+	if _, err := os.Stat(commentMarker); !os.IsNotExist(err) {
+		t.Fatalf("weather beacon executed ignored comment_cmd: %v", err)
+	}
+	if len(textSink.raw) != 1 || !bytes.HasPrefix(textSink.raw[0], []byte("F4JJE-16>APGRWO,NN7LE-GS:")) {
+		t.Fatalf("Native TNC2 weather packet = %q", textSink.raw)
+	}
+	packet, err := tnc2.Parse(textSink.raw[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := aprs.ParseTNC2Packet(packet)
+	if err != nil || decoded.Type != aprs.PacketWeather || decoded.Weather == nil {
+		t.Fatalf("weather decode: packet=%+v err=%v", decoded, err)
+	}
+	if decoded.Weather.Temperature != 69 || decoded.Weather.Humidity != 61 {
+		t.Fatalf("weather values lost: %+v", decoded.Weather)
 	}
 }
 

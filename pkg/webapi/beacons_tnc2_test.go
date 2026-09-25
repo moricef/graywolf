@@ -60,6 +60,33 @@ func TestCustomBeaconFieldsRoundTripOnConfiguredTextChannel(t *testing.T) {
 	}
 }
 
+func TestWeatherBeaconFieldsRoundTripOnConfiguredTextChannel(t *testing.T) {
+	srv, _ := newTestServer(t)
+	mux := http.NewServeMux()
+	srv.RegisterRoutes(mux)
+	srv.SetBeaconTextRFEnabled(func(ch uint32) bool { return ch == 1 })
+
+	body := `{
+		"type":"weather", "channel":1, "callsign":"F4JJE-16",
+		"destination":"APGRWO", "path":"NN7LE-GS", "use_gps":true,
+		"weather_source":"wxnow_file", "weather_path":"/var/lib/weather/WxNow.txt",
+		"interval":600, "send_path":"rf", "enabled":true
+	}`
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/beacons", strings.NewReader(body)))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create weather text beacon: %d %s", rec.Code, rec.Body.String())
+	}
+	var created dto.BeaconResponse
+	if err := json.NewDecoder(rec.Body).Decode(&created); err != nil {
+		t.Fatal(err)
+	}
+	if created.Type != "weather" || created.WeatherSource != "wxnow_file" ||
+		created.WeatherPath != "/var/lib/weather/WxNow.txt" {
+		t.Fatalf("weather fields lost on create: %+v", created)
+	}
+}
+
 func TestExtendedBeaconOnlyOnConfiguredTextChannel(t *testing.T) {
 	srv, _ := newTestServer(t)
 	mux := http.NewServeMux()

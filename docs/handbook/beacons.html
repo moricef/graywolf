@@ -66,7 +66,7 @@
 
   <main class="content">
     <h1>Beacons</h1>
-    <p class="subtitle">Position reports, objects, trackers, and custom beacons</p>
+    <p class="subtitle">Position reports, objects, trackers, weather, and custom beacons</p>
 
     <p>
       Beacons are periodic APRS transmissions that announce your station&rsquo;s
@@ -110,12 +110,68 @@
               <td>GPS-driven position beacon with SmartBeacon rate adaptation. For mobile stations.</td>
             </tr>
             <tr>
+              <td><code>weather</code></td>
+              <td>Positioned APRS weather report read from a standard two-line <code>WxNow.txt</code> file.</td>
+            </tr>
+            <tr>
               <td><code>custom</code></td>
               <td>Raw APRS info field. Full control over the transmitted packet content.</td>
             </tr>
             <tr>
               <td><code>igate</code></td>
               <td>iGate status beacon. Automatically includes iGate statistics in the comment.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <h2>Weather from WxNow.txt</h2>
+
+    <p>
+      A weather beacon reads a <code>WxNow.txt</code> file at every scheduled
+      transmission. This provides a manufacturer-neutral handoff: weather
+      station software writes the file, then Graywolf validates and sends its
+      APRS weather data through the beacon&rsquo;s normal RF, APRS-IS, or
+      Native TNC2 route.
+    </p>
+
+    <pre><code>Feb 01 2009 12:34
+272/010g006t069r010p030P020h61b10150</code></pre>
+
+    <p>
+      The first non-empty line must use <code>Mon DD YYYY HH:MM</code>. The
+      second must be an APRS complete weather report. Graywolf checks the
+      timestamp&rsquo;s format but does not currently reject old timestamps;
+      the weather program remains responsible for updating the file. The
+      file path must be readable by the account running the Graywolf service.
+    </p>
+
+    <p>
+      Choose either the live GPS fix or fixed latitude/longitude. Graywolf
+      emits an uncompressed positioned report with the APRS weather symbol
+      (<code>_</code>) and places the WxNow weather string immediately after
+      it. Weather beacons intentionally omit altitude, PHG, static comments,
+      and <code>comment_cmd</code> so nothing is inserted ahead of the weather
+      fields.
+    </p>
+
+    <div class="box">
+      <div class="box-body">
+        <table>
+          <thead>
+            <tr><th>Field</th><th>Value</th><th>Description</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>weather_source</code></td>
+              <td><code>wxnow_file</code></td>
+              <td>Source adapter. More adapters can be added without changing the beacon type.</td>
+            </tr>
+            <tr>
+              <td><code>weather_path</code></td>
+              <td>&mdash;</td>
+              <td>Absolute path to the two-line <code>WxNow.txt</code> file.</td>
             </tr>
           </tbody>
         </table>

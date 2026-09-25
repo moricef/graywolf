@@ -22,17 +22,20 @@ func (s *Scheduler) buildInfo(ctx context.Context, b Config) (string, error) {
 			"id", b.ID, "type", b.Type, "ambiguity", b.Ambiguity)
 		b.Ambiguity = 4
 	}
-	comment := ExpandComment(b.Comment, s.version)
-	if len(b.CommentCmd) > 0 {
-		out, err := RunCommentCmd(ctx, b.CommentCmd, 5*time.Second)
-		if err != nil {
-			s.logger.Warn("comment_cmd failed", "id", b.ID, "err", err)
-			// Fall through with static comment.
-		} else if out != "" {
-			if comment != "" {
-				comment = comment + " " + out
-			} else {
-				comment = out
+	comment := ""
+	if b.Type != TypeWeather {
+		comment = ExpandComment(b.Comment, s.version)
+		if len(b.CommentCmd) > 0 {
+			out, err := RunCommentCmd(ctx, b.CommentCmd, 5*time.Second)
+			if err != nil {
+				s.logger.Warn("comment_cmd failed", "id", b.ID, "err", err)
+				// Fall through with static comment.
+			} else if out != "" {
+				if comment != "" {
+					comment = comment + " " + out
+				} else {
+					comment = out
+				}
 			}
 		}
 	}
@@ -142,6 +145,32 @@ func (s *Scheduler) buildInfo(ctx context.Context, b Config) (string, error) {
 		// once wall-clock time drifts away from it (issue #412).
 		ts := DHMZulu(s.clock.Now().UTC())
 		return ObjectInfo(b.ObjectName, true, ts, lat, lon, altM, b.SymbolTable, b.SymbolCode, phg, comment), nil
+
+	case TypeWeather:
+		if b.WeatherSource != "wxnow_file" {
+			return "", fmt.Errorf("weather beacon: unsupported source %q", b.WeatherSource)
+		}
+		weather, err := ReadWxNow(b.WeatherPath)
+		if err != nil {
+			return "", fmt.Errorf("weather beacon: %w", err)
+		}
+		lat, lon := b.Lat, b.Lon
+		if b.UseGps {
+			if s.cache == nil {
+				return "", fmt.Errorf("weather beacon: use_gps set but no GPS cache configured")
+			}
+			fix, ok := s.cache.Get()
+			if !ok {
+				return "", fmt.Errorf("weather beacon: use_gps set but no GPS fix available")
+			}
+			lat, lon = fix.Latitude, fix.Longitude
+		} else if lat == 0 && lon == 0 {
+			return "", fmt.Errorf("weather beacon: fixed coordinates are 0/0 (configure lat/lon or enable use_gps)")
+		}
+		// WxNow's second line is already the complete APRS weather appendix.
+		// Keep it immediately after the mandatory weather symbol. Altitude,
+		// PHG and comments would otherwise be inserted ahead of it.
+		return PositionInfo(lat, lon, 0, 0, 0, '/', '_', false, "", weather, 0), nil
 
 	case TypeCustom:
 		if b.CustomInfo == "" {

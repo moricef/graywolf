@@ -21,6 +21,7 @@
     beaconExtraFields,
     beaconTypeUsesPosition,
     validateCustomBeacon,
+    validateWeatherBeacon,
   } from '../lib/beaconForm.js';
   import {
     channelRefStatus,
@@ -123,12 +124,14 @@
     position_format: 'compressed', ambiguity: 0,
     pos_source: 'gps', latitude: '', longitude: '', alt_ft: '',
     comment: '', comment_cmd: '', custom_info: '',
+    weather_source: 'wxnow_file', weather_path: '',
     interval: '600', slot: '', send_path: 'rf', enabled: true,
     smart_beacon: false,
   });
 
   let callsignError = $state('');
   let customInfoError = $state('');
+  let weatherPathError = $state('');
   // Placeholder shown in the disabled input when "override" is unchecked.
   // Mirrors the D3 copy: "Uses station callsign (KE7XYZ-9)" when loaded,
   // "Uses station callsign (not set)" when StationConfig is empty.
@@ -171,12 +174,14 @@
   );
   let saveBlocked = $derived(!!txBlock && !txBlockAllowsSave);
   // The format radio + ambiguity sub-block apply only to types that
-  // carry an APRS101 ch 6/9/10 position field. Object and custom
+  // carry a selectable APRS101 ch 6/9/10 position field. Object, weather, and custom
   // beacons hide the whole section. Position and tracker beacons both
   // emit a position report, so they share the format selector.
   let showFormat = $derived(form.type === 'position' || form.type === 'tracker');
   let usesPosition = $derived(beaconTypeUsesPosition(form.type));
   let isCustom = $derived(form.type === 'custom');
+  let isWeather = $derived(form.type === 'weather');
+  let usesSymbol = $derived(usesPosition && !isWeather);
   // A tracker is a GPS-driven mobile beacon: the backend builder always
   // sources its position (and the CSE/SPD course-speed extension) from
   // the live GPS fix, so fixed coordinates are never valid for it. Force
@@ -351,7 +356,10 @@
     form.comment = defaultComment;
     form.comment_cmd = '';
     form.custom_info = '';
+    form.weather_source = 'wxnow_file';
+    form.weather_path = '';
     customInfoError = '';
+    weatherPathError = '';
     form.interval = '600';
     form.slot = '';
     form.send_path = channels.length === 0 ? 'is_only' : 'rf';
@@ -394,6 +402,7 @@
     altError = '';
     callsignError = '';
     customInfoError = '';
+    weatherPathError = '';
     modalOpen = true;
   }
 
@@ -419,6 +428,11 @@
     customInfoError = validateCustomBeacon(form);
     if (customInfoError) {
       toasts.error(customInfoError);
+      return;
+    }
+    weatherPathError = validateWeatherBeacon(form);
+    if (weatherPathError) {
+      toasts.error(weatherPathError);
       return;
     }
     let channelId = parseInt(form.channel);
@@ -688,6 +702,8 @@
               <Badge variant="info">Object</Badge>
             {:else if b.type === 'tracker'}
               <Badge variant="info">Tracker</Badge>
+            {:else if b.type === 'weather'}
+              <Badge variant="info">Weather</Badge>
             {:else if b.type === 'custom'}
               <Badge variant="info">Custom</Badge>
             {/if}
@@ -743,6 +759,15 @@
             <div class="detail-row">
               <span class="detail-label">Information</span>
               <span class="detail-value detail-comment">{b.custom_info}</span>
+            </div>
+          {:else if b.type === 'weather'}
+            <div class="detail-row">
+              <span class="detail-label">Position</span>
+              <span class="detail-value">{formatCoords(b)}</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">WxNow.txt</span>
+              <span class="detail-value detail-comment">{b.weather_path}</span>
             </div>
           {:else}
             <div class="detail-row">
@@ -952,7 +977,7 @@
       <FormField label="Path" id="bcn-path">
         <Input id="bcn-path" bind:value={form.path} placeholder="WIDE1-1,WIDE2-1" />
       </FormField>
-      {#if usesPosition}
+      {#if usesSymbol}
         <FormField label="Symbol" id="bcn-symbol"
           hint="The icon shown for this station on aprs.fi and other APRS maps.">
           <div class="symbol-row">
@@ -1010,17 +1035,30 @@
             oninput={() => customInfoError = ''} />
         </FormField>
       {/if}
-      <FormField label={isCustom ? 'Appended comment' : 'Comment'} id="bcn-comment"
-        hint={isCustom
-          ? "Optional text appended directly to the raw APRS information. Use {{version}} to insert the running Graywolf version."
-          : "Tip: use {{version}} to insert the running Graywolf version."}>
-        <Input id="bcn-comment" bind:value={form.comment} placeholder={defaultComment} />
-      </FormField>
-      <FormField label="Dynamic comment command" id="bcn-comment-cmd"
-        hint="Optional command run by the Graywolf service at transmit time. Its stdout is appended to the static comment. Arguments are parsed without a shell.">
-        <Input id="bcn-comment-cmd" bind:value={form.comment_cmd}
-          placeholder="/usr/local/bin/weather-comment --short" />
-      </FormField>
+      {#if isWeather}
+        <FormField label="Weather source" id="bcn-weather-source"
+          hint="The file is re-read at every transmission, so weather software can update it continuously.">
+          <div class="tracker-gps-fixed">WxNow.txt file</div>
+        </FormField>
+        <FormField label="WxNow.txt path" id="bcn-weather-path"
+          error={weatherPathError}
+          hint="Absolute path visible to the Graywolf service. The standard two-line WxNow.txt format is expected.">
+          <Input id="bcn-weather-path" bind:value={form.weather_path}
+            placeholder="/var/lib/weather/WxNow.txt" oninput={() => weatherPathError = ''} />
+        </FormField>
+      {:else}
+        <FormField label={isCustom ? 'Appended comment' : 'Comment'} id="bcn-comment"
+          hint={isCustom
+            ? "Optional text appended directly to the raw APRS information. Use {{version}} to insert the running Graywolf version."
+            : "Tip: use {{version}} to insert the running Graywolf version."}>
+          <Input id="bcn-comment" bind:value={form.comment} placeholder={defaultComment} />
+        </FormField>
+        <FormField label="Dynamic comment command" id="bcn-comment-cmd"
+          hint="Optional command run by the Graywolf service at transmit time. Its stdout is appended to the static comment. Arguments are parsed without a shell.">
+          <Input id="bcn-comment-cmd" bind:value={form.comment_cmd}
+            placeholder="/usr/local/bin/weather-comment --short" />
+        </FormField>
+      {/if}
     </div>
 
     <div class="beacon-form-col">
@@ -1056,21 +1094,23 @@
           hint="Decimal degrees, east positive (e.g. -122.4 for San Francisco; 151.2 for Sydney).">
           <Input id="bcn-lon" bind:value={form.longitude} placeholder="-122.4" />
         </FormField>
-        <FormField label="Altitude" id="bcn-alt"
-          hint={form.type === 'object'
-            ? `Object altitude above sea level in ${altUnit}. Optional; leave blank or 0 to omit.`
-            : `Antenna height above sea level in ${altUnit}. Optional; leave blank or 0 to omit.`}>
-          <div class="alt-row">
-            <Input id="bcn-alt" bind:value={altInput} placeholder={altUnit === 'feet' ? '0 ft' : '0 m'}
-              type="text" inputmode="decimal" error={altError} oninput={() => altError = ''} />
-            <div class="unit-toggle" role="group" aria-label="Altitude unit">
-              <button type="button" class="unit-btn" class:unit-active={altUnit === 'feet'}
-                onclick={() => toggleAltUnit('feet')}>ft</button>
-              <button type="button" class="unit-btn" class:unit-active={altUnit === 'meters'}
-                onclick={() => toggleAltUnit('meters')}>m</button>
+        {#if !isWeather}
+          <FormField label="Altitude" id="bcn-alt"
+            hint={form.type === 'object'
+              ? `Object altitude above sea level in ${altUnit}. Optional; leave blank or 0 to omit.`
+              : `Antenna height above sea level in ${altUnit}. Optional; leave blank or 0 to omit.`}>
+            <div class="alt-row">
+              <Input id="bcn-alt" bind:value={altInput} placeholder={altUnit === 'feet' ? '0 ft' : '0 m'}
+                type="text" inputmode="decimal" error={altError} oninput={() => altError = ''} />
+              <div class="unit-toggle" role="group" aria-label="Altitude unit">
+                <button type="button" class="unit-btn" class:unit-active={altUnit === 'feet'}
+                  onclick={() => toggleAltUnit('feet')}>ft</button>
+                <button type="button" class="unit-btn" class:unit-active={altUnit === 'meters'}
+                  onclick={() => toggleAltUnit('meters')}>m</button>
+              </div>
             </div>
-          </div>
-        </FormField>
+          </FormField>
+        {/if}
       {/if}
       <FormField label="Interval (seconds)" id="bcn-interval">
         <Input id="bcn-interval" bind:value={form.interval} type="number" placeholder="600" />
