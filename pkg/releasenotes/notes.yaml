@@ -7,34 +7,6 @@
 # route the body references via [text](link) markdown; renderer only
 # accepts internal #/... routes.
 
-- version: "0.14.14"
-  date: "2026-09-25"
-  style: info
-  schema_version: 1
-  link: "#/preferences/rxt"
-  title: "LoRa APRS reception, RXT radio links, and direct TNC2 connections"
-  body: |
-    Graywolf can now receive LoRa APRS packets and radio measurements from
-    compatible iGates. Add one or more iGate streams in [RXT settings](#/preferences/rxt)
-    to see received packets, stations, and measured radio links. The map shows
-    recent links, and the RXT page shows signal level, signal-to-noise ratio,
-    frequency offset, and relay delay for each measured hop. Graywolf resumes
-    the stream after a disconnect when the iGate provides history.
-
-    You can also connect a LoRa TNC directly over TCP or serial in
-    [TNC2 settings](#/preferences/tnc2). Both connections can receive. To send,
-    explicitly select one connection, your exact station identity, and a
-    Graywolf channel. Messages, retries, and beacons on that channel use the
-    LoRa connection. Transmission stays disabled until you authorize it.
-
-    LoRa packets keep their original station identities, including suffixes
-    such as -16 or -GS, and Mic-E information is preserved. Conventional
-    AX.25 and KISS channels continue to use their own address rules.
-
-    Other improvements include a fixed-coordinate GPS source, a storage usage
-    view, and fixes for busy message threads, KISS connections, and Live Map
-    controls.
-
 - version: "0.14.13"
   date: "2026-08-24"
   style: info
