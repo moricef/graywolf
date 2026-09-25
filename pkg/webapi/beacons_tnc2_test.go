@@ -2,6 +2,7 @@ package webapi
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -9,7 +10,55 @@ import (
 	"testing"
 
 	"github.com/chrissnell/graywolf/pkg/configstore"
+	"github.com/chrissnell/graywolf/pkg/webapi/dto"
 )
+
+func TestCustomBeaconFieldsRoundTripOnConfiguredTextChannel(t *testing.T) {
+	srv, _ := newTestServer(t)
+	mux := http.NewServeMux()
+	srv.RegisterRoutes(mux)
+	srv.SetBeaconTextRFEnabled(func(ch uint32) bool { return ch == 1 })
+
+	body := `{
+		"type":"custom",
+		"channel":1,
+		"callsign":"F4MLV-GS",
+		"destination":"APGRWO",
+		"path":"WIDE1-1",
+		"custom_info":">weather:",
+		"comment":"static",
+		"comment_cmd":"/usr/local/bin/weather-comment --short",
+		"interval":600,
+		"send_path":"rf",
+		"enabled":true
+	}`
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/beacons", strings.NewReader(body)))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create custom text beacon: %d %s", rec.Code, rec.Body.String())
+	}
+	var created dto.BeaconResponse
+	if err := json.NewDecoder(rec.Body).Decode(&created); err != nil {
+		t.Fatal(err)
+	}
+	if created.Type != "custom" || created.CustomInfo != ">weather:" ||
+		created.Comment != "static" || created.CommentCmd != "/usr/local/bin/weather-comment --short" {
+		t.Fatalf("custom fields lost on create: %+v", created)
+	}
+
+	get := httptest.NewRecorder()
+	mux.ServeHTTP(get, httptest.NewRequest(http.MethodGet, "/api/beacons/"+fmt.Sprint(created.ID), nil))
+	if get.Code != http.StatusOK {
+		t.Fatalf("get custom text beacon: %d %s", get.Code, get.Body.String())
+	}
+	var fetched dto.BeaconResponse
+	if err := json.NewDecoder(get.Body).Decode(&fetched); err != nil {
+		t.Fatal(err)
+	}
+	if fetched.CustomInfo != created.CustomInfo || fetched.CommentCmd != created.CommentCmd {
+		t.Fatalf("custom fields lost on GET: created=%+v fetched=%+v", created, fetched)
+	}
+}
 
 func TestExtendedBeaconOnlyOnConfiguredTextChannel(t *testing.T) {
 	srv, _ := newTestServer(t)

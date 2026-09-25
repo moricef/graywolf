@@ -66,11 +66,11 @@ func TestTextBeaconKeepsBinaryInformation(t *testing.T) {
 		t.Fatal(err)
 	}
 	info := string([]byte{0x1d, 'w', '2', '6', 'l', 0x1c, '[', '/'})
-	s.SetBeacons([]Config{{ID: 2, Type: TypeCustom, Channel: 1, SourceText: "F4MLV-16", DestText: "425WV3", CustomInfo: info}})
+	s.SetBeacons([]Config{{ID: 2, Type: TypeCustom, Channel: 1, SourceText: "F4MLV-16", DestText: "425WV3", CustomInfo: info, Comment: "WX"}})
 	if err := s.SendNow(context.Background(), 2); err != nil {
 		t.Fatal(err)
 	}
-	want := append([]byte("F4MLV-16>425WV3:"), []byte(info)...)
+	want := append([]byte("F4MLV-16>425WV3:"), []byte(info+"WX")...)
 	if len(textSink.raw) != 1 || !bytes.Equal(textSink.raw[0], want) {
 		t.Fatalf("binary text beacon=%q want=%q", textSink.raw, want)
 	}
