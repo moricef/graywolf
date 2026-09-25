@@ -122,6 +122,59 @@ func TestMicEPositionInfo_RoundTrip(t *testing.T) {
 	}
 }
 
+// TestMicELongitudeDegreeEncoding locks in all four longitude-degree
+// ranges from APRS101 ch 10. A two-range implementation previously emitted
+// 0x1d for 1 degree east; aprs.fi correctly rejected that byte as an invalid
+// Mic-E longitude degree. The operator's 42.9606 N, 1.3711 E position is
+// included verbatim as the regression case.
+func TestMicELongitudeDegreeEncoding(t *testing.T) {
+	cases := []struct {
+		name       string
+		lat, lon   float64
+		wantDest   string
+		wantDegree byte
+	}{
+		{"zero_to_nine_operator_position", 42.9606, 1.3711, "TRUWV3", 'w'},
+		{"ten_to_ninety_nine", 42.9606, 72.3711, "TRUW63", 'd'},
+		{"one_hundred_to_one_hundred_nine", 42.9606, 101.3711, "TRUWV3", 'm'},
+		{"one_hundred_ten_to_one_hundred_seventy_nine", 42.9606, 122.3711, "TRUWV3", '2'},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dest := MicEDestination(tc.lat, tc.lon, 0)
+			if dest != tc.wantDest {
+				t.Fatalf("MicEDestination() = %q, want %q", dest, tc.wantDest)
+			}
+
+			info := []byte(MicEPositionInfo(tc.lat, tc.lon, 0, 0, 0, '/', '>', false, 0, ""))
+			if info[1] != tc.wantDegree {
+				t.Fatalf("longitude degree byte = 0x%02x, want 0x%02x", info[1], tc.wantDegree)
+			}
+
+			destAddr, err := ax25.ParseAddress(dest)
+			if err != nil {
+				t.Fatalf("ParseAddress(%q): %v", dest, err)
+			}
+			srcAddr, _ := ax25.ParseAddress("F4MLV-2")
+			frame, err := ax25.NewUIFrame(srcAddr, destAddr, nil, info)
+			if err != nil {
+				t.Fatalf("NewUIFrame: %v", err)
+			}
+			packet, err := aprs.Parse(frame)
+			if err != nil {
+				t.Fatalf("aprs.Parse: %v", err)
+			}
+			if packet.Position == nil {
+				t.Fatal("decoded Mic-E position is nil")
+			}
+			if absf(packet.Position.Longitude-tc.lon) > 0.001 {
+				t.Fatalf("decoded longitude = %.6f, want %.6f", packet.Position.Longitude, tc.lon)
+			}
+		})
+	}
+}
+
 // TestMicEPositionInfo_AmbiguityRoundTrip exercises ambiguity levels
 // 1..4 end to end: build a Mic-E frame with the new encoder, parse it
 // through aprs.Parse, and confirm the position decodes without error
