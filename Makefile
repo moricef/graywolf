@@ -14,6 +14,7 @@ GIT_DIRTY   := $(shell git diff-index --quiet HEAD -- 2>/dev/null || echo -dirty
 FULL_COMMIT := $(GIT_COMMIT)$(GIT_DIRTY)
 
 GIT_REMOTE ?= origin
+RELEASE_REPO ?= chrissnell/graywolf
 
 GO_LDFLAGS := -X main.Version=$(VERSION) -X main.GitCommit=$(FULL_COMMIT)
 
@@ -184,8 +185,10 @@ bump-minor:
 	@echo "$(NEW)" > VERSION
 	@sed -i.bak 's/^version = ".*"/version = "$(NEW)"/' $(MODEM_DIR)/Cargo.toml && rm $(MODEM_DIR)/Cargo.toml.bak
 	@sed -i.bak 's/^pkgver=.*/pkgver=$(NEW)/' packaging/aur/PKGBUILD && rm packaging/aur/PKGBUILD.bak
+	@sed -i.bak 's|^url=.*|url="https://github.com/$(RELEASE_REPO)"|' packaging/aur/PKGBUILD && rm packaging/aur/PKGBUILD.bak
 	@sed -i.bak 's/pkgver = .*/pkgver = $(NEW)/' packaging/aur/.SRCINFO && rm packaging/aur/.SRCINFO.bak
-	@sed -i.bak 's|source = graywolf-.*\.tar\.gz::.*|source = graywolf-$(NEW).tar.gz::https://github.com/chrissnell/graywolf/archive/v$(NEW).tar.gz|' packaging/aur/.SRCINFO && rm packaging/aur/.SRCINFO.bak
+	@sed -i.bak 's|^\([[:space:]]*\)url = .*|\1url = https://github.com/$(RELEASE_REPO)|' packaging/aur/.SRCINFO && rm packaging/aur/.SRCINFO.bak
+	@sed -i.bak 's|source = graywolf-.*\.tar\.gz::.*|source = graywolf-$(NEW).tar.gz::https://github.com/$(RELEASE_REPO)/archive/v$(NEW).tar.gz|' packaging/aur/.SRCINFO && rm packaging/aur/.SRCINFO.bak
 	@sed -i.bak 's|v[0-9]*\.[0-9]*\.[0-9]*-abc1234|v$(NEW)-abc1234|' docs/handbook/installation.html && rm docs/handbook/installation.html.bak
 	$(CARGO) update $(MANIFEST)
 	@echo "New version: $(NEW)"
@@ -206,8 +209,10 @@ bump-point:
 	@echo "$(NEW)" > VERSION
 	@sed -i.bak 's/^version = ".*"/version = "$(NEW)"/' $(MODEM_DIR)/Cargo.toml && rm $(MODEM_DIR)/Cargo.toml.bak
 	@sed -i.bak 's/^pkgver=.*/pkgver=$(NEW)/' packaging/aur/PKGBUILD && rm packaging/aur/PKGBUILD.bak
+	@sed -i.bak 's|^url=.*|url="https://github.com/$(RELEASE_REPO)"|' packaging/aur/PKGBUILD && rm packaging/aur/PKGBUILD.bak
 	@sed -i.bak 's/pkgver = .*/pkgver = $(NEW)/' packaging/aur/.SRCINFO && rm packaging/aur/.SRCINFO.bak
-	@sed -i.bak 's|source = graywolf-.*\.tar\.gz::.*|source = graywolf-$(NEW).tar.gz::https://github.com/chrissnell/graywolf/archive/v$(NEW).tar.gz|' packaging/aur/.SRCINFO && rm packaging/aur/.SRCINFO.bak
+	@sed -i.bak 's|^\([[:space:]]*\)url = .*|\1url = https://github.com/$(RELEASE_REPO)|' packaging/aur/.SRCINFO && rm packaging/aur/.SRCINFO.bak
+	@sed -i.bak 's|source = graywolf-.*\.tar\.gz::.*|source = graywolf-$(NEW).tar.gz::https://github.com/$(RELEASE_REPO)/archive/v$(NEW).tar.gz|' packaging/aur/.SRCINFO && rm packaging/aur/.SRCINFO.bak
 	@sed -i.bak 's|v[0-9]*\.[0-9]*\.[0-9]*-abc1234|v$(NEW)-abc1234|' docs/handbook/installation.html && rm docs/handbook/installation.html.bak
 	$(CARGO) update $(MANIFEST)
 	@echo "New version: $(NEW)"

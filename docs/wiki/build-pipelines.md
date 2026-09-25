@@ -126,3 +126,12 @@ Wiki-side notes:
 3. Retag contract: if CI fails after the tag is pushed, delete and
    re-tag the same version; do not rewrite the release note. See
    [invariant 5](invariants.md).
+
+For the `moricef/graywolf` RXT fork, invoke a bump with
+`GIT_REMOTE=moricef RELEASE_REPO=moricef/graywolf`. `GIT_REMOTE` selects the
+push destination; `RELEASE_REPO` selects the AUR source URL in both `PKGBUILD`
+and `.SRCINFO`. This branch's GoReleaser configuration publishes OCI images
+under `ghcr.io/moricef/graywolf` and uses the fork as the package homepage.
+The Android signing and Play upload job runs only in `chrissnell/graywolf`;
+the fork's tag still builds the Android debug variant but does not publish a
+signed Android release.
