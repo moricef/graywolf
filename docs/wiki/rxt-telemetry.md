@@ -164,8 +164,8 @@ the source cursor through event `5b689892:3`, confirming consumption from the
 continuous JSON stream.
 
 Together with the automated extended-identity and AX.25-boundary tests, these
-on-air observations validate 100% of the extended textual identity model in
-Graywolf's supported LoRa APRS/RXT scope: message reception, beacon reception,
+on-air observations validate the extended textual identity model across
+Graywolf's supported LoRa APRS/RXT paths: message reception, beacon reception,
 exact identity preservation, JSON ingestion, RXT decoding and named RF-hop
 resolution.
 
