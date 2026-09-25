@@ -62,6 +62,7 @@
     placeholder = 'Select a channel',
     onChange = undefined,
     capabilityFilter = () => ({ ok: true, reason: '' }),
+    presentationForChannel = () => null,
     allowNone = false,
     noneLabel = 'None',
   } = $props();
@@ -299,7 +300,7 @@
   // aria-activedescendant during keyboard nav.
   function optionAriaLabel(o, idx) {
     if (o.none) return noneLabel;
-    const base = rowAriaLabel(o.channel);
+    const base = presentationForChannel(o.channel)?.ariaLabel ?? rowAriaLabel(o.channel);
     const cap = capability[idx];
     if (cap && !cap.ok) {
       const r = cap.reason ? cap.reason + ', ' : '';
@@ -328,7 +329,8 @@
     onkeydown={onTriggerKey}
   >
     {#if selectedChannel}
-      <ChannelOption channel={selectedChannel} variant="trigger-compact" />
+      <ChannelOption channel={selectedChannel} variant="trigger-compact"
+        presentation={presentationForChannel(selectedChannel)} />
     {:else if selectedIsNone}
       <span class="none-trigger">{noneLabel}</span>
     {:else}
@@ -382,6 +384,7 @@
             {:else}
               <ChannelOption
                 channel={o.channel}
+                presentation={presentationForChannel(o.channel)}
                 unavailable={!capability[idx]?.ok}
                 unavailableReason={capability[idx]?.reason ?? ''}
               />

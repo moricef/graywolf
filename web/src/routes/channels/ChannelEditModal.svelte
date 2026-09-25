@@ -113,7 +113,7 @@
     <span class="channel-type-label" id="channel-type-label">Channel type</span>
     {#if editing}
       <span class="channel-type-badge">
-        {#if form.channel_type === 'modem'}Modem-backed{:else}KISS-TNC only{/if}
+        {#if form.channel_type === 'modem'}Modem-backed{:else}KISS-TNC{/if}
       </span>
     {:else}
       <div class="segmented" role="radiogroup" aria-labelledby="channel-type-label">
@@ -131,11 +131,16 @@
                 class="segment"
                 class:active={form.channel_type === 'kiss-tnc'}
                 onclick={() => form.channel_type = 'kiss-tnc'}>
-          KISS-TNC only
+          KISS-TNC
         </button>
       </div>
     {/if}
   </div>
+  <p class="enabled-hint">
+    Choose how this channel connects to a radio. Native LoRa TNC2 transmit
+    is configured separately in
+    <a href="#/preferences/tnc2">TNC2 settings</a> and assigned to a channel.
+  </p>
 
   <div class="form-section">
     <h4 class="section-label">Identity</h4>
@@ -242,10 +247,10 @@
     {/if}
   {:else}
     <div class="kiss-only-explainer">
-      This channel is serviced by a KISS TNC interface (configured on
-      the <a href="#/kiss">KISS page</a>). No audio device, modem, or
-      CSMA timing is required — frames route through the attached
-      KISS-TNC backend.
+      This channel has no audio modem. Its KISS interface is configured on
+      the <a href="#/kiss">KISS page</a>. Native TNC2 transmission can be
+      assigned to the channel separately in
+      <a href="#/preferences/tnc2">TNC2 settings</a>.
     </div>
   {/if}
 

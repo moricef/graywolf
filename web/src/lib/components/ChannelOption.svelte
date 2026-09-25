@@ -44,6 +44,7 @@
     variant = 'option',
     unavailable = false,
     unavailableReason = '',
+    presentation = null,
   } = $props();
 
   // Track the previous health value so a transition triggers a
@@ -54,7 +55,7 @@
   let prevHealth = null;
 
   $effect(() => {
-    const h = channel?.backing?.health;
+    const h = presentation?.health ?? channel?.backing?.health;
     if (prevHealth !== null && h !== prevHealth) {
       pulse = true;
       const t = setTimeout(() => {
@@ -66,13 +67,14 @@
     prevHealth = h ?? null;
   });
 
-  let glyph = $derived(healthGlyph(channel?.backing?.health));
-  let text = $derived(healthText(channel?.backing?.health));
+  let displayHealth = $derived(presentation?.health ?? channel?.backing?.health);
+  let glyph = $derived(healthGlyph(displayHealth));
+  let text = $derived(healthText(displayHealth));
   let sum = $derived(summaryLabel(channel?.backing));
-  let aria = $derived(ariaLabel(channel));
-  let tip = $derived(tooltipText(channel?.backing));
+  let aria = $derived(presentation?.ariaLabel ?? ariaLabel(channel));
+  let tip = $derived(presentation?.tooltip ?? tooltipText(channel?.backing));
   let healthClass = $derived.by(() => {
-    const h = channel?.backing?.health;
+    const h = displayHealth;
     if (h === HEALTH_LIVE) return 'live';
     if (h === HEALTH_DOWN) return 'down';
     return 'unbound';
@@ -83,7 +85,7 @@
   // the slot doesn't render "undefined" if a caller forgot the
   // reason.
   let detailLine = $derived(
-    unavailable ? (unavailableReason || 'Unavailable') : `${sum} · ${text}`,
+    unavailable ? (unavailableReason || 'Unavailable') : (presentation?.detail ?? `${sum} · ${text}`),
   );
 </script>
 

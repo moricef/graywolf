@@ -14,6 +14,7 @@
   import { getChannel as lookupChannel } from '../lib/stores/channels.svelte.js';
   import { txPredicate, TX_REASON_FALLBACK } from '../lib/channelBacking.js';
   import { beaconLabel } from '../lib/beaconLabel.js';
+  import { beaconRFTransport, beaconChannelPresentation } from '../lib/beaconTransport.js';
   import { trackerBeaconFlags } from '../lib/trackerBeacon.js';
   import {
     channelRefStatus,
@@ -68,7 +69,19 @@
   // channelName() and the modal channel-defaulting code paths keep
   // working without changes.
   let channels = $derived(channelsStore.list);
-  let tnc2TxChannel = $state(0);
+  let tnc2Config = $state(null);
+  let tnc2TxChannel = $derived(
+    tnc2Config?.tx_transport ? Number(tnc2Config.tx_channel) : 0,
+  );
+  function beaconPresentation(channel) {
+    return beaconChannelPresentation(channel, tnc2Config);
+  }
+  async function refreshTNC2Config() {
+    try {
+      const response = await fetch('/api/tnc2/config');
+      if (response.ok) tnc2Config = await response.json();
+    } catch { /* Keep the last known state until the next refresh. */ }
+  }
   function beaconTxPredicate(channel) {
     if (channel?.id === tnc2TxChannel && tnc2TxChannel > 0) return { ok: true, reason: '' };
     return txPredicate(channel);
@@ -254,13 +267,7 @@
   }
 
   onMount(async () => {
-    try {
-      const response = await fetch('/api/tnc2/config');
-      if (response.ok) {
-        const cfg = await response.json();
-        tnc2TxChannel = cfg.tx_transport ? Number(cfg.tx_channel) : 0;
-      }
-    } catch { /* The existing AX.25 channel list remains usable. */ }
+    await refreshTNC2Config();
     beacons = await api.get('/beacons') || [];
     const sb = await api.get('/smart-beacon');
     if (sb) smartBeacon = {
@@ -295,6 +302,11 @@
       form.latitude = String(lat);
       form.longitude = String(lon);
     }
+  });
+
+  onMount(() => {
+    const timer = setInterval(refreshTNC2Config, 5000);
+    return () => clearInterval(timer);
   });
 
   function openCreate() {
@@ -613,6 +625,7 @@
   <div class="beacon-grid">
     {#each beacons as b}
       {@const isOnly = b.send_path === 'is_only'}
+      {@const rfTransport = beaconRFTransport(b.channel, tnc2Config)}
       {@const refStatus = channelRefStatus(b.channel, channelsById)}
       {@const broken = !isOnly && refStatus.status !== STATUS_OK && !(b.channel === tnc2TxChannel && refStatus.status !== STATUS_DELETED)}
       {@const pillAriaLabel = broken
@@ -690,6 +703,12 @@
         </div>
 
         <div class="beacon-details">
+          {#if !isOnly}
+            <div class="detail-row">
+              <span class="detail-label">RF transport</span>
+              <span class="detail-value">{rfTransport.detail}</span>
+            </div>
+          {/if}
           <div class="detail-row">
             <span class="detail-label">Destination</span>
             <span class="detail-value">{b.destination}</span>
@@ -852,8 +871,14 @@
               valueType="string"
               channels={channels}
               capabilityFilter={beaconTxPredicate}
+              presentationForChannel={beaconPresentation}
             />
           </FormField>
+          {#if selectedChannelObj}
+            <div class="beacon-transport-note" role="status">
+              RF transport: {beaconRFTransport(selectedChannelObj.id, tnc2Config).detail}.
+            </div>
+          {/if}
         {/if}
       {/if}
       <FormField
@@ -1311,6 +1336,11 @@
     background: var(--bg-secondary);
     border: 1px dashed var(--border-color);
     border-radius: var(--radius);
+  }
+  .beacon-transport-note {
+    margin: -4px 0 12px;
+    font-size: 13px;
+    color: var(--text-secondary);
   }
   .no-rf-banner {
     display: flex;

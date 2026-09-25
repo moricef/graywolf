@@ -17,6 +17,7 @@
   let channels = $derived(channelsStore.list);
   let audioDevices = $state([]);
   let txTimings = $state({});
+  let tnc2Config = $state(null);
   let modalOpen = $state(false);
   let editing = $state(null);
 
@@ -41,8 +42,20 @@
 
   onMount(async () => {
     startChannelsStore();
-    await Promise.all([loadChannels(), loadDevices(), loadTxTimings()]);
+    await Promise.all([loadChannels(), loadDevices(), loadTxTimings(), refreshTNC2Config()]);
   });
+
+  onMount(() => {
+    const timer = setInterval(refreshTNC2Config, 5000);
+    return () => clearInterval(timer);
+  });
+
+  async function refreshTNC2Config() {
+    try {
+      const response = await fetch('/api/tnc2/config');
+      if (response.ok) tnc2Config = await response.json();
+    } catch { /* Keep the last known state until the next refresh. */ }
+  }
 
   // Legacy name; delegates to the shared store so every caller gets
   // the same refresh semantics (including pickers on other tabs).
@@ -206,6 +219,7 @@
       <ChannelRow
         channel={ch}
         txTiming={txTimings[ch.id]}
+        {tnc2Config}
         {audioDevices}
         onEdit={openEdit}
         onDelete={requestDelete}

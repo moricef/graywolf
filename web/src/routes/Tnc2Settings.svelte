@@ -82,12 +82,12 @@
         options={[{ value: '', label: 'Disabled' }, { value: 'tcp', label: 'TCP' }, { value: 'serial', label: 'Serial' }]} />
       <label for="tnc2-source">Source identity</label>
       <Input id="tnc2-source" bind:value={config.tx_source} disabled={loading || saving} placeholder="F4MLV-2" />
-      <label for="tnc2-channel">Message channel</label>
+      <label for="tnc2-channel">RF TX channel</label>
       <Input id="tnc2-channel" type="number" min="1" bind:value={config.tx_channel} disabled={loading || saving} />
       <label for="tnc2-limit">Maximum packet bytes</label>
       <Input id="tnc2-limit" type="number" min="1" bind:value={config.max_tx_bytes} disabled={loading || saving} />
     </div>
-    <p class="hint">Only packets with the exact source identity can be transmitted. Incoming packets remain receive-only.</p>
+    <p class="hint">Messages and beacons on this channel use native TNC2 TX. Only packets with the exact source identity can be transmitted. Incoming packets remain receive-only.</p>
     <div class="actions"><Button variant="primary" type="submit" disabled={loading || saving}>{saving ? 'Saving…' : 'Save'}</Button>{#if saved}<span class="saved">Saved and applied.</span>{/if}</div>
   </Box>
 </form>

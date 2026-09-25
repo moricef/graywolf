@@ -15,9 +15,10 @@
     ariaLabel as pttAriaLabel,
   } from '../../lib/channelPtt.js';
   import { api } from '../../lib/api.js';
+  import { beaconRFTransport } from '../../lib/beaconTransport.js';
   import { toasts } from '../../lib/stores.js';
 
-  let { channel, txTiming, audioDevices = [], onEdit, onDelete, onToggled } = $props();
+  let { channel, txTiming, tnc2Config = null, audioDevices = [], onEdit, onDelete, onToggled } = $props();
 
   let sendingSignal = $state(false);
   let togglingEnabled = $state(false);
@@ -61,6 +62,7 @@
   }
 
   let isKissOnly = $derived(channel.input_device_id == null);
+  let tnc2TX = $derived(beaconRFTransport(channel.id, tnc2Config));
 
   function deviceName(id) {
     if (!id || id === 0) return null;
@@ -80,9 +82,7 @@
       {#if isDisabled}
         <Badge variant="warning">Disabled</Badge>
       {/if}
-      {#if isKissOnly}
-        <Badge variant="info">KISS-TNC only</Badge>
-      {:else}
+      {#if !isKissOnly}
         <Badge variant="default">{channel.modem_type.toUpperCase()}</Badge>
         {#if channel.output_device_id && channel.output_device_id !== 0}
           <Badge variant="success">RX/TX</Badge>
@@ -119,9 +119,15 @@
         </div>
       {/if}
     </div>
-  {:else}
-    <div class="channel-kiss-only-note">
-      Serviced by a KISS TNC interface (configured on the KISS page).
+  {/if}
+
+  {#if tnc2TX.kind === 'tnc2'}
+    <div class="backing-row" aria-label={`TNC2 TX: ${tnc2TX.connectionDetail}`}>
+      <span class="backing-label">TNC2 TX</span>
+      <span class="backing-summary">
+        <span class="glyph {tnc2TX.health}" aria-hidden="true">{healthGlyph(tnc2TX.health)}</span>
+        <span class="backing-text">{tnc2TX.connectionDetail}</span>
+      </span>
     </div>
   {/if}
 
@@ -130,10 +136,10 @@
          "Disabled" state instead of the (stale) live/down backing health,
          which would otherwise contradict the Disabled badge. -->
     <div class="backing-row" aria-label="Channel disabled; backend not running">
-      <span class="backing-label">Backing</span>
+      <span class="backing-label">{isKissOnly ? 'KISS-TNC' : 'Modem'}</span>
       <span class="backing-summary">
         <span class="glyph unbound" aria-hidden="true">○</span>
-        <span class="backing-text">{channel.backing ? summaryLabel(channel.backing) + ' · ' : ''}Disabled</span>
+        <span class="backing-text">Disabled</span>
       </span>
     </div>
   {:else if channel.backing}
@@ -142,10 +148,10 @@
     <div class="backing-row"
          aria-label={backingAriaLabel(channel)}
          title={backingTooltip(channel.backing)}>
-      <span class="backing-label">Backing</span>
+      <span class="backing-label">{isKissOnly ? 'KISS-TNC' : 'Modem'}</span>
       <span class="backing-summary">
         <span class="glyph {glyphClass}" aria-hidden="true">{healthGlyph(h)}</span>
-        <span class="backing-text">{summaryLabel(channel.backing)} · {healthText(h)}</span>
+        <span class="backing-text">{isKissOnly ? summaryLabel(channel.backing).replace(/^KISS-TNC: ?/, '') : summaryLabel(channel.backing)} · {healthText(h)}</span>
       </span>
     </div>
   {/if}
@@ -389,12 +395,4 @@
     color: var(--text-muted, #888);
   }
 
-  .channel-kiss-only-note {
-    padding: 10px;
-    background: var(--bg-tertiary);
-    border-radius: var(--radius);
-    font-size: 13px;
-    color: var(--text-secondary);
-    margin-bottom: 12px;
-  }
 </style>
