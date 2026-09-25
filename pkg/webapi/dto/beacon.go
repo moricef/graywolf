@@ -23,19 +23,19 @@ import (
 // The response DTO carries Callsign as plain string — an empty value
 // in the response means "inherits from station callsign".
 type BeaconRequest struct {
-	Type          string  `json:"type"`
-	Channel       uint32  `json:"channel"`
-	Callsign      *string `json:"callsign"`
-	Destination   string  `json:"destination"`
-	Path          string  `json:"path"`
-	UseGps        bool    `json:"use_gps"`
-	Latitude      float64 `json:"latitude"`
-	Longitude     float64 `json:"longitude"`
-	AltFt         float64 `json:"alt_ft"`
-	Ambiguity     uint32  `json:"ambiguity"`
-	SymbolTable   string  `json:"symbol_table"`
-	Symbol        string  `json:"symbol"`
-	Overlay       string  `json:"overlay"`
+	Type           string  `json:"type"`
+	Channel        uint32  `json:"channel"`
+	Callsign       *string `json:"callsign"`
+	Destination    string  `json:"destination"`
+	Path           string  `json:"path"`
+	UseGps         bool    `json:"use_gps"`
+	Latitude       float64 `json:"latitude"`
+	Longitude      float64 `json:"longitude"`
+	AltFt          float64 `json:"alt_ft"`
+	Ambiguity      uint32  `json:"ambiguity"`
+	SymbolTable    string  `json:"symbol_table"`
+	Symbol         string  `json:"symbol"`
+	Overlay        string  `json:"overlay"`
 	PositionFormat string  `json:"position_format"`
 	Messaging      bool    `json:"messaging"`
 	Comment        string  `json:"comment"`
@@ -89,20 +89,23 @@ func (r BeaconRequest) Validate() error {
 	// which is validated by the station config, so skip it here.
 	if r.Callsign != nil {
 		if c := strings.TrimSpace(*r.Callsign); c != "" {
-			if _, err := ax25.ParseAddress(c); err != nil {
-				return fmt.Errorf("callsign %q is not a valid APRS address (SSID must be 0-15): %w", c, err)
+			if _, err := ax25.ParseCanonicalEndpoint(c); err != nil {
+				return fmt.Errorf("callsign %q is not canonical AX.25 text: %w", c, err)
 			}
 		}
 	}
 	if d := strings.TrimSpace(r.Destination); d != "" {
-		if _, err := ax25.ParseAddress(d); err != nil {
-			return fmt.Errorf("destination %q is not a valid APRS address: %w", d, err)
+		if _, err := ax25.ParseCanonicalEndpoint(d); err != nil {
+			return fmt.Errorf("destination %q is not canonical AX.25 text: %w", d, err)
 		}
 	}
 	for _, p := range strings.Split(r.Path, ",") {
 		if p = strings.TrimSpace(p); p != "" {
-			if _, err := ax25.ParseAddress(p); err != nil {
-				return fmt.Errorf("path element %q is not a valid APRS address: %w", p, err)
+			if strings.HasSuffix(p, "*") {
+				return fmt.Errorf("outgoing path element %q must not be repeated", p)
+			}
+			if _, err := ax25.ParseCanonicalAddress(p); err != nil {
+				return fmt.Errorf("path element %q is not canonical AX.25 text: %w", p, err)
 			}
 		}
 	}
@@ -169,45 +172,45 @@ func (r BeaconRequest) callsignValue() string {
 
 func (r BeaconRequest) ToModel() configstore.Beacon {
 	return configstore.Beacon{
-		Type:          r.Type,
-		Channel:       r.Channel,
-		Callsign:      r.callsignValue(),
-		Destination:   r.Destination,
-		Path:          r.Path,
-		UseGps:        r.UseGps,
-		Latitude:      r.Latitude,
-		Longitude:     r.Longitude,
-		AltFt:         r.AltFt,
-		Ambiguity:     r.Ambiguity,
-		SymbolTable:   r.SymbolTable,
-		Symbol:        r.Symbol,
-		Overlay:       r.Overlay,
+		Type:           r.Type,
+		Channel:        r.Channel,
+		Callsign:       r.callsignValue(),
+		Destination:    r.Destination,
+		Path:           r.Path,
+		UseGps:         r.UseGps,
+		Latitude:       r.Latitude,
+		Longitude:      r.Longitude,
+		AltFt:          r.AltFt,
+		Ambiguity:      r.Ambiguity,
+		SymbolTable:    r.SymbolTable,
+		Symbol:         r.Symbol,
+		Overlay:        r.Overlay,
 		PositionFormat: r.normalizedFormat(),
-		Messaging:     r.Messaging,
-		Comment:       r.Comment,
-		CommentCmd:    r.CommentCmd,
-		CustomInfo:    r.CustomInfo,
-		ObjectName:    r.ObjectName,
-		Power:         r.Power,
-		Height:        r.Height,
-		Gain:          r.Gain,
-		Dir:           r.Dir,
-		Freq:          r.Freq,
-		Tone:          r.Tone,
-		FreqOffset:    r.FreqOffset,
-		DelaySeconds:  r.DelaySeconds,
-		EverySeconds:  r.EverySeconds,
-		SlotSeconds:   r.SlotSeconds,
-		SmartBeacon:   r.SmartBeacon,
-		SbFastSpeed:   r.SbFastSpeed,
-		SbSlowSpeed:   r.SbSlowSpeed,
-		SbFastRate:    r.SbFastRate,
-		SbSlowRate:    r.SbSlowRate,
-		SbTurnAngle:   r.SbTurnAngle,
-		SbTurnSlope:   r.SbTurnSlope,
-		SbMinTurnTime: r.SbMinTurnTime,
-		SendPath:      r.normalizedSendPath(),
-		Enabled:       r.Enabled,
+		Messaging:      r.Messaging,
+		Comment:        r.Comment,
+		CommentCmd:     r.CommentCmd,
+		CustomInfo:     r.CustomInfo,
+		ObjectName:     r.ObjectName,
+		Power:          r.Power,
+		Height:         r.Height,
+		Gain:           r.Gain,
+		Dir:            r.Dir,
+		Freq:           r.Freq,
+		Tone:           r.Tone,
+		FreqOffset:     r.FreqOffset,
+		DelaySeconds:   r.DelaySeconds,
+		EverySeconds:   r.EverySeconds,
+		SlotSeconds:    r.SlotSeconds,
+		SmartBeacon:    r.SmartBeacon,
+		SbFastSpeed:    r.SbFastSpeed,
+		SbSlowSpeed:    r.SbSlowSpeed,
+		SbFastRate:     r.SbFastRate,
+		SbSlowRate:     r.SbSlowRate,
+		SbTurnAngle:    r.SbTurnAngle,
+		SbTurnSlope:    r.SbTurnSlope,
+		SbMinTurnTime:  r.SbMinTurnTime,
+		SendPath:       r.normalizedSendPath(),
+		Enabled:        r.Enabled,
 	}
 }
 
@@ -227,46 +230,46 @@ func (r BeaconRequest) ApplyToUpdate(id uint32, existing configstore.Beacon) con
 		callsign = *r.Callsign
 	}
 	return configstore.Beacon{
-		ID:            id,
-		Type:          r.Type,
-		Channel:       r.Channel,
-		Callsign:      callsign,
-		Destination:   r.Destination,
-		Path:          r.Path,
-		UseGps:        r.UseGps,
-		Latitude:      r.Latitude,
-		Longitude:     r.Longitude,
-		AltFt:         r.AltFt,
-		Ambiguity:     r.Ambiguity,
-		SymbolTable:   r.SymbolTable,
-		Symbol:        r.Symbol,
-		Overlay:       r.Overlay,
+		ID:             id,
+		Type:           r.Type,
+		Channel:        r.Channel,
+		Callsign:       callsign,
+		Destination:    r.Destination,
+		Path:           r.Path,
+		UseGps:         r.UseGps,
+		Latitude:       r.Latitude,
+		Longitude:      r.Longitude,
+		AltFt:          r.AltFt,
+		Ambiguity:      r.Ambiguity,
+		SymbolTable:    r.SymbolTable,
+		Symbol:         r.Symbol,
+		Overlay:        r.Overlay,
 		PositionFormat: r.normalizedFormat(),
-		Messaging:     r.Messaging,
-		Comment:       r.Comment,
-		CommentCmd:    r.CommentCmd,
-		CustomInfo:    r.CustomInfo,
-		ObjectName:    r.ObjectName,
-		Power:         r.Power,
-		Height:        r.Height,
-		Gain:          r.Gain,
-		Dir:           r.Dir,
-		Freq:          r.Freq,
-		Tone:          r.Tone,
-		FreqOffset:    r.FreqOffset,
-		DelaySeconds:  r.DelaySeconds,
-		EverySeconds:  r.EverySeconds,
-		SlotSeconds:   r.SlotSeconds,
-		SmartBeacon:   r.SmartBeacon,
-		SbFastSpeed:   r.SbFastSpeed,
-		SbSlowSpeed:   r.SbSlowSpeed,
-		SbFastRate:    r.SbFastRate,
-		SbSlowRate:    r.SbSlowRate,
-		SbTurnAngle:   r.SbTurnAngle,
-		SbTurnSlope:   r.SbTurnSlope,
-		SbMinTurnTime: r.SbMinTurnTime,
-		SendPath:      r.normalizedSendPath(),
-		Enabled:       r.Enabled,
+		Messaging:      r.Messaging,
+		Comment:        r.Comment,
+		CommentCmd:     r.CommentCmd,
+		CustomInfo:     r.CustomInfo,
+		ObjectName:     r.ObjectName,
+		Power:          r.Power,
+		Height:         r.Height,
+		Gain:           r.Gain,
+		Dir:            r.Dir,
+		Freq:           r.Freq,
+		Tone:           r.Tone,
+		FreqOffset:     r.FreqOffset,
+		DelaySeconds:   r.DelaySeconds,
+		EverySeconds:   r.EverySeconds,
+		SlotSeconds:    r.SlotSeconds,
+		SmartBeacon:    r.SmartBeacon,
+		SbFastSpeed:    r.SbFastSpeed,
+		SbSlowSpeed:    r.SbSlowSpeed,
+		SbFastRate:     r.SbFastRate,
+		SbSlowRate:     r.SbSlowRate,
+		SbTurnAngle:    r.SbTurnAngle,
+		SbTurnSlope:    r.SbTurnSlope,
+		SbMinTurnTime:  r.SbMinTurnTime,
+		SendPath:       r.normalizedSendPath(),
+		Enabled:        r.Enabled,
 	}
 }
 
@@ -274,90 +277,90 @@ func (r BeaconRequest) ApplyToUpdate(id uint32, existing configstore.Beacon) con
 // Callsign is the stored value — empty means "inherit from station
 // callsign" at transmit time.
 type BeaconResponse struct {
-	ID            uint32  `json:"id"`
-	Type          string  `json:"type"`
-	Channel       uint32  `json:"channel"`
-	Callsign      string  `json:"callsign"`
-	Destination   string  `json:"destination"`
-	Path          string  `json:"path"`
-	UseGps        bool    `json:"use_gps"`
-	Latitude      float64 `json:"latitude"`
-	Longitude     float64 `json:"longitude"`
-	AltFt         float64 `json:"alt_ft"`
-	Ambiguity     uint32  `json:"ambiguity"`
-	SymbolTable   string  `json:"symbol_table"`
-	Symbol        string  `json:"symbol"`
-	Overlay       string  `json:"overlay"`
+	ID             uint32  `json:"id"`
+	Type           string  `json:"type"`
+	Channel        uint32  `json:"channel"`
+	Callsign       string  `json:"callsign"`
+	Destination    string  `json:"destination"`
+	Path           string  `json:"path"`
+	UseGps         bool    `json:"use_gps"`
+	Latitude       float64 `json:"latitude"`
+	Longitude      float64 `json:"longitude"`
+	AltFt          float64 `json:"alt_ft"`
+	Ambiguity      uint32  `json:"ambiguity"`
+	SymbolTable    string  `json:"symbol_table"`
+	Symbol         string  `json:"symbol"`
+	Overlay        string  `json:"overlay"`
 	PositionFormat string  `json:"position_format"`
 	Messaging      bool    `json:"messaging"`
-	Comment       string  `json:"comment"`
-	CommentCmd    string  `json:"comment_cmd"`
-	CustomInfo    string  `json:"custom_info"`
-	ObjectName    string  `json:"object_name"`
-	Power         uint32  `json:"power"`
-	Height        uint32  `json:"height"`
-	Gain          uint32  `json:"gain"`
-	Dir           uint32  `json:"dir"`
-	Freq          string  `json:"freq"`
-	Tone          string  `json:"tone"`
-	FreqOffset    string  `json:"freq_offset"`
-	DelaySeconds  uint32  `json:"delay_seconds"`
-	EverySeconds  uint32  `json:"interval"`
-	SlotSeconds   int32   `json:"slot_seconds"`
-	SmartBeacon   bool    `json:"smart_beacon"`
-	SbFastSpeed   uint32  `json:"sb_fast_speed"`
-	SbSlowSpeed   uint32  `json:"sb_slow_speed"`
-	SbFastRate    uint32  `json:"sb_fast_rate"`
-	SbSlowRate    uint32  `json:"sb_slow_rate"`
-	SbTurnAngle   uint32  `json:"sb_turn_angle"`
-	SbTurnSlope   uint32  `json:"sb_turn_slope"`
-	SbMinTurnTime uint32  `json:"sb_min_turn_time"`
-	SendPath      string  `json:"send_path" enums:"rf,both,is_only" example:"rf"`
-	Enabled       bool    `json:"enabled"`
+	Comment        string  `json:"comment"`
+	CommentCmd     string  `json:"comment_cmd"`
+	CustomInfo     string  `json:"custom_info"`
+	ObjectName     string  `json:"object_name"`
+	Power          uint32  `json:"power"`
+	Height         uint32  `json:"height"`
+	Gain           uint32  `json:"gain"`
+	Dir            uint32  `json:"dir"`
+	Freq           string  `json:"freq"`
+	Tone           string  `json:"tone"`
+	FreqOffset     string  `json:"freq_offset"`
+	DelaySeconds   uint32  `json:"delay_seconds"`
+	EverySeconds   uint32  `json:"interval"`
+	SlotSeconds    int32   `json:"slot_seconds"`
+	SmartBeacon    bool    `json:"smart_beacon"`
+	SbFastSpeed    uint32  `json:"sb_fast_speed"`
+	SbSlowSpeed    uint32  `json:"sb_slow_speed"`
+	SbFastRate     uint32  `json:"sb_fast_rate"`
+	SbSlowRate     uint32  `json:"sb_slow_rate"`
+	SbTurnAngle    uint32  `json:"sb_turn_angle"`
+	SbTurnSlope    uint32  `json:"sb_turn_slope"`
+	SbMinTurnTime  uint32  `json:"sb_min_turn_time"`
+	SendPath       string  `json:"send_path" enums:"rf,both,is_only" example:"rf"`
+	Enabled        bool    `json:"enabled"`
 }
 
 func BeaconFromModel(m configstore.Beacon) BeaconResponse {
 	return BeaconResponse{
-		ID:            m.ID,
-		Type:          m.Type,
-		Channel:       m.Channel,
-		Callsign:      m.Callsign,
-		Destination:   m.Destination,
-		Path:          m.Path,
-		UseGps:        m.UseGps,
-		Latitude:      m.Latitude,
-		Longitude:     m.Longitude,
-		AltFt:         m.AltFt,
-		Ambiguity:     m.Ambiguity,
-		SymbolTable:   m.SymbolTable,
-		Symbol:        m.Symbol,
-		Overlay:       m.Overlay,
+		ID:             m.ID,
+		Type:           m.Type,
+		Channel:        m.Channel,
+		Callsign:       m.Callsign,
+		Destination:    m.Destination,
+		Path:           m.Path,
+		UseGps:         m.UseGps,
+		Latitude:       m.Latitude,
+		Longitude:      m.Longitude,
+		AltFt:          m.AltFt,
+		Ambiguity:      m.Ambiguity,
+		SymbolTable:    m.SymbolTable,
+		Symbol:         m.Symbol,
+		Overlay:        m.Overlay,
 		PositionFormat: m.PositionFormat,
-		Messaging:     m.Messaging,
-		Comment:       m.Comment,
-		CommentCmd:    m.CommentCmd,
-		CustomInfo:    m.CustomInfo,
-		ObjectName:    m.ObjectName,
-		Power:         m.Power,
-		Height:        m.Height,
-		Gain:          m.Gain,
-		Dir:           m.Dir,
-		Freq:          m.Freq,
-		Tone:          m.Tone,
-		FreqOffset:    m.FreqOffset,
-		DelaySeconds:  m.DelaySeconds,
-		EverySeconds:  m.EverySeconds,
-		SlotSeconds:   m.SlotSeconds,
-		SmartBeacon:   m.SmartBeacon,
-		SbFastSpeed:   m.SbFastSpeed,
-		SbSlowSpeed:   m.SbSlowSpeed,
-		SbFastRate:    m.SbFastRate,
-		SbSlowRate:    m.SbSlowRate,
-		SbTurnAngle:   m.SbTurnAngle,
-		SbTurnSlope:   m.SbTurnSlope,
-		SbMinTurnTime: m.SbMinTurnTime,
-		SendPath:      m.SendPath,
-		Enabled:       m.Enabled,
+		Messaging:      m.Messaging,
+		Comment:        m.Comment,
+		CommentCmd:     m.CommentCmd,
+		CustomInfo:     m.CustomInfo,
+		ObjectName:     m.ObjectName,
+		Power:          m.Power,
+		Height:         m.Height,
+		Gain:           m.Gain,
+		Dir:            m.Dir,
+		Freq:           m.Freq,
+		Tone:           m.Tone,
+		FreqOffset:     m.FreqOffset,
+		DelaySeconds:   m.DelaySeconds,
+		EverySeconds:   m.EverySeconds,
+		SlotSeconds:    m.SlotSeconds,
+		SmartBeacon:    m.SmartBeacon,
+		SbFastSpeed:    m.SbFastSpeed,
+		SbSlowSpeed:    m.SbSlowSpeed,
+		SbFastRate:     m.SbFastRate,
+		SbSlowRate:     m.SbSlowRate,
+		SbTurnAngle:    m.SbTurnAngle,
+		SbTurnSlope:    m.SbTurnSlope,
+		SbMinTurnTime:  m.SbMinTurnTime,
+		SendPath:       m.SendPath,
+		Enabled:        m.Enabled,
 	}
 }
 

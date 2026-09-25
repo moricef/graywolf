@@ -112,6 +112,27 @@ func TestConsumeStreamDeliversPacketAndBuildsRXTAndLocalLinks(t *testing.T) {
 	}
 }
 
+func TestVersionedRXTLinksKeepExactTextualIdentities(t *testing.T) {
+	raw := []byte("nn7le-gs>APRS:!4903.50N/07201.75W-Test")
+	rx := fmt.Sprintf(`{"protocol":"lora-aprs-json","protocol_version":"1","schema_version":"1.0","event":"rx","event_id":"case:1","boot_id":"case","sequence":1,"receiver":{"station":"local-gs"},"packet":{"raw_tnc2_base64":%q,"parse_status":"parsed"},"reception":{"local":{"rssi_dbm":-70,"snr_db":8,"frequency_error_hz":100},"rxt":{"hops":[{"ordinal":1,"tx":"nn7le-gs","rx":"relay-gs","has_data":true,"rssi_dbm":-110,"snr_db":2,"frequency_error_hz":-100,"tth_ms":400}]}}}`,
+		base64.StdEncoding.EncodeToString(raw))
+	s := New("http://igate.invalid/api/v1/aprs/stream", nil, nil)
+	if err := s.consumeStream(context.Background(), strings.NewReader(rx+"\n")); !errors.Is(err, io.ErrUnexpectedEOF) {
+		t.Fatalf("consumeStream error = %v", err)
+	}
+	links := s.Snapshot(time.Now().UTC())
+	if len(links) != 2 {
+		t.Fatalf("links = %+v", links)
+	}
+	seen := make(map[string]bool)
+	for _, link := range links {
+		seen[link.From+">"+link.To] = true
+	}
+	if !seen["nn7le-gs>relay-gs"] || !seen["nn7le-gs>local-gs"] {
+		t.Fatalf("versioned identity was normalized: %+v", links)
+	}
+}
+
 func TestLocalLinkIgnoresRepeatedRoutingAlias(t *testing.T) {
 	tnc2Raw := []byte("F4KOL-4>APLRG1,F1ZDB-10*,F4GCF-4*,WIDE2*:test")
 	rx := fmt.Sprintf(`{"protocol":"lora-aprs-json","protocol_version":"1","schema_version":"1.0","event":"rx","event_id":"boot-alias:1","boot_id":"boot-alias","sequence":1,"receiver":{"station":"F1ZDB-10"},"packet":{"raw_tnc2_base64":%q,"parse_status":"parsed"},"reception":{"local":{"rssi_dbm":-122,"snr_db":-1.5,"frequency_error_hz":460}}}`,

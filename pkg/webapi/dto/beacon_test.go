@@ -122,6 +122,28 @@ func TestBeaconRequest_Validate_GoodCallsign(t *testing.T) {
 	}
 }
 
+func TestBeaconRequest_Validate_RejectsNoncanonicalAX25Identity(t *testing.T) {
+	for _, test := range []struct {
+		name, source, dest, path string
+	}{
+		{"source leading zero", "F4MLV-01", "APGRWO", "WIDE1-1"},
+		{"source explicit zero", "F4MLV-0", "APGRWO", "WIDE1-1"},
+		{"source repeated marker", "F4MLV-2*", "APGRWO", "WIDE1-1"},
+		{"destination leading zero", "F4MLV-2", "APGRWO-01", "WIDE1-1"},
+		{"destination repeated marker", "F4MLV-2", "APGRWO*", "WIDE1-1"},
+		{"path leading zero", "F4MLV-2", "APGRWO", "WIDE1-01"},
+		{"outgoing repeated path", "F4MLV-2", "APGRWO", "WIDE1-1*"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			req := BeaconRequest{Type: "position", Latitude: 1, Longitude: 1,
+				Callsign: strPtr(test.source), Destination: test.dest, Path: test.path}
+			if err := req.Validate(); err == nil {
+				t.Fatalf("noncanonical beacon %+v accepted", req)
+			}
+		})
+	}
+}
+
 func TestBeaconRequest_Validate_InheritCallsignSkipsParse(t *testing.T) {
 	// nil/empty override = inherit station callsign; must not be parsed here.
 	r := BeaconRequest{Type: "position", Latitude: 1, Longitude: 1, SendPath: "rf"}

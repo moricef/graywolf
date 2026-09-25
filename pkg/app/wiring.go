@@ -2526,7 +2526,7 @@ func (a *App) digipeaterComponent() namedComponent {
 			a.digi.SetBlocklist(nil)
 			return
 		}
-		mycall, err := ax25.ParseAddress(resolved)
+		mycall, err := ax25.ParseCanonicalEndpoint(resolved)
 		if err != nil {
 			a.logger.Warn("digipeater mycall parse failed",
 				"value", resolved, "err", err)

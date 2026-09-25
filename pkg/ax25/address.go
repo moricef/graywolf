@@ -59,6 +59,35 @@ func ParseAddress(s string) (Address, error) {
 	return a, nil
 }
 
+// ParseCanonicalAddress accepts only text that can be rendered back exactly
+// after conversion to a classic AX.25 address. Use it at output boundaries
+// where silently changing a textual identity (such as CALL-01 to CALL-1)
+// would be incorrect. ParseAddress retains its legacy, permissive behavior.
+func ParseCanonicalAddress(s string) (Address, error) {
+	a, err := ParseAddress(s)
+	if err != nil {
+		return Address{}, err
+	}
+	if rendered := a.String(); rendered != s {
+		return Address{}, fmt.Errorf("ax25: address %q is not canonical (renders as %q)", s, rendered)
+	}
+	return a, nil
+}
+
+// ParseCanonicalEndpoint is for source and destination fields. A trailing '*'
+// is an H-bit marker only for path addresses; it cannot survive encoding in
+// an AX.25 source or destination field.
+func ParseCanonicalEndpoint(s string) (Address, error) {
+	a, err := ParseCanonicalAddress(s)
+	if err != nil {
+		return Address{}, err
+	}
+	if a.Repeated {
+		return Address{}, fmt.Errorf("ax25: source/destination %q cannot carry a repeated marker", s)
+	}
+	return a, nil
+}
+
 // ParseVia parses a comma-separated APRS digipeater via-path such as
 // "WIDE1-1,WIDE2-1" into the Address slice used for the Path of an
 // outgoing UI frame. Whitespace around each element is trimmed and
@@ -78,7 +107,7 @@ func ParseVia(s string) ([]Address, error) {
 		if strings.HasSuffix(f, "*") {
 			return nil, fmt.Errorf("ax25: via path element %q must not carry the '*' repeated marker", f)
 		}
-		a, err := ParseAddress(f)
+		a, err := ParseCanonicalAddress(f)
 		if err != nil {
 			return nil, err
 		}
@@ -111,12 +140,13 @@ func (a Address) String() string {
 // repeater SSID layout (H bit instead of C bit).
 //
 // AX.25 address byte layout:
-//   bytes 0..5: callsign, left-justified, space-padded, shifted left by 1
-//   byte 6:     CRRSSID1 / HRRSSID1 where
-//                  bit 7 = C (dest/source) or H (repeater)
-//                  bits 6,5 = RR (reserved, set to 1)
-//                  bits 4..1 = SSID
-//                  bit 0 = end-of-address marker (0 unless last)
+//
+//	bytes 0..5: callsign, left-justified, space-padded, shifted left by 1
+//	byte 6:     CRRSSID1 / HRRSSID1 where
+//	               bit 7 = C (dest/source) or H (repeater)
+//	               bits 6,5 = RR (reserved, set to 1)
+//	               bits 4..1 = SSID
+//	               bit 0 = end-of-address marker (0 unless last)
 func (a Address) encode(buf []byte, last bool, isRepeater bool, cBit bool) error {
 	if len(buf) < addrLen {
 		return errors.New("ax25: short address buffer")

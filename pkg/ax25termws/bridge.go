@@ -247,17 +247,17 @@ func (b *Bridge) Handle(ctx context.Context, env Envelope) error {
 }
 
 func (b *Bridge) handleConnect(c *ConnectArgs) error {
-	local, err := ax25.ParseAddress(formatAddr(c.LocalCall, c.LocalSSID))
+	local, err := ax25.ParseCanonicalEndpoint(formatAddr(c.LocalCall, c.LocalSSID))
 	if err != nil {
 		return fmt.Errorf("ax25termws: local address: %w", err)
 	}
-	peer, err := ax25.ParseAddress(formatAddr(c.DestCall, c.DestSSID))
+	peer, err := ax25.ParseCanonicalEndpoint(formatAddr(c.DestCall, c.DestSSID))
 	if err != nil {
 		return fmt.Errorf("ax25termws: dest address: %w", err)
 	}
 	path := make([]ax25.Address, 0, len(c.Via))
 	for _, p := range c.Via {
-		a, err := ax25.ParseAddress(p)
+		a, err := ax25.ParseCanonicalAddress(p)
 		if err != nil {
 			return fmt.Errorf("ax25termws: via %q: %w", p, err)
 		}

@@ -145,7 +145,7 @@ func New(cfg Config) (*Digipeater, error) {
 	var myaddr ax25.Address
 	resolved, err := callsign.Resolve(cfg.MyCall, cfg.StationCallsign)
 	if err == nil {
-		myaddr, err = ax25.ParseAddress(resolved)
+		myaddr, err = ax25.ParseCanonicalEndpoint(resolved)
 		if err != nil {
 			return nil, fmt.Errorf("digipeater: parse resolved callsign %q: %w", resolved, err)
 		}
@@ -462,7 +462,7 @@ func ruleMatches(r Rule, addr ax25.Address) bool {
 }
 
 func ruleMatchesCall(r Rule, addr ax25.Address) bool {
-	parsed, err := ax25.ParseAddress(r.Alias)
+	parsed, err := ax25.ParseCanonicalAddress(r.Alias)
 	if err != nil {
 		return false
 	}

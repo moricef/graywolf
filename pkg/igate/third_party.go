@@ -40,7 +40,7 @@ func wrapThirdParty(inner *ax25.Frame, igateCall string, via []ax25.Address) (*a
 	if igateCall == "" {
 		return nil, errors.New("igate: wrapThirdParty: empty igate callsign")
 	}
-	outerSrc, err := ax25.ParseAddress(igateCall)
+	outerSrc, err := ax25.ParseCanonicalEndpoint(igateCall)
 	if err != nil {
 		return nil, err
 	}

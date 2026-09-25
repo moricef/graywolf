@@ -3,6 +3,9 @@ package stationcache
 import (
 	"testing"
 	"time"
+
+	"github.com/chrissnell/graywolf/pkg/aprs"
+	"github.com/chrissnell/graywolf/pkg/tnc2"
 )
 
 func newTestCache(t *testing.T) *MemCache {
@@ -10,6 +13,36 @@ func newTestCache(t *testing.T) *MemCache {
 	c := NewMemCache(2 * time.Hour)
 	t.Cleanup(c.Close)
 	return c
+}
+
+func TestTextualIdentityRoundTripsThroughAPRSAndStationCache(t *testing.T) {
+	cache := newTestCache(t)
+	for _, raw := range []string{
+		"F4MLV-01>APRS:!4903.50N/07201.75W-Test",
+		"F4MLV-01>APRS:!4904.50N/07201.75W-Test",
+		"F4MLV-1>APRS:!4905.50N/07201.75W-Test",
+	} {
+		packet, err := tnc2.Parse([]byte(raw))
+		if err != nil {
+			t.Fatal(err)
+		}
+		decoded, err := aprs.ParseTNC2Packet(packet)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cache.Update(ExtractEntry(decoded, "aprs-json", "RX", 0))
+	}
+	stations := cache.QueryBBox(BBox{SwLat: -90, SwLon: -180, NeLat: 90, NeLon: 180}, time.Hour)
+	if len(stations) != 2 {
+		t.Fatalf("textual identities were merged or lost: %+v", stations)
+	}
+	byCall := make(map[string]Station, len(stations))
+	for _, station := range stations {
+		byCall[station.Callsign] = station
+	}
+	if len(byCall["F4MLV-01"].Positions) != 2 || len(byCall["F4MLV-1"].Positions) != 1 {
+		t.Fatalf("station identity/history mismatch: %+v", byCall)
+	}
 }
 
 func stationEntry(key, callsign string, lat, lon float64) CacheEntry {
@@ -535,7 +568,7 @@ func TestMemCache_RFCopyNotMaskedByGated(t *testing.T) {
 func TestMemCache_LastDirectHeardSetOnDirect(t *testing.T) {
 	c := newTestCache(t)
 
-	c.Update([]CacheEntry{stationEntry("stn:DIRECT", "DIRECT", 40.0, -105.0)})    // RX, hops 0
+	c.Update([]CacheEntry{stationEntry("stn:DIRECT", "DIRECT", 40.0, -105.0)})     // RX, hops 0
 	c.Update([]CacheEntry{digiEntry("stn:DIGIONLY", "DIGIONLY", 41.0, -105.0, 2)}) // RX, hops 2
 
 	results := c.QueryBBox(BBox{SwLat: 39, SwLon: -106, NeLat: 42, NeLon: -104}, 1*time.Hour)

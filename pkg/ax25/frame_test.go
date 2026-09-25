@@ -33,6 +33,28 @@ func TestParseAddress(t *testing.T) {
 	}
 }
 
+func TestParseCanonicalAddressRejectsIdentityChanges(t *testing.T) {
+	for _, value := range []string{"F4MLV", "F4MLV-1", "F4MLV-15", "WIDE1-1*"} {
+		if _, err := ParseCanonicalAddress(value); err != nil {
+			t.Errorf("canonical %q: %v", value, err)
+		}
+	}
+	for _, value := range []string{"F4MLV-01", "F4MLV-0", "F4MLV-00015", "f4mlv-1", "F4MLV-1junk", "F4MLV-GS", "F4MLV-16"} {
+		if a, err := ParseCanonicalAddress(value); err == nil {
+			t.Errorf("noncanonical %q converted to %q", value, a.String())
+		}
+	}
+}
+
+func TestParseCanonicalEndpointRejectsRepeatedMarker(t *testing.T) {
+	if _, err := ParseCanonicalAddress("F4MLV-2*"); err != nil {
+		t.Fatalf("canonical path address rejected: %v", err)
+	}
+	if _, err := ParseCanonicalEndpoint("F4MLV-2*"); err == nil {
+		t.Fatal("source/destination repeated marker was silently dropped")
+	}
+}
+
 func TestAddressString(t *testing.T) {
 	if got := (Address{Call: "N0CALL"}).String(); got != "N0CALL" {
 		t.Errorf("got %q", got)

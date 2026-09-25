@@ -92,17 +92,17 @@ func parseTNC2(line string) (*ax25.Frame, error) {
 		}
 		pathStrs = append(pathStrs, p)
 	}
-	src, err := ax25.ParseAddress(srcStr)
+	src, err := ax25.ParseCanonicalEndpoint(srcStr)
 	if err != nil {
 		return nil, fmt.Errorf("igate: parse source: %w", err)
 	}
-	dest, err := ax25.ParseAddress(destStr)
+	dest, err := ax25.ParseCanonicalEndpoint(destStr)
 	if err != nil {
 		return nil, fmt.Errorf("igate: parse dest: %w", err)
 	}
 	path := make([]ax25.Address, 0, len(pathStrs))
 	for _, p := range pathStrs {
-		a, err := ax25.ParseAddress(p)
+		a, err := ax25.ParseCanonicalAddress(p)
 		if err != nil {
 			return nil, fmt.Errorf("igate: parse path %q: %w", p, err)
 		}

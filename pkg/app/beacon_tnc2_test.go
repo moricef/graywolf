@@ -7,7 +7,7 @@ import (
 )
 
 func TestBeaconConfigTextualIdentityHasNoAX25Dependency(t *testing.T) {
-	for _, source := range []string{"F4MLV-16", "F4MLV-GS"} {
+	for _, source := range []string{"F4MLV-16", "F4MLV-GS", "F4MLV-01"} {
 		row := configstore.Beacon{Type: "position", Channel: 1, Callsign: source,
 			Destination: "APGRWO", Path: "WIDE1-1", Latitude: 42.9, Longitude: 1.2}
 		cfg, err := beaconConfigFromStoreWithMode(row, nil, "", true)

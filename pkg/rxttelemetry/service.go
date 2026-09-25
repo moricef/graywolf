@@ -549,7 +549,7 @@ func (s *Service) consumeLegacy(body io.Reader) error {
 	for _, row := range rows {
 		observed := now.Add(-time.Duration(max(row.AgeMS, 0)) * time.Millisecond)
 		for _, hop := range row.RXTHops {
-			s.storeLinkLocked(hop, observed, row.Packet)
+			s.storeLegacyLinkLocked(hop, observed, row.Packet)
 		}
 	}
 	return nil
@@ -789,11 +789,20 @@ func contains(values []string, target string) bool {
 	return false
 }
 
-func (s *Service) storeLinkLocked(hop Hop, observed time.Time, packet string) {
+// Legacy /rxt.json has historically normalized callsigns for display. Keep
+// that compatibility rule separate from versioned JSON identities.
+func (s *Service) storeLegacyLinkLocked(hop Hop, observed time.Time, packet string) {
 	hop.From = strings.ToUpper(strings.TrimSpace(hop.From))
 	hop.To = strings.ToUpper(strings.TrimSpace(hop.To))
+	s.storeLinkLocked(hop, observed, packet)
+}
+
+// Versioned JSON identities are textual and must match the packet and station
+// cache exactly; neither AX.25 nor display normalization may rewrite them.
+func (s *Service) storeLinkLocked(hop Hop, observed time.Time, packet string) {
 	if !hop.HasData || hop.From == "" || hop.To == "" || hop.From == hop.To ||
-		hop.From == "UNKNOWN" || hop.To == "UNKNOWN" {
+		strings.TrimSpace(hop.From) != hop.From || strings.TrimSpace(hop.To) != hop.To ||
+		strings.EqualFold(hop.From, "UNKNOWN") || strings.EqualFold(hop.To, "UNKNOWN") {
 		return
 	}
 	key := fmt.Sprintf("%s>%s", hop.From, hop.To)

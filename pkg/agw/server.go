@@ -426,20 +426,20 @@ func (s *Server) dispatch(ctx context.Context, cs *clientState, h *Header, data 
 // submitUnproto builds a UI frame from an AGW 'M'/'V' submission and
 // funnels it through the TxSink.
 func (s *Server) submitUnproto(ctx context.Context, cs *clientState, h *Header, via []string, info []byte) error {
-	src, err := ax25.ParseAddress(h.CallFrom)
+	src, err := ax25.ParseCanonicalEndpoint(h.CallFrom)
 	if err != nil {
 		return nil
 	}
-	dst, err := ax25.ParseAddress(h.CallTo)
+	dst, err := ax25.ParseCanonicalEndpoint(h.CallTo)
 	if err != nil {
 		return nil
 	}
 	path := make([]ax25.Address, 0, len(via))
 	for _, v := range via {
-		a, err := ax25.ParseAddress(v)
+		a, err := ax25.ParseCanonicalAddress(v)
 		if err != nil {
 			s.logger.Debug("agw via parse", "addr", v, "err", err)
-			continue
+			return nil
 		}
 		path = append(path, a)
 	}

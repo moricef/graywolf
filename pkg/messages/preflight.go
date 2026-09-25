@@ -263,11 +263,11 @@ func preflightAckFrame(ourCall, peerCall, msgID string) (*ax25.Frame, error) {
 	if err != nil {
 		return nil, err
 	}
-	src, err := ax25.ParseAddress(ourCall)
+	src, err := ax25.ParseCanonicalEndpoint(ourCall)
 	if err != nil {
 		return nil, fmt.Errorf("messages: ack source: %w", err)
 	}
-	dest, err := ax25.ParseAddress("APGRWO")
+	dest, err := ax25.ParseCanonicalEndpoint("APGRWO")
 	if err != nil {
 		return nil, fmt.Errorf("messages: ack dest: %w", err)
 	}

@@ -613,11 +613,11 @@ func (s *Sender) buildFrame(row *configstore.Message) (*ax25.Frame, error) {
 	if err != nil {
 		return nil, fmt.Errorf("messages: encode: %w", err)
 	}
-	src, err := ax25.ParseAddress(row.FromCall)
+	src, err := ax25.ParseCanonicalEndpoint(row.FromCall)
 	if err != nil {
 		return nil, fmt.Errorf("messages: source %q: %w", row.FromCall, err)
 	}
-	dest, err := ax25.ParseAddress("APGRWO")
+	dest, err := ax25.ParseCanonicalEndpoint("APGRWO")
 	if err != nil {
 		return nil, fmt.Errorf("messages: dest: %w", err)
 	}
@@ -645,7 +645,10 @@ func parsePath(p string) ([]ax25.Address, error) {
 		if part == "" {
 			continue
 		}
-		addr, err := ax25.ParseAddress(part)
+		if strings.HasSuffix(part, "*") {
+			return nil, fmt.Errorf("outgoing path %q must not be repeated", part)
+		}
+		addr, err := ax25.ParseCanonicalAddress(part)
 		if err != nil {
 			return nil, fmt.Errorf("%q: %w", part, err)
 		}

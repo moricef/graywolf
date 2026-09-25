@@ -58,6 +58,31 @@ func TestSenderUsesDirectTNC2ForExtendedSource(t *testing.T) {
 	}
 }
 
+func TestMessageAX25BoundaryRefusesNoncanonicalText(t *testing.T) {
+	rig := buildSender(t, FallbackPolicyRFOnly, true)
+	defer rig.close()
+	row := newOutboundDM(t, rig, "F4MLV-01", "F1ZDB-10", "identity test")
+	if _, err := rig.sender.buildFrame(row); err == nil {
+		t.Fatal("AX.25 message silently changed F4MLV-01 to F4MLV-1")
+	}
+	if _, err := preflightAckFrame("F4MLV-01", "F1ZDB-10", "123"); err == nil {
+		t.Fatal("AX.25 ACK silently changed F4MLV-01 to F4MLV-1")
+	}
+	if _, err := parsePath("WIDE1-01"); err == nil {
+		t.Fatal("AX.25 message path silently changed WIDE1-01 to WIDE1-1")
+	}
+	textRF := &capturedTextRF{}
+	rig.sender.cfg.TextRF = textRF
+	result := rig.sender.Send(context.Background(), row)
+	if result.Err != nil {
+		t.Fatalf("textual message rejected: %+v", result)
+	}
+	packet, err := tnc2.Parse(textRF.raw)
+	if err != nil || packet.Source.Text != "F4MLV-01" {
+		t.Fatalf("textual message identity changed: packet=%+v err=%v", packet, err)
+	}
+}
+
 func TestPreflightAutoAckUsesDirectTNC2WithoutAX25(t *testing.T) {
 	rf := &capturedTextRF{}
 	sink := &fakeTxSink{}

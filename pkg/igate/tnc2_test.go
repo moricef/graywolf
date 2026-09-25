@@ -97,3 +97,17 @@ func TestParseTNC2RejectsBadLine(t *testing.T) {
 		}
 	}
 }
+
+func TestParseTNC2RejectsNoncanonicalAX25Identity(t *testing.T) {
+	for _, line := range []string{
+		"W5ABC-01>APRS:>test",
+		"W5ABC>APRS-00:>test",
+		"W5ABC>APRS,WIDE1-01:>test",
+		"w5abc>APRS:>test",
+		"W5ABC*>APRS:>test",
+	} {
+		if f, err := parseTNC2(line); err == nil {
+			t.Errorf("parseTNC2(%q) = %+v; want refusal before AX.25 output", line, f)
+		}
+	}
+}

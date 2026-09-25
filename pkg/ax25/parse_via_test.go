@@ -15,6 +15,8 @@ func TestParseVia(t *testing.T) {
 		{name: "multi with spaces", in: " WIDE1-1 , WIDE2-1 ", want: []string{"WIDE1-1", "WIDE2-1"}},
 		{name: "explicit digi", in: "N0CALL-3", want: []string{"N0CALL-3"}},
 		{name: "rejects repeated marker", in: "WIDE1-1*", wantErr: true},
+		{name: "rejects noncanonical ssid", in: "WIDE1-01", wantErr: true},
+		{name: "rejects lowercase", in: "wide1-1", wantErr: true},
 		{name: "rejects bad ssid", in: "WIDE1-99", wantErr: true},
 		{name: "rejects bad call", in: "wide1-1,!!!", wantErr: true},
 		{name: "rejects too many hops", in: "A,B,C,D,E,F,G,H,I", wantErr: true},

@@ -121,7 +121,7 @@ func beaconConfigFromStore(b configstore.Beacon, smart *configstore.SmartBeaconC
 }
 
 func beaconConfigFromStoreWithMode(b configstore.Beacon, smart *configstore.SmartBeaconConfig, stationCall string, textual bool) (beacon.Config, error) {
-	resolved, err := callsign.Resolve(b.Callsign, stationCall)
+	_, err := callsign.Resolve(b.Callsign, stationCall)
 	if err != nil {
 		return beacon.Config{}, fmt.Errorf("resolve callsign (override %q, station %q): %w", b.Callsign, stationCall, err)
 	}
@@ -168,11 +168,11 @@ func beaconConfigFromStoreWithMode(b configstore.Beacon, smart *configstore.Smar
 			sourceText = strings.TrimSpace(stationCall)
 		}
 		destText = strings.TrimSpace(b.Destination)
-		src, err = ax25.ParseAddress(resolved)
+		src, err = ax25.ParseCanonicalEndpoint(sourceText)
 		if err != nil {
-			return beacon.Config{}, fmt.Errorf("parse callsign %q: %w", resolved, err)
+			return beacon.Config{}, fmt.Errorf("parse callsign %q: %w", sourceText, err)
 		}
-		dest, err = ax25.ParseAddress(b.Destination)
+		dest, err = ax25.ParseCanonicalEndpoint(destText)
 		if err != nil {
 			return beacon.Config{}, fmt.Errorf("parse destination %q: %w", b.Destination, err)
 		}
@@ -181,7 +181,10 @@ func beaconConfigFromStoreWithMode(b configstore.Beacon, smart *configstore.Smar
 			if p == "" {
 				continue
 			}
-			a, err := ax25.ParseAddress(p)
+			if strings.HasSuffix(p, "*") {
+				return beacon.Config{}, fmt.Errorf("outgoing path %q must not be repeated", p)
+			}
+			a, err := ax25.ParseCanonicalAddress(p)
 			if err != nil {
 				return beacon.Config{}, fmt.Errorf("parse path %q: %w", p, err)
 			}
