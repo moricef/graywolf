@@ -9331,6 +9331,15 @@
                 "use_gps": {
                     "type": "boolean"
                 },
+                "weather_baud": {
+                    "type": "integer"
+                },
+                "weather_bucket": {
+                    "type": "string"
+                },
+                "weather_device": {
+                    "type": "string"
+                },
                 "weather_path": {
                     "type": "string"
                 },
@@ -9467,6 +9476,15 @@
                 },
                 "use_gps": {
                     "type": "boolean"
+                },
+                "weather_baud": {
+                    "type": "integer"
+                },
+                "weather_bucket": {
+                    "type": "string"
+                },
+                "weather_device": {
+                    "type": "string"
                 },
                 "weather_path": {
                     "type": "string"

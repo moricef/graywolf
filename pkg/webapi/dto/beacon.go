@@ -43,6 +43,9 @@ type BeaconRequest struct {
 	CustomInfo     string  `json:"custom_info"`
 	WeatherSource  string  `json:"weather_source"`
 	WeatherPath    string  `json:"weather_path"`
+	WeatherDevice  string  `json:"weather_device"`
+	WeatherBaud    uint32  `json:"weather_baud"`
+	WeatherBucket  string  `json:"weather_bucket"`
 	ObjectName     string  `json:"object_name"`
 	Power          uint32  `json:"power"`
 	Height         uint32  `json:"height"`
@@ -117,11 +120,23 @@ func (r BeaconRequest) Validate() error {
 			return fmt.Errorf("latitude/longitude required when use_gps is false")
 		}
 		if r.Type == "weather" {
-			if r.WeatherSource != "wxnow_file" {
-				return fmt.Errorf("weather_source must be wxnow_file")
-			}
-			if strings.TrimSpace(r.WeatherPath) == "" {
-				return fmt.Errorf("weather_path is required for a weather beacon")
+			switch r.WeatherSource {
+			case "wxnow_file":
+				if strings.TrimSpace(r.WeatherPath) == "" {
+					return fmt.Errorf("weather_path is required for a WxNow weather beacon")
+				}
+			case "davis_serial":
+				if strings.TrimSpace(r.WeatherDevice) == "" {
+					return fmt.Errorf("weather_device is required for a Davis weather beacon")
+				}
+				if r.WeatherBaud == 0 {
+					return fmt.Errorf("weather_baud is required for a Davis weather beacon")
+				}
+				if r.WeatherBucket != "0.2mm" && r.WeatherBucket != "0.01in" {
+					return fmt.Errorf("weather_bucket must be 0.2mm or 0.01in")
+				}
+			default:
+				return fmt.Errorf("weather_source must be wxnow_file or davis_serial")
 			}
 		}
 	case "custom":
@@ -237,6 +252,9 @@ func (r BeaconRequest) ToModel() configstore.Beacon {
 		CustomInfo:     r.CustomInfo,
 		WeatherSource:  r.WeatherSource,
 		WeatherPath:    r.WeatherPath,
+		WeatherDevice:  r.WeatherDevice,
+		WeatherBaud:    r.WeatherBaud,
+		WeatherBucket:  r.WeatherBucket,
 		ObjectName:     r.ObjectName,
 		Power:          r.Power,
 		Height:         r.Height,
@@ -298,6 +316,9 @@ func (r BeaconRequest) ApplyToUpdate(id uint32, existing configstore.Beacon) con
 		CustomInfo:     r.CustomInfo,
 		WeatherSource:  r.WeatherSource,
 		WeatherPath:    r.WeatherPath,
+		WeatherDevice:  r.WeatherDevice,
+		WeatherBaud:    r.WeatherBaud,
+		WeatherBucket:  r.WeatherBucket,
 		ObjectName:     r.ObjectName,
 		Power:          r.Power,
 		Height:         r.Height,
@@ -347,6 +368,9 @@ type BeaconResponse struct {
 	CustomInfo     string  `json:"custom_info"`
 	WeatherSource  string  `json:"weather_source"`
 	WeatherPath    string  `json:"weather_path"`
+	WeatherDevice  string  `json:"weather_device"`
+	WeatherBaud    uint32  `json:"weather_baud"`
+	WeatherBucket  string  `json:"weather_bucket"`
 	ObjectName     string  `json:"object_name"`
 	Power          uint32  `json:"power"`
 	Height         uint32  `json:"height"`
@@ -393,6 +417,9 @@ func BeaconFromModel(m configstore.Beacon) BeaconResponse {
 		CustomInfo:     m.CustomInfo,
 		WeatherSource:  m.WeatherSource,
 		WeatherPath:    m.WeatherPath,
+		WeatherDevice:  m.WeatherDevice,
+		WeatherBaud:    m.WeatherBaud,
+		WeatherBucket:  m.WeatherBucket,
 		ObjectName:     m.ObjectName,
 		Power:          m.Power,
 		Height:         m.Height,

@@ -2494,6 +2494,9 @@ export interface components {
             tone?: string;
             type?: string;
             use_gps?: boolean;
+            weather_baud?: number;
+            weather_bucket?: string;
+            weather_device?: string;
             weather_path?: string;
             weather_source?: string;
         };
@@ -2542,6 +2545,9 @@ export interface components {
             tone?: string;
             type?: string;
             use_gps?: boolean;
+            weather_baud?: number;
+            weather_bucket?: string;
+            weather_device?: string;
             weather_path?: string;
             weather_source?: string;
         };

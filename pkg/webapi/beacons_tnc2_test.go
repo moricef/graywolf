@@ -87,6 +87,32 @@ func TestWeatherBeaconFieldsRoundTripOnConfiguredTextChannel(t *testing.T) {
 	}
 }
 
+func TestDavisWeatherFieldsRoundTrip(t *testing.T) {
+	srv, _ := newTestServer(t)
+	mux := http.NewServeMux()
+	srv.RegisterRoutes(mux)
+	body := `{
+		"type":"weather", "channel":0, "callsign":"F4JJE-15",
+		"destination":"APGRWO", "use_gps":true,
+		"weather_source":"davis_serial", "weather_device":"/dev/ttyUSB0",
+		"weather_baud":19200, "weather_bucket":"0.2mm",
+		"interval":600, "send_path":"is_only", "enabled":true
+	}`
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/beacons", strings.NewReader(body)))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create Davis weather beacon: %d %s", rec.Code, rec.Body.String())
+	}
+	var created dto.BeaconResponse
+	if err := json.NewDecoder(rec.Body).Decode(&created); err != nil {
+		t.Fatal(err)
+	}
+	if created.WeatherSource != "davis_serial" || created.WeatherDevice != "/dev/ttyUSB0" ||
+		created.WeatherBaud != 19200 || created.WeatherBucket != "0.2mm" {
+		t.Fatalf("Davis fields lost: %+v", created)
+	}
+}
+
 func TestExtendedBeaconOnlyOnConfiguredTextChannel(t *testing.T) {
 	srv, _ := newTestServer(t)
 	mux := http.NewServeMux()

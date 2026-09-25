@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	weatherobs "github.com/chrissnell/graywolf/pkg/weather"
 )
 
 func writeWxNowTestFile(t *testing.T, contents string) string {
@@ -18,7 +20,11 @@ func writeWxNowTestFile(t *testing.T, contents string) string {
 
 func TestReadWxNow(t *testing.T) {
 	path := writeWxNowTestFile(t, "Feb 01 2009 12:34\r\n272/010g006t069r010p030P020h61b10150\r\n")
-	got, err := ReadWxNow(path)
+	observation, err := weatherobs.ReadWxNow(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := weatherobs.EncodeAPRS(observation)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,7 +43,7 @@ func TestReadWxNowRejectsMalformedFiles(t *testing.T) {
 		{"weather line too long", "Feb 01 2009 12:34\nt069" + strings.Repeat("x", 237) + "\n", "exceeds"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := ReadWxNow(writeWxNowTestFile(t, tc.contents))
+			_, err := weatherobs.ReadWxNow(writeWxNowTestFile(t, tc.contents))
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("ReadWxNow() error = %v, want substring %q", err, tc.want)
 			}

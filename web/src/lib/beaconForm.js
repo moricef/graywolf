@@ -17,7 +17,7 @@ export const BEACON_TYPE_OPTIONS = Object.freeze([
   {
     value: 'weather',
     label: 'Weather',
-    description: 'a positioned APRS weather report read from a WxNow.txt file.',
+    description: 'a positioned APRS weather report from a Davis console or WxNow.txt file.',
   },
   {
     value: 'custom',
@@ -38,16 +38,35 @@ export function beaconExtraFields(row = {}) {
       ? row.weather_source
       : 'wxnow_file',
     weather_path: typeof row.weather_path === 'string' ? row.weather_path : '',
+    weather_device: typeof row.weather_device === 'string' ? row.weather_device : '',
+    weather_baud: Number.isFinite(Number(row.weather_baud)) && Number(row.weather_baud) > 0
+      ? String(row.weather_baud)
+      : '19200',
+    weather_bucket: row.weather_bucket === '0.01in' ? '0.01in' : '0.2mm',
   };
 }
 
 export function validateWeatherBeacon(form) {
   if (form?.type !== 'weather') return '';
-  if (form.weather_source !== 'wxnow_file') return 'Weather source must be WxNow.txt';
-  if (typeof form.weather_path !== 'string' || form.weather_path.trim() === '') {
-    return 'WxNow.txt path is required for a weather beacon';
+  if (form.weather_source === 'wxnow_file') {
+    if (typeof form.weather_path !== 'string' || form.weather_path.trim() === '') {
+      return 'WxNow.txt path is required for a weather beacon';
+    }
+    return '';
   }
-  return '';
+  if (form.weather_source === 'davis_serial') {
+    if (typeof form.weather_device !== 'string' || form.weather_device.trim() === '') {
+      return 'Serial device is required for a Davis weather beacon';
+    }
+    if (!Number.isInteger(Number(form.weather_baud)) || Number(form.weather_baud) <= 0) {
+      return 'Serial baud must be a positive integer';
+    }
+    if (form.weather_bucket !== '0.2mm' && form.weather_bucket !== '0.01in') {
+      return 'Select the Davis rain collector size';
+    }
+    return '';
+  }
+  return 'Select a supported weather source';
 }
 
 export function validateCustomBeacon(form) {

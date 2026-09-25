@@ -125,6 +125,7 @@
     pos_source: 'gps', latitude: '', longitude: '', alt_ft: '',
     comment: '', comment_cmd: '', custom_info: '',
     weather_source: 'wxnow_file', weather_path: '',
+    weather_device: '', weather_baud: '19200', weather_bucket: '0.2mm',
     interval: '600', slot: '', send_path: 'rf', enabled: true,
     smart_beacon: false,
   });
@@ -358,6 +359,9 @@
     form.custom_info = '';
     form.weather_source = 'wxnow_file';
     form.weather_path = '';
+    form.weather_device = '';
+    form.weather_baud = '19200';
+    form.weather_bucket = '0.2mm';
     customInfoError = '';
     weatherPathError = '';
     form.interval = '600';
@@ -512,6 +516,7 @@
       latitude: lat,
       longitude: lon,
       alt_ft: altFt,
+      weather_baud: parseInt(form.weather_baud, 10) || 0,
     };
     delete data.pos_source;
     delete data.callsign_override;
@@ -766,8 +771,12 @@
               <span class="detail-value">{formatCoords(b)}</span>
             </div>
             <div class="detail-row">
-              <span class="detail-label">WxNow.txt</span>
-              <span class="detail-value detail-comment">{b.weather_path}</span>
+              <span class="detail-label">Weather source</span>
+              <span class="detail-value detail-comment">
+                {b.weather_source === 'davis_serial'
+                  ? `Davis serial — ${b.weather_device} @ ${b.weather_baud || 19200}`
+                  : `WxNow.txt — ${b.weather_path}`}
+              </span>
             </div>
           {:else}
             <div class="detail-row">
@@ -1037,15 +1046,42 @@
       {/if}
       {#if isWeather}
         <FormField label="Weather source" id="bcn-weather-source"
-          hint="The file is re-read at every transmission, so weather software can update it continuously.">
-          <div class="tracker-gps-fixed">WxNow.txt file</div>
+          hint="Davis talks directly to a Vantage console. WxNow.txt remains available for weather software and other hardware.">
+          <RadioGroup bind:value={form.weather_source}>
+            <div class="pos-source-row">
+              <Radio value="davis_serial" label="Davis serial" />
+              <Radio value="wxnow_file" label="WxNow.txt file" />
+            </div>
+          </RadioGroup>
         </FormField>
-        <FormField label="WxNow.txt path" id="bcn-weather-path"
-          error={weatherPathError}
-          hint="Absolute path visible to the Graywolf service. The standard two-line WxNow.txt format is expected.">
-          <Input id="bcn-weather-path" bind:value={form.weather_path}
-            placeholder="/var/lib/weather/WxNow.txt" oninput={() => weatherPathError = ''} />
-        </FormField>
+        {#if form.weather_source === 'davis_serial'}
+          <FormField label="Serial device" id="bcn-weather-device"
+            error={weatherPathError}
+            hint="Device connected to the Davis WeatherLink serial interface.">
+            <Input id="bcn-weather-device" bind:value={form.weather_device}
+              placeholder="/dev/ttyUSB0" oninput={() => weatherPathError = ''} />
+          </FormField>
+          <FormField label="Serial baud" id="bcn-weather-baud"
+            hint="Davis Vantage consoles normally use 19200 baud, 8N1.">
+            <Input id="bcn-weather-baud" bind:value={form.weather_baud} type="number" placeholder="19200" />
+          </FormField>
+          <FormField label="Rain collector" id="bcn-weather-bucket"
+            hint="Must match the collector configured on the Davis station.">
+            <RadioGroup bind:value={form.weather_bucket}>
+              <div class="pos-source-row">
+                <Radio value="0.2mm" label="0.2 mm per tip" />
+                <Radio value="0.01in" label="0.01 inch per tip" />
+              </div>
+            </RadioGroup>
+          </FormField>
+        {:else}
+          <FormField label="WxNow.txt path" id="bcn-weather-path"
+            error={weatherPathError}
+            hint="Absolute path visible to the Graywolf service. The standard two-line WxNow.txt format is expected.">
+            <Input id="bcn-weather-path" bind:value={form.weather_path}
+              placeholder="/var/lib/weather/WxNow.txt" oninput={() => weatherPathError = ''} />
+          </FormField>
+        {/if}
       {:else}
         <FormField label={isCustom ? 'Appended comment' : 'Comment'} id="bcn-comment"
           hint={isCustom

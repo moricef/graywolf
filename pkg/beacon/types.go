@@ -49,8 +49,11 @@ type Config struct {
 	Messaging     bool
 	ObjectName    string             // for TypeObject
 	CustomInfo    string             // for TypeCustom (raw info field override)
-	WeatherSource string             // for TypeWeather; currently "wxnow_file"
+	WeatherSource string             // for TypeWeather: "wxnow_file" or "davis_serial"
 	WeatherPath   string             // path to the WxNow.txt source file
+	WeatherDevice string             // serial device for source "davis_serial"
+	WeatherBaud   uint32             // Davis serial baud (normally 19200)
+	WeatherBucket string             // Davis collector: "0.2mm" or "0.01in"
 	SmartBeacon   *SmartBeaconConfig // non-nil + .Enabled → use for tracker
 	// PHG radio-capability extension (APRS101 ch 7) for fixed-station
 	// position, igate, and object beacons. Emitted only when PHGPower

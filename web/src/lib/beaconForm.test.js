@@ -31,18 +31,30 @@ test('custom info and comment command survive edit-form hydration', () => {
     comment_cmd: '/usr/local/bin/weather-comment --short',
     weather_source: 'wxnow_file',
     weather_path: '',
+    weather_device: '',
+    weather_baud: '19200',
+    weather_bucket: '0.2mm',
   });
   assert.deepEqual(beaconExtraFields({}), {
     custom_info: '', comment_cmd: '', weather_source: 'wxnow_file', weather_path: '',
+    weather_device: '', weather_baud: '19200', weather_bucket: '0.2mm',
   });
 });
 
-test('weather beacons require the WxNow.txt file source', () => {
+test('weather beacons validate WxNow.txt and Davis source settings', () => {
   assert.match(validateWeatherBeacon({
     type: 'weather', weather_source: 'wxnow_file', weather_path: '   ',
   }), /path is required/);
   assert.equal(validateWeatherBeacon({
     type: 'weather', weather_source: 'wxnow_file', weather_path: '/var/lib/weather/WxNow.txt',
+  }), '');
+  assert.match(validateWeatherBeacon({
+    type: 'weather', weather_source: 'davis_serial', weather_device: '',
+    weather_baud: '19200', weather_bucket: '0.2mm',
+  }), /Serial device/);
+  assert.equal(validateWeatherBeacon({
+    type: 'weather', weather_source: 'davis_serial', weather_device: '/dev/ttyUSB0',
+    weather_baud: '19200', weather_bucket: '0.2mm',
   }), '');
   assert.equal(validateWeatherBeacon({ type: 'position' }), '');
 });

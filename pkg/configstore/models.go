@@ -660,16 +660,19 @@ type Beacon struct {
 	Comment        string  `json:"comment"`
 	CommentCmd     string  `json:"comment_cmd"`                               // shell command whose stdout is appended as comment
 	CustomInfo     string  `json:"custom_info"`                               // raw info field override for Type=="custom"
-	WeatherSource  string  `gorm:"not null;default:''" json:"weather_source"` // wxnow_file for Type=="weather"
+	WeatherSource  string  `gorm:"not null;default:''" json:"weather_source"` // wxnow_file | davis_serial
 	WeatherPath    string  `gorm:"not null;default:''" json:"weather_path"`   // path to WxNow.txt
-	ObjectName     string  `json:"object_name"`                               // for Type=="object"
-	Power          uint32  `gorm:"not null;default:0" json:"power"`           // watts for PHG
-	Height         uint32  `gorm:"not null;default:0" json:"height"`          // feet HAAT for PHG
-	Gain           uint32  `gorm:"not null;default:0" json:"gain"`            // dBi for PHG
-	Dir            uint32  `gorm:"not null;default:0" json:"dir"`             // antenna direction 0..8 for PHG
-	Freq           string  `json:"freq"`                                      // frequency string for freq info
-	Tone           string  `json:"tone"`                                      // CTCSS/DCS tone
-	FreqOffset     string  `json:"freq_offset"`                               // repeater offset
+	WeatherDevice  string  `gorm:"not null;default:''" json:"weather_device"` // Davis serial device
+	WeatherBaud    uint32  `gorm:"not null;default:19200" json:"weather_baud"`
+	WeatherBucket  string  `gorm:"not null;default:'0.2mm'" json:"weather_bucket"` // 0.2mm | 0.01in
+	ObjectName     string  `json:"object_name"`                                    // for Type=="object"
+	Power          uint32  `gorm:"not null;default:0" json:"power"`                // watts for PHG
+	Height         uint32  `gorm:"not null;default:0" json:"height"`               // feet HAAT for PHG
+	Gain           uint32  `gorm:"not null;default:0" json:"gain"`                 // dBi for PHG
+	Dir            uint32  `gorm:"not null;default:0" json:"dir"`                  // antenna direction 0..8 for PHG
+	Freq           string  `json:"freq"`                                           // frequency string for freq info
+	Tone           string  `json:"tone"`                                           // CTCSS/DCS tone
+	FreqOffset     string  `json:"freq_offset"`                                    // repeater offset
 	DelaySeconds   uint32  `gorm:"not null;default:30" json:"delay_seconds"`
 	EverySeconds   uint32  `gorm:"not null;default:1800" json:"interval"`
 	SlotSeconds    int32   `gorm:"not null;default:-1" json:"slot_seconds"`

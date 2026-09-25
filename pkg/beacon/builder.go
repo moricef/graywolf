@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/chrissnell/graywolf/pkg/aprs"
+	weatherobs "github.com/chrissnell/graywolf/pkg/weather"
+	"github.com/chrissnell/graywolf/pkg/weather/davis"
 )
 
 // buildInfo constructs the APRS info field for b, including optional
@@ -147,12 +149,26 @@ func (s *Scheduler) buildInfo(ctx context.Context, b Config) (string, error) {
 		return ObjectInfo(b.ObjectName, true, ts, lat, lon, altM, b.SymbolTable, b.SymbolCode, phg, comment), nil
 
 	case TypeWeather:
-		if b.WeatherSource != "wxnow_file" {
+		var source weatherobs.Source
+		switch b.WeatherSource {
+		case "wxnow_file":
+			source = weatherobs.WxNowSource{Path: b.WeatherPath}
+		case "davis_serial":
+			source = davis.SerialConfig{
+				Device: b.WeatherDevice,
+				Baud:   int(b.WeatherBaud),
+				Bucket: davis.Bucket(b.WeatherBucket),
+			}
+		default:
 			return "", fmt.Errorf("weather beacon: unsupported source %q", b.WeatherSource)
 		}
-		weather, err := ReadWxNow(b.WeatherPath)
+		observation, err := source.Read(ctx)
 		if err != nil {
-			return "", fmt.Errorf("weather beacon: %w", err)
+			return "", fmt.Errorf("weather beacon: read %s: %w", b.WeatherSource, err)
+		}
+		weatherAppendix, err := weatherobs.EncodeAPRS(observation)
+		if err != nil {
+			return "", fmt.Errorf("weather beacon: encode APRS: %w", err)
 		}
 		lat, lon := b.Lat, b.Lon
 		if b.UseGps {
@@ -167,10 +183,9 @@ func (s *Scheduler) buildInfo(ctx context.Context, b Config) (string, error) {
 		} else if lat == 0 && lon == 0 {
 			return "", fmt.Errorf("weather beacon: fixed coordinates are 0/0 (configure lat/lon or enable use_gps)")
 		}
-		// WxNow's second line is already the complete APRS weather appendix.
-		// Keep it immediately after the mandatory weather symbol. Altitude,
-		// PHG and comments would otherwise be inserted ahead of it.
-		return PositionInfo(lat, lon, 0, 0, 0, '/', '_', false, "", weather, 0), nil
+		// Keep the complete weather appendix immediately after the mandatory
+		// weather symbol. Altitude, PHG and comments would precede and corrupt it.
+		return PositionInfo(lat, lon, 0, 0, 0, '/', '_', false, "", weatherAppendix, 0), nil
 
 	case TypeCustom:
 		if b.CustomInfo == "" {

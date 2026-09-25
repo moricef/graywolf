@@ -153,6 +153,19 @@ func TestBeaconRequest_Validate_WeatherSource(t *testing.T) {
 	if m.Comment != "" || m.CommentCmd != "" {
 		t.Fatalf("weather comment fields must be cleared: %+v", m)
 	}
+	davis := valid
+	davis.WeatherSource = "davis_serial"
+	davis.WeatherPath = ""
+	davis.WeatherDevice = "/dev/ttyUSB0"
+	davis.WeatherBaud = 19200
+	davis.WeatherBucket = "0.2mm"
+	if err := davis.Validate(); err != nil {
+		t.Fatalf("valid Davis source rejected: %v", err)
+	}
+	davis.WeatherBucket = "unknown"
+	if err := davis.Validate(); err == nil || !strings.Contains(err.Error(), "weather_bucket") {
+		t.Fatalf("invalid Davis bucket accepted: %v", err)
+	}
 }
 
 func strPtr(s string) *string { return &s }
