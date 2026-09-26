@@ -6,7 +6,7 @@
 //   - creds:          credential list (one cache for the whole app).
 //   - lastUsedCredByTarget: peer -> cred id used most recently for free-form
 //                            fires; primes the picker default.
-import { remoteCredsApi, remoteMacrosApi } from './api.js';
+import { remoteCommandCredsApi, remoteCredsApi, remoteMacrosApi } from './api.js';
 
 function describe(error, fallback) {
   if (!error) return fallback;
@@ -16,6 +16,7 @@ function describe(error, fallback) {
 
 class RemoteActionsStore {
   creds = $state([]);
+  commandCreds = $state([]);
   macrosByTarget = $state({}); // { 'KK7XYZ-9': [macro, ...] }
   lastUsedCredByTarget = $state({}); // { 'KK7XYZ-9': 4 }
   loading = $state(false);
@@ -41,13 +42,28 @@ class RemoteActionsStore {
     this.error = null;
   }
 
+  async loadCommandCreds() {
+    const { data, error } = await remoteCommandCredsApi.list();
+    if (error) {
+      this.error = describe(error, 'Failed to load remote command credentials');
+      return;
+    }
+    this.commandCreds = data ?? [];
+    this.error = null;
+  }
+
   async refreshTarget(target) {
     this.loading = true;
     try {
-      await Promise.all([this.loadCreds(), this.loadMacros(target)]);
+      await Promise.all([this.loadCreds(), this.loadMacros(target), this.loadCommandCreds()]);
     } finally {
       this.loading = false;
     }
+  }
+
+  commandCredFor(target) {
+    const normalized = (target ?? '').trim().toUpperCase();
+    return this.commandCreds.find((c) => c.target_call === normalized) ?? null;
   }
 
   rememberCredForTarget(target, credId) {

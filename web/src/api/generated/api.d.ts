@@ -1684,6 +1684,59 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/remote-actions/command-credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List authenticated remote-control credentials */
+        get: operations["listRemoteCommandCredentials"];
+        put?: never;
+        /** Install an authenticated remote-control credential */
+        post: operations["createRemoteCommandCredential"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/remote-actions/command-credentials/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update an authenticated remote-control credential */
+        put: operations["updateRemoteCommandCredential"];
+        post?: never;
+        /** Remove an authenticated remote-control credential */
+        delete: operations["deleteRemoteCommandCredential"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/remote-actions/commands/{target}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Queue an authenticated remote command */
+        post: operations["sendRemoteCommand"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/remote-actions/credentials": {
         parameters: {
             query?: never;
@@ -3267,6 +3320,29 @@ export interface components {
             target_call?: string;
             updated_at?: string;
         };
+        "dto.RemoteCommandCredential": {
+            created_at?: string;
+            id?: number;
+            key_id?: string;
+            last_counter?: string;
+            last_used_at?: string;
+            name?: string;
+            target_call?: string;
+            updated_at?: string;
+        };
+        "dto.RemoteCommandCredentialRequest": {
+            name?: string;
+            secret_b64url?: string;
+            target_call?: string;
+        };
+        "dto.RemoteCommandSendRequest": {
+            channel?: number;
+            command?: string;
+        };
+        "dto.RemoteCommandSendResponse": {
+            counter?: string;
+            message?: components["schemas"]["dto.MessageResponse"];
+        };
         "dto.RemoteOTPCode": {
             code?: string;
             expires_at?: string;
@@ -4158,6 +4234,12 @@ export interface components {
         "dto.PttRequest": {
             content: {
                 "application/json": components["schemas"]["dto.PttRequest"];
+            };
+        };
+        /** @description Credential */
+        "dto.RemoteCommandCredentialRequest": {
+            content: {
+                "application/json": components["schemas"]["dto.RemoteCommandCredentialRequest"];
             };
         };
     };
@@ -10330,6 +10412,181 @@ export interface operations {
             };
             /** @description Internal Server Error */
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["webtypes.ErrorResponse"];
+                };
+            };
+        };
+    };
+    listRemoteCommandCredentials: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["dto.RemoteCommandCredential"][];
+                };
+            };
+        };
+    };
+    createRemoteCommandCredential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: components["requestBodies"]["dto.RemoteCommandCredentialRequest"];
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["dto.RemoteCommandCredential"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["webtypes.ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["webtypes.ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateRemoteCommandCredential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Credential id */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: components["requestBodies"]["dto.RemoteCommandCredentialRequest"];
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["dto.RemoteCommandCredential"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["webtypes.ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["webtypes.ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteRemoteCommandCredential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Credential id */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    sendRemoteCommand: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Target callsign */
+                target: string;
+            };
+            cookie?: never;
+        };
+        /** @description Command */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["dto.RemoteCommandSendRequest"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["dto.RemoteCommandSendResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["webtypes.ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["webtypes.ErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -15,10 +15,11 @@ import (
 // the wiring layer; the REST handlers fall back to 503 when the
 // service is missing.
 type Service struct {
-	db     *gorm.DB
-	creds  *CredStore
-	macros *MacroStore
-	logger *slog.Logger
+	db       *gorm.DB
+	creds    *CredStore
+	macros   *MacroStore
+	commands *CommandCredentialStore
+	logger   *slog.Logger
 }
 
 // ServiceConfig wires the service to its dependencies.
@@ -38,12 +39,14 @@ func NewService(cfg ServiceConfig) (*Service, error) {
 		logger = slog.Default()
 	}
 	return &Service{
-		db:     cfg.DB,
-		creds:  NewCredStore(cfg.DB),
-		macros: NewMacroStore(cfg.DB),
-		logger: logger,
+		db:       cfg.DB,
+		creds:    NewCredStore(cfg.DB),
+		macros:   NewMacroStore(cfg.DB),
+		commands: NewCommandCredentialStore(cfg.DB),
+		logger:   logger,
 	}, nil
 }
 
-func (s *Service) Creds() *CredStore   { return s.creds }
-func (s *Service) Macros() *MacroStore { return s.macros }
+func (s *Service) Creds() *CredStore                 { return s.creds }
+func (s *Service) Macros() *MacroStore               { return s.macros }
+func (s *Service) Commands() *CommandCredentialStore { return s.commands }

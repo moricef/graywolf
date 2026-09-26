@@ -2134,6 +2134,48 @@ definitions:
       updated_at:
         type: string
     type: object
+  dto.RemoteCommandCredential:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: integer
+      key_id:
+        type: string
+      last_counter:
+        type: string
+      last_used_at:
+        type: string
+      name:
+        type: string
+      target_call:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  dto.RemoteCommandCredentialRequest:
+    properties:
+      name:
+        type: string
+      secret_b64url:
+        type: string
+      target_call:
+        type: string
+    type: object
+  dto.RemoteCommandSendRequest:
+    properties:
+      channel:
+        type: integer
+      command:
+        type: string
+    type: object
+  dto.RemoteCommandSendResponse:
+    properties:
+      counter:
+        type: string
+      message:
+        $ref: '#/definitions/dto.MessageResponse'
+    type: object
   dto.RemoteOTPCode:
     properties:
       code:
@@ -7874,6 +7916,148 @@ paths:
       summary: List unseen release notes for the caller
       tags:
         - release-notes
+  /remote-actions/command-credentials:
+    get:
+      operationId: listRemoteCommandCredentials
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/dto.RemoteCommandCredential'
+            type: array
+      security:
+        - CookieAuth: []
+      summary: List authenticated remote-control credentials
+      tags:
+        - remote-actions
+    post:
+      consumes:
+        - application/json
+      operationId: createRemoteCommandCredential
+      parameters:
+        - description: Credential
+          in: body
+          name: body
+          required: true
+          schema:
+            $ref: '#/definitions/dto.RemoteCommandCredentialRequest'
+      produces:
+        - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/dto.RemoteCommandCredential'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/webtypes.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/webtypes.ErrorResponse'
+      security:
+        - CookieAuth: []
+      summary: Install an authenticated remote-control credential
+      tags:
+        - remote-actions
+  /remote-actions/command-credentials/{id}:
+    delete:
+      operationId: deleteRemoteCommandCredential
+      parameters:
+        - description: Credential id
+          in: path
+          name: id
+          required: true
+          type: integer
+      responses:
+        "204":
+          description: No Content
+      security:
+        - CookieAuth: []
+      summary: Remove an authenticated remote-control credential
+      tags:
+        - remote-actions
+    put:
+      consumes:
+        - application/json
+      operationId: updateRemoteCommandCredential
+      parameters:
+        - description: Credential id
+          in: path
+          name: id
+          required: true
+          type: integer
+        - description: Credential
+          in: body
+          name: body
+          required: true
+          schema:
+            $ref: '#/definitions/dto.RemoteCommandCredentialRequest'
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.RemoteCommandCredential'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/webtypes.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/webtypes.ErrorResponse'
+      security:
+        - CookieAuth: []
+      summary: Update an authenticated remote-control credential
+      tags:
+        - remote-actions
+  /remote-actions/commands/{target}:
+    post:
+      consumes:
+        - application/json
+      operationId: sendRemoteCommand
+      parameters:
+        - description: Target callsign
+          in: path
+          name: target
+          required: true
+          type: string
+        - description: Command
+          in: body
+          name: body
+          required: true
+          schema:
+            $ref: '#/definitions/dto.RemoteCommandSendRequest'
+      produces:
+        - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            $ref: '#/definitions/dto.RemoteCommandSendResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/webtypes.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/webtypes.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/webtypes.ErrorResponse'
+      security:
+        - CookieAuth: []
+      summary: Queue an authenticated remote command
+      tags:
+        - remote-actions
   /remote-actions/credentials:
     get:
       operationId: listRemoteOTPCredentials

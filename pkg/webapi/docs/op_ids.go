@@ -427,16 +427,21 @@ const (
 // Messages. Wire shape: pkg/webapi/dto/remote_actions.go. Composition
 // root: pkg/remoteactions/.
 const (
-	OpListRemoteOTPCredentials  = "listRemoteOTPCredentials"
-	OpCreateRemoteOTPCredential = "createRemoteOTPCredential"
-	OpUpdateRemoteOTPCredential = "updateRemoteOTPCredential"
-	OpDeleteRemoteOTPCredential = "deleteRemoteOTPCredential"
-	OpListRemoteActionMacros    = "listRemoteActionMacros"
-	OpCreateRemoteActionMacro   = "createRemoteActionMacro"
-	OpUpdateRemoteActionMacro   = "updateRemoteActionMacro"
-	OpDeleteRemoteActionMacro   = "deleteRemoteActionMacro"
-	OpReorderRemoteActionMacros = "reorderRemoteActionMacros"
-	OpGenerateRemoteOTPCode     = "generateRemoteOTPCode"
+	OpListRemoteOTPCredentials      = "listRemoteOTPCredentials"
+	OpCreateRemoteOTPCredential     = "createRemoteOTPCredential"
+	OpUpdateRemoteOTPCredential     = "updateRemoteOTPCredential"
+	OpDeleteRemoteOTPCredential     = "deleteRemoteOTPCredential"
+	OpListRemoteActionMacros        = "listRemoteActionMacros"
+	OpCreateRemoteActionMacro       = "createRemoteActionMacro"
+	OpUpdateRemoteActionMacro       = "updateRemoteActionMacro"
+	OpDeleteRemoteActionMacro       = "deleteRemoteActionMacro"
+	OpReorderRemoteActionMacros     = "reorderRemoteActionMacros"
+	OpGenerateRemoteOTPCode         = "generateRemoteOTPCode"
+	OpListRemoteCommandCredentials  = "listRemoteCommandCredentials"
+	OpCreateRemoteCommandCredential = "createRemoteCommandCredential"
+	OpUpdateRemoteCommandCredential = "updateRemoteCommandCredential"
+	OpDeleteRemoteCommandCredential = "deleteRemoteCommandCredential"
+	OpSendRemoteCommand             = "sendRemoteCommand"
 )
 
 // Fixed Points resource — /api/fixed-points/* — server-side fixed-point

@@ -218,6 +218,8 @@ type migration struct {
 //	    of how the column was created. Post-AutoMigrate; the ALTER is
 //	    skipped when AutoMigrate already added the column (columnExists
 //	    guard). See graywolf#517.
+//	30 — remote_command_auth: store one CA2RXU HMAC key and persistent
+//	     sender counter per controlled station.
 var schemaMigrations = []migration{
 	{version: 1, name: "beacon_compress_default", phase: postAutoMigrate, run: migrateBeaconCompressDefault},
 	{version: 2, name: "channel_device_fields", phase: preAutoMigrate, run: migrateChannelDeviceFields},
@@ -248,6 +250,7 @@ var schemaMigrations = []migration{
 	{version: 27, name: "igate_is_tx_via", phase: postAutoMigrate, run: migrateIGateIsTxVia},
 	{version: 28, name: "igate_gate_is_to_rf_backfill", phase: postAutoMigrate, run: migrateIGateGateIsToRfBackfill},
 	{version: 29, name: "channels_enabled", phase: postAutoMigrate, run: migrateChannelsEnabled},
+	{version: 30, name: "remote_command_auth", phase: postAutoMigrate, run: migrateRemoteCommandAuth},
 }
 
 // runMigrations applies every pending migration in the given phase,

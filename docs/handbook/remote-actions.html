@@ -62,7 +62,7 @@
 
   <main class="content">
     <h1>Remote Actions</h1>
-    <p class="subtitle">Send <code>@@&lt;otp&gt;#&lt;action&gt;</code> commands at another station from inside Messages</p>
+    <p class="subtitle">Send Actions and authenticated CA2RXU control commands from inside Messages</p>
 
     <p>
       A <strong>Remote Action</strong> is the outbound side of the same
@@ -293,6 +293,46 @@
       the peer that happens to start with <code>ok</code> will be
       mis-badged, but unrelated chat will not be. False negatives are
       preferred over false positives.
+    </p>
+
+    <h2>Authenticated CA2RXU iGate control</h2>
+
+    <p>
+      A CA2RXU iGate with Remote Command Authentication enabled uses a
+      different protocol from the TOTP Actions above. Its commands are signed
+      with HMAC-SHA-256 and a persistent counter, so a captured radio packet
+      cannot be changed or executed again. The supported commands are
+      <code>EM=ON</code>, <code>EM=OFF</code>, <code>TX=ON</code>,
+      <code>TX=OFF</code>, and <code>COMMIT</code>.
+    </p>
+
+    <ol>
+      <li>Open a direct-message thread to the iGate callsign.</li>
+      <li>Open the Remote Actions drawer with the zap icon.</li>
+      <li>In <strong>CA2RXU authenticated control</strong>, choose
+        <strong>Install key</strong>.</li>
+      <li>Paste the same 43-character Base64URL key installed locally on the
+        iGate, then save.</li>
+      <li>For a LoRa-only asset, open the conversation routing menu, select
+        <strong>RF only</strong>, and select the LoRa TNC channel below the
+        conversation.</li>
+      <li>Use the control buttons. Graywolf signs the command and sends it
+        through that conversation route and channel.</li>
+    </ol>
+
+    <p class="note">
+      <strong>Queued is not applied.</strong> The confirmation shown by
+      Graywolf means the APRS message entered its transmit path. An APRS ACK
+      confirms transport only; it is not an authenticated result from the
+      remote command processor.
+    </p>
+
+    <p>
+      Graywolf never returns the installed key through its API. Its persistent
+      counter is advanced before each send. If transmission fails after that
+      point, the counter remains consumed so it can never be reused. Replacing
+      a key resets Graywolf&rsquo;s sender counter and must be coordinated with
+      installing the same new key on the iGate.
     </p>
 
     <h2>Troubleshooting</h2>

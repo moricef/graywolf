@@ -7075,6 +7075,231 @@
                 }
             }
         },
+        "/remote-actions/command-credentials": {
+            "get": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "remote-actions"
+                ],
+                "summary": "List authenticated remote-control credentials",
+                "operationId": "listRemoteCommandCredentials",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/dto.RemoteCommandCredential"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "remote-actions"
+                ],
+                "summary": "Install an authenticated remote-control credential",
+                "operationId": "createRemoteCommandCredential",
+                "parameters": [
+                    {
+                        "description": "Credential",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.RemoteCommandCredentialRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/dto.RemoteCommandCredential"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/webtypes.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/webtypes.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/remote-actions/command-credentials/{id}": {
+            "put": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "remote-actions"
+                ],
+                "summary": "Update an authenticated remote-control credential",
+                "operationId": "updateRemoteCommandCredential",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Credential id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Credential",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.RemoteCommandCredentialRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.RemoteCommandCredential"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/webtypes.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/webtypes.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ],
+                "tags": [
+                    "remote-actions"
+                ],
+                "summary": "Remove an authenticated remote-control credential",
+                "operationId": "deleteRemoteCommandCredential",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Credential id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    }
+                }
+            }
+        },
+        "/remote-actions/commands/{target}": {
+            "post": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "remote-actions"
+                ],
+                "summary": "Queue an authenticated remote command",
+                "operationId": "sendRemoteCommand",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Target callsign",
+                        "name": "target",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Command",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.RemoteCommandSendRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "$ref": "#/definitions/dto.RemoteCommandSendResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/webtypes.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/webtypes.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/webtypes.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/remote-actions/credentials": {
             "get": {
                 "produces": [
@@ -11092,6 +11317,71 @@
                 },
                 "updated_at": {
                     "type": "string"
+                }
+            }
+        },
+        "dto.RemoteCommandCredential": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "key_id": {
+                    "type": "string"
+                },
+                "last_counter": {
+                    "type": "string"
+                },
+                "last_used_at": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "target_call": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.RemoteCommandCredentialRequest": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "secret_b64url": {
+                    "type": "string"
+                },
+                "target_call": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.RemoteCommandSendRequest": {
+            "type": "object",
+            "properties": {
+                "channel": {
+                    "type": "integer"
+                },
+                "command": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.RemoteCommandSendResponse": {
+            "type": "object",
+            "properties": {
+                "counter": {
+                    "type": "string"
+                },
+                "message": {
+                    "$ref": "#/definitions/dto.MessageResponse"
                 }
             }
         },

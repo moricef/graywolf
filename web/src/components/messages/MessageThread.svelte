@@ -487,6 +487,7 @@
       bind:open={actionsDrawerOpen}
       target={thread.key}
       maxLen={aprsBudget}
+      channel={txChannel}
     />
   {/if}
 {/if}

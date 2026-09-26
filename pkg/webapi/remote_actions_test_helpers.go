@@ -46,6 +46,17 @@ func newTestServerWithRemoteActions(t *testing.T) (*Server, func()) {
 			FOREIGN KEY (remote_otp_credential_id)
 				REFERENCES remote_otp_credentials(id) ON DELETE SET NULL
 		)`,
+		`CREATE TABLE remote_command_credentials (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			name TEXT NOT NULL,
+			target_call TEXT NOT NULL UNIQUE,
+			secret_b64url TEXT NOT NULL,
+			key_id TEXT NOT NULL DEFAULT 'A',
+			last_counter INTEGER NOT NULL DEFAULT 0,
+			created_at DATETIME NOT NULL,
+			updated_at DATETIME NOT NULL,
+			last_used_at DATETIME
+		)`,
 	} {
 		if err := db.Exec(s).Error; err != nil {
 			t.Fatalf("schema: %v", err)

@@ -1,4 +1,4 @@
-# Remote Actions (outbound) subsystem
+# Remote Actions and authenticated iGate control
 
 Operator-curated affordance that turns the same `@@<otp>#<action>` wire
 grammar into outbound traffic: the operator picks a remote station in
@@ -51,6 +51,32 @@ The macro fire is **indistinguishable on the wire from a hand-typed
 line**. There is no `Source: macro` flag in the messages table; the
 auditor sees one outbound message of kind `text`.
 
+## CA2RXU authenticated control
+
+The same drawer also contains a separate controller for CA2RXU iGates using
+the `!RC1` protocol. It is deliberately independent from the `@@`/TOTP macro
+system: CA2RXU commands use HMAC-SHA-256 over the controller, target, key ID,
+persistent counter and exact command. Supported v1 commands are `EM=ON`,
+`EM=OFF`, `TX=ON`, `TX=OFF` and `COMMIT`.
+
+The sender implementation is in `command_auth.go`. One 32-byte Base64URL key
+and one monotonically increasing counter are stored per target in
+`remote_command_credentials` (configstore migration 30). The REST read shape
+never contains the secret. `ReserveEnvelope` advances the counter transactionally
+before returning the signed body; an ambiguous send failure consumes the
+counter instead of risking reuse. The server then submits the body through
+`messages.Service.SendMessage`, so the selected native TNC2, KISS or APRS-IS
+message route remains authoritative. Selecting a channel does not override the
+conversation send path: a LoRa-only target normally needs the conversation set
+to `RF only` as well as the intended LoRa channel.
+
+The UI components are `RemoteCommandPanel.svelte` and
+`RemoteCommandCredentialModal.svelte`. The panel is target-scoped to the open
+DM and passes its selected channel to `POST
+/api/remote-actions/commands/{target}`. A queued response means only that
+Graywolf accepted the APRS message; an ordinary APRS ACK is not treated as an
+authenticated application result.
+
 ## Schema (migration 16)
 
 `pkg/configstore/migrate_remote_actions.go`. Two tables, raw SQL so
@@ -60,6 +86,7 @@ the FK and the index can be expressed precisely:
 |---|---|---|
 | `remote_otp_credentials` | `id`, `name` (UNIQUE), `secret_b32`, `algorithm`, `digits`, `period`, `created_at`, `last_used_at` | TOTP secret stored plaintext per the single-user-station design. `secret_b32` is never echoed back after Create. |
 | `remote_action_macros` | `id`, `target_call`, `label`, `action_name`, `args_string`, `remote_otp_credential_id` (nullable FK), `position`, `created_at`, `updated_at` | `target_call` indexed for per-thread lookup. FK has `ON DELETE SET NULL` — deleting a credential demotes its macros to "manual OTP" instead of orphaning them. |
+| `remote_command_credentials` | `id`, `name`, `target_call` (UNIQUE), `secret_b64url`, `key_id`, `last_counter`, timestamps | CA2RXU HMAC key and sender anti-replay state. Secret is write-only through REST. |
 
 The two matching Go models in
 [`../../pkg/remoteactions/models.go`](../../pkg/remoteactions/models.go)
@@ -88,6 +115,9 @@ swagger tag `remote-actions`.
 | DELETE | `/api/remote-actions/macros/{id}` | `deleteRemoteActionMacro` | 204 on success. |
 | POST | `/api/remote-actions/macros/reorder` | `reorderRemoteActionMacros` | Body `{target_call, ids[]}`. Each id must resolve to a macro for that target; an unknown id rolls the transaction back and returns 400. |
 | POST | `/api/remote-actions/otp/{credId}` | `generateRemoteOTPCode` | Returns `{code, expires_at}` (RFC3339 UTC, inclusive upper edge of current TOTP step). Bumps `last_used_at` (non-fatal on error). |
+| GET/POST | `/api/remote-actions/command-credentials` | list/create command credential | Lists safe metadata or installs one key for a target. |
+| PUT/DELETE | `/api/remote-actions/command-credentials/{id}` | update/delete command credential | Empty secret preserves the key; replacing it resets the sender counter. |
+| POST | `/api/remote-actions/commands/{target}` | `sendRemoteCommand` | Reserves a counter, signs an allowed command and queues it through Messages. |
 
 ## Wiring
 

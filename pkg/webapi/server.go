@@ -330,6 +330,7 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	s.registerRemoteActionsCreds(mux)
 	s.registerRemoteActionsMacros(mux)
 	s.registerRemoteActionsOTP(mux)
+	s.registerRemoteCommands(mux)
 	s.registerStorageUsage(mux)
 
 	mux.HandleFunc("GET /api/health", s.handleHealth)

@@ -81,3 +81,37 @@ type RemoteOTPCode struct {
 	Code      string `json:"code"`
 	ExpiresAt string `json:"expires_at"`
 }
+
+// RemoteCommandCredential is the safe wire shape for one CA2RXU !RC1
+// credential. The HMAC secret is deliberately absent and can never be read
+// back through the API.
+type RemoteCommandCredential struct {
+	ID          uint    `json:"id"`
+	Name        string  `json:"name"`
+	TargetCall  string  `json:"target_call"`
+	KeyID       string  `json:"key_id"`
+	LastCounter string  `json:"last_counter"`
+	CreatedAt   string  `json:"created_at"`
+	UpdatedAt   string  `json:"updated_at"`
+	LastUsedAt  *string `json:"last_used_at,omitempty"`
+}
+
+// RemoteCommandCredentialRequest creates or updates a target credential. An
+// empty secret on update preserves the installed key; replacing it resets the
+// sender counter because the receiver must be provisioned with the same new
+// key at the same time.
+type RemoteCommandCredentialRequest struct {
+	Name            string `json:"name"`
+	TargetCall      string `json:"target_call"`
+	SecretBase64URL string `json:"secret_b64url"`
+}
+
+type RemoteCommandSendRequest struct {
+	Command string  `json:"command"`
+	Channel *uint32 `json:"channel,omitempty"`
+}
+
+type RemoteCommandSendResponse struct {
+	Counter string          `json:"counter"`
+	Message MessageResponse `json:"message"`
+}

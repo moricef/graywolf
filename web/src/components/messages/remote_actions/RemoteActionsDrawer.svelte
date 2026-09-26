@@ -16,6 +16,7 @@
   import MacroTile from './MacroTile.svelte';
   import MacroEditRow from './MacroEditRow.svelte';
   import FreeFormSender from './FreeFormSender.svelte';
+  import RemoteCommandPanel from './RemoteCommandPanel.svelte';
   import { remoteActionsStore } from '../../../lib/remote_actions/store.svelte.js';
   import { remoteMacrosApi, remoteOtpApi } from '../../../lib/remote_actions/api.js';
   import { sendActionFire } from '../../../lib/remote_actions/send.js';
@@ -25,6 +26,7 @@
     open = $bindable(false),
     target,
     maxLen = 67,
+    channel = 0,
   } = $props();
 
   let mode = $state('fire'); // 'fire' | 'edit'
@@ -190,6 +192,7 @@
     </header>
 
     {#if mode === 'fire'}
+      <RemoteCommandPanel {target} {channel} />
       <ul class="tiles">
         {#each macros as m (m.id)}
           <li><MacroTile macro={m} cooldownSec={cooldownFor(m.id)} onFire={() => fireMacro(m)} /></li>

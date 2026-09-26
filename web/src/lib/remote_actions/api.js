@@ -24,3 +24,17 @@ export const remoteMacrosApi = {
 export const remoteOtpApi = {
   generate: (id) => api.POST('/remote-actions/otp/{id}', { params: { path: { id } } }),
 };
+
+export const remoteCommandCredsApi = {
+  list:   ()      => api.GET('/remote-actions/command-credentials'),
+  create: (body)  => api.POST('/remote-actions/command-credentials', { body }),
+  update: (id, b) => api.PUT('/remote-actions/command-credentials/{id}', { params: { path: { id } }, body: b }),
+  remove: (id)    => api.DELETE('/remote-actions/command-credentials/{id}', { params: { path: { id } } }),
+};
+
+export const remoteCommandsApi = {
+  send: (target, body) => api.POST('/remote-actions/commands/{target}', {
+    params: { path: { target } },
+    body,
+  }),
+};
