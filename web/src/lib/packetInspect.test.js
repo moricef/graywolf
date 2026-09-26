@@ -116,6 +116,66 @@ test('analyzeFrame validates a well-formed Mic-E frame', () => {
   assert.equal(r.issues.length, 0);
 });
 
+test('analyzeFrame accepts a low but valid Mic-E digit byte', () => {
+  // Real on-air KD3DKY-7 packet: speed/course byte 0x23 (digit 7) sits
+  // below the old (wrong) 0x26 floor but is a legitimate encoding.
+  // Source built as an explicit addr() array — passing 'KD3DKY-7' as a
+  // plain string silently encodes SSID 0, since addr() takes SSID as a
+  // separate argument and doesn't parse a '-N' suffix out of the call.
+  const f = frame(
+    'T0TR4P',
+    [...addr('KD3DKY', 7, { last: true })],
+    ['`', 0x6c, 0x60, 0x3c, 0x6c, 0x23, 0x25, 0x62, 0x2f],
+  );
+  const r = analyzeFrame(f);
+  assert.equal(r.isMicE, true);
+  assert.equal(r.source.ssid, 7);
+  assert.equal(r.issues.length, 0);
+});
+
+test('analyzeFrame flags a SPACE byte in the Mic-E longitude field', () => {
+  const f = frame('T7SUTV', 'NW5W', ['`', 0x6c, 0x20, 0x3c, 0x6c, 0x25, 0x25, 0x62, 0x2f]);
+  const r = analyzeFrame(f);
+  assert.ok(r.issues.some((i) => i.severity === 'error' && /SPACE/.test(i.text)));
+});
+
+test('analyzeFrame does not flag a DEL byte in the Mic-E longitude field', () => {
+  // 0x7f is an ordinary top-of-range digit (99), never flagged — mice.go
+  // no longer special-cases it against the dest's +100 offset bit either.
+  const f = frame('T7SUTV', 'NW5W', ['`', 0x7f, 0x2e, 0x4f, 0x6c, 0x25, 0x25, 0x62, 0x2f]);
+  const r = analyzeFrame(f);
+  assert.equal(r.issues.length, 0);
+});
+
+test('analyzeFrame does not flag a DEL byte in the Mic-E minutes/hundredths bytes', () => {
+  // Real DL8XI longitude bytes: degrees=DEL, minutes='(', hundredths=DEL.
+  const f = frame('T7SUTV', 'NW5W', ['`', 0x7f, 0x28, 0x7f, 0x6c, 0x25, 0x25, 0x62, 0x2f]);
+  const r = analyzeFrame(f);
+  assert.equal(r.issues.length, 0);
+});
+
+test('analyzeFrame does not flag an aligned SPACE byte in the Mic-E speed/course field', () => {
+  // In the speed/course bytes 0x20 is just digit 4 and the Go decoder
+  // reads it normally (this frame decodes to 30 kt / 84 degrees). Only
+  // the longitude bytes treat SPACE as the "unknown data" sentinel.
+  for (const i of [4, 5, 6]) {
+    const info = ['`', 0x6c, 0x6d, 0x6e, 0x6f, 0x70, 0x71, 0x72, 0x2f];
+    info[i] = 0x20;
+    const r = analyzeFrame(frame('T7SUTV', 'NW5W', info));
+    assert.deepEqual(r.issues, [], `SPACE at info offset ${i}`);
+  }
+});
+
+test('analyzeFrame warns on a squashed Mic-E speed/course field', () => {
+  // A double space collapsed to one shifts the symbol code+table a byte
+  // early: info[7] is '/', info[8] is not a table. Same shape the Go
+  // decoder's accept_broken_mice realigns (to symbol '/>').
+  const f = frame('T7SUTV', 'NW5W', ['`', 0x6c, 0x6d, 0x6e, 0x6c, 0x20, 0x3e, 0x2f, 0x5d]);
+  const r = analyzeFrame(f);
+  assert.ok(r.issues.some((i) => i.severity === 'warn' && /squashed/.test(i.text)));
+  assert.ok(!r.issues.some((i) => i.severity === 'error'));
+});
+
 test('analyzeFrame accepts live Mic-E zero-speed wrap bytes', () => {
   // F4MLV-7>4R5WV3,TCPIP:`w26l `[/"=I}
   // The speed/course triplet 0x6c 0x20 0x60 encodes 0 kt / 68 degrees.

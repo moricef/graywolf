@@ -216,9 +216,18 @@ function validateControl(result, issues) {
 }
 
 // Mic-E info field: type byte + 3 longitude + 3 speed/course + symbol +
-// symbol-table = 9 bytes minimum (APRS101 ch.10). The longitude/speed bytes
-// are offset by 28 and therefore occupy 0x1c-0x7f. Values below printable
-// ASCII are legitimate; zero-speed wrap encodings commonly contain them.
+// symbol-table = 9 bytes minimum (APRS101 ch.10). The longitude/speed
+// bytes are offset-encoded (byte = digit + 28), so the legal range is
+// 0x1c-0x7f, not 0x26-0x7f — digit 0 legitimately encodes as 0x1c.
+// 0x20 (SPACE) in the longitude bytes (1-3) is the APRS101 ch.10
+// "unknown data" sentinel and makes the position unplottable. In the
+// speed/course bytes (4-6) it is just digit 4 and decodes normally
+// (e.g. 0x6c 0x20 0x60 is 0 kt / 68 degrees, GH #596), so it is only
+// called out when it matches the squashed double-space shape that
+// mice.go's accept_broken_mice realigns. 0x7f (DEL) is never flagged —
+// the Go decoder no longer special-cases it either, since it's just the
+// ordinary top-of-range digit 99 regardless of the destination's +100°
+// longitude offset.
 function validateMicE(result, info, issues) {
   if (info.length < 9) {
     issues.push({
@@ -229,6 +238,13 @@ function validateMicE(result, info, issues) {
   }
   for (let i = 1; i <= 6; i++) {
     const b = info[i];
+    if (b === 0x20 && i <= 3) {
+      issues.push({
+        severity: 'error',
+        text: `Mic-E longitude byte at info offset ${i} is 0x20 (SPACE), the APRS101 "unknown data" sentinel — receivers must not plot this position.`,
+      });
+      break;
+    }
     if (b < 0x1c || b > 0x7f) {
       issues.push({
         severity: 'error',
@@ -237,6 +253,27 @@ function validateMicE(result, info, issues) {
       break;
     }
   }
+  // Mirrors the accept_broken_mice condition in pkg/aprs/mice.go: the
+  // symbol table byte is misaligned, but a lone space at offset 5
+  // followed by a valid code+table pair one byte early means an
+  // upstream iGate collapsed the speed/course field's double space.
+  if (!isMicESymTable(info[8]) && info[5] === 0x20 && isMicESymTable(info[7])) {
+    issues.push({
+      severity: 'warn',
+      text: 'Mic-E speed/course field looks squashed (a double space collapsed to one, shifting the symbol a byte early); the decoder realigns it before reading the symbol.',
+    });
+  }
+}
+
+// Mic-E symbol table identifiers: '/', '\\', A-Z, or 0-9 (APRS101 ch.10;
+// same set as isMicESymTable in pkg/aprs/mice.go).
+function isMicESymTable(b) {
+  return (
+    b === 0x2f ||
+    b === 0x5c ||
+    (b >= 0x41 && b <= 0x5a) ||
+    (b >= 0x30 && b <= 0x39)
+  );
 }
 
 function quoteChars(chars) {

@@ -116,13 +116,22 @@
             </tr>
             <tr>
               <td>APRS-IS Server</td>
-              <td><code>rotate.aprs2.net</code></td>
-              <td>APRS-IS server hostname</td>
+              <td><code>rotate.aprs2.net</code> (shown as Worldwide)</td>
+              <td>
+                Select the <a href="https://www.aprs2.net/">Tier-2 regional
+                rotate address</a> nearest your station, or leave it on
+                <strong>Worldwide</strong> to use the global rotation. Select
+                <strong>Custom</strong> to enter another APRS-IS hostname.
+              </td>
             </tr>
             <tr>
               <td>Port</td>
               <td><code>14580</code></td>
-              <td>APRS-IS server port</td>
+              <td>
+                APRS-IS server port. <code>14580</code> is the client-defined
+                filter port that <a href="https://www.aprs2.net/">aprs2.net</a>
+                asks all users to connect to; you should not need to change it.
+              </td>
             </tr>
             <tr>
               <td>Callsign</td>
@@ -136,6 +145,32 @@
             </tr>
           </tbody>
         </table>
+      </div>
+    </div>
+
+    <div class="callout tip">
+      <span class="callout-icon">&#10003;</span>
+      <div class="callout-body">
+        <p>
+          <strong>Choosing an APRS-IS server.</strong> Pick the regional
+          address for where your station is:
+        </p>
+        <ul>
+          <li><strong>North America</strong> &mdash; <code>noam.aprs2.net</code></li>
+          <li><strong>South America</strong> &mdash; <code>soam.aprs2.net</code></li>
+          <li><strong>Europe &amp; Africa</strong> &mdash; <code>euro.aprs2.net</code></li>
+          <li><strong>Asia</strong> &mdash; <code>asia.aprs2.net</code></li>
+          <li><strong>Oceania</strong> &mdash; <code>aunz.aprs2.net</code></li>
+        </ul>
+        <p>
+          Each regional address rotates among Tier 2 servers in that part of
+          the world, and these are the addresses
+          <a href="https://www.aprs2.net/">aprs2.net</a> asks clients to use.
+          <strong>Worldwide</strong> (<code>rotate.aprs2.net</code>) can hand
+          you a server on the other side of the world, adding latency to every
+          packet you gate. graywolf only defaults to Worldwide because it
+          can't tell which region a new install is in.
+        </p>
       </div>
     </div>
 
