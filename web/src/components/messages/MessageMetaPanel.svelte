@@ -54,6 +54,8 @@
   // about instead.
   const rawLine = $derived.by(() => {
     if (!msg) return '';
+    // The frame as received or last transmitted, when recorded.
+    if (msg.raw_tnc2) return msg.raw_tnc2;
     const from = msg.direction === 'out' ? (msg.our_call || '') : (msg.from_call || '');
     const to = msg.direction === 'out' ? (msg.to_call || msg.peer_call || '') : (msg.our_call || '');
     const via = msg.path || msg.via || '';

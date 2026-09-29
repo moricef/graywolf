@@ -173,3 +173,21 @@ func TestEncodeMessageRoundTrip(t *testing.T) {
 		t.Errorf("round-trip: %+v", pkt.Message)
 	}
 }
+
+// replyacks.txt step 7: an old-style ack of a reply-ack message carries
+// "MM}AA"; only MM identifies the acknowledged outgoing message.
+func TestParseMessageAckOfReplyAckForm(t *testing.T) {
+	for info, want := range map[string]string{
+		":W1AW     :ack12}AB": "12",
+		":W1AW     :ack12}":   "12",
+		":W1AW     :rej12}AB": "12",
+	} {
+		pkt, err := ParseInfo([]byte(info))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if pkt.Message.MessageID != want {
+			t.Errorf("%q: MessageID=%q want %q", info, pkt.Message.MessageID, want)
+		}
+	}
+}

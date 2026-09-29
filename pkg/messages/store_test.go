@@ -571,15 +571,15 @@ func TestAllocateMsgIDHappyPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AllocateMsgID: %v", err)
 	}
-	if first != "001" {
-		t.Fatalf("first alloc=%q want 001", first)
+	if first != "01" {
+		t.Fatalf("first alloc=%q want 01", first)
 	}
 	second, err := store.AllocateMsgID(ctx, peer)
 	if err != nil {
 		t.Fatalf("AllocateMsgID #2: %v", err)
 	}
-	if second != "002" {
-		t.Fatalf("second alloc=%q want 002", second)
+	if second != "02" {
+		t.Fatalf("second alloc=%q want 02", second)
 	}
 }
 
@@ -588,8 +588,8 @@ func TestAllocateMsgIDSkipsOutstandingDM(t *testing.T) {
 	store, _ := newTestStore(t)
 	peer := "W1ABC"
 
-	// Simulate outstanding DM outbound with msg_id=001.
-	m := seedMsg("out", "K0ABC", "K0ABC", "W1ABC", "pending", "001")
+	// Simulate outstanding DM outbound with msg_id=01.
+	m := seedMsg("out", "K0ABC", "K0ABC", "W1ABC", "pending", "01")
 	m.Direction = "out"
 	m.FromCall = "K0ABC"
 	m.ToCall = "W1ABC"
@@ -600,23 +600,23 @@ func TestAllocateMsgIDSkipsOutstandingDM(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AllocateMsgID: %v", err)
 	}
-	if got == "001" {
+	if got == "01" {
 		t.Fatalf("alloc returned held id %q", got)
 	}
-	if got != "002" {
-		t.Errorf("alloc=%q want 002 (first free)", got)
+	if got != "02" {
+		t.Errorf("alloc=%q want 02 (first free)", got)
 	}
 }
 
-func TestAllocateMsgIDExhaustedFor999HeldDMRows(t *testing.T) {
+func TestAllocateMsgIDExhaustedForAllHeldDMRows(t *testing.T) {
 	ctx := context.Background()
 	store, _ := newTestStore(t)
 	peer := "W1ABC"
 
-	// Insert 999 DM outbound rows holding every id 001..999 to peer.
-	for i := 1; i <= 999; i++ {
+	// Insert DM outbound rows holding every id 01..ZZ to peer.
+	for i := uint32(1); i <= msgIDSlots; i++ {
 		m := seedMsg("out", "K0ABC", "K0ABC", peer,
-			fmt.Sprintf("pending-%d", i), fmt.Sprintf("%03d", i))
+			fmt.Sprintf("pending-%d", i), formatMsgID(i))
 		m.Direction = "out"
 		m.FromCall = "K0ABC"
 		m.ToCall = peer
@@ -634,15 +634,15 @@ func TestAllocateMsgIDExhaustedFor999HeldDMRows(t *testing.T) {
 // once their AckState transitions to "broadcast" (which Phase 3 writes
 // at send completion). This test simulates the Phase 3 semantic by
 // setting AckState="broadcast" at insert and verifies that allocation
-// cycles through the whole 001..999 range without running out.
+// cycles through the whole 01..ZZ range without running out.
 func TestAllocateMsgIDTacticalNoExhaustion(t *testing.T) {
 	ctx := context.Background()
 	store, _ := newTestStore(t)
 	peer := "NET"
 
-	for i := 0; i < 1000; i++ {
+	for i := uint32(0); i < msgIDSlots+1; i++ {
 		m := seedMsg("out", "K0ABC", "K0ABC", peer,
-			fmt.Sprintf("bcast-%d", i), fmt.Sprintf("%03d", (i%999)+1))
+			fmt.Sprintf("bcast-%d", i), formatMsgID((i%msgIDSlots)+1))
 		m.Direction = "out"
 		m.ThreadKind = ThreadKindTactical
 		m.FromCall = "K0ABC"
@@ -657,22 +657,17 @@ func TestAllocateMsgIDTacticalNoExhaustion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AllocateMsgID: %v", err)
 	}
-	if _, perr := strconvAtoi(id); perr != nil {
-		t.Errorf("alloc=%q not decimal: %v", id, perr)
+	if len(id) != 2 || strings.Trim(id, "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ") != "" {
+		t.Errorf("alloc=%q not two base-36 characters", id)
 	}
 }
 
-// strconvAtoi wraps strconv.Atoi without bringing the whole strconv
-// name into scope (the store already imports it).
-func strconvAtoi(s string) (int, error) {
-	var n int
-	for _, r := range s {
-		if r < '0' || r > '9' {
-			return 0, fmt.Errorf("non-digit %q", r)
+func TestFormatMsgIDBounds(t *testing.T) {
+	for n, want := range map[uint32]string{1: "01", 35: "0Z", 36: "10", msgIDSlots: "ZZ"} {
+		if got := formatMsgID(n); got != want {
+			t.Errorf("formatMsgID(%d)=%q want %q", n, got, want)
 		}
-		n = n*10 + int(r-'0')
 	}
-	return n, nil
 }
 
 func TestAllocateMsgIDWrapAround(t *testing.T) {
@@ -680,23 +675,23 @@ func TestAllocateMsgIDWrapAround(t *testing.T) {
 	store, _ := newTestStore(t)
 	peer := "W1ABC"
 
-	// Force the counter to 999 so the next allocation wraps to 001.
-	if err := store.db.Create(&configstore.MessageCounter{NextID: 999}).Error; err != nil {
+	// Force the counter to the last slot so the next allocation wraps to 01.
+	if err := store.db.Create(&configstore.MessageCounter{NextID: msgIDSlots}).Error; err != nil {
 		t.Fatalf("seed counter: %v", err)
 	}
 	id, err := store.AllocateMsgID(ctx, peer)
 	if err != nil {
 		t.Fatalf("AllocateMsgID: %v", err)
 	}
-	if id != "999" {
-		t.Fatalf("first=%q want 999", id)
+	if id != "ZZ" {
+		t.Fatalf("first=%q want ZZ", id)
 	}
 	id, err = store.AllocateMsgID(ctx, peer)
 	if err != nil {
 		t.Fatalf("AllocateMsgID #2: %v", err)
 	}
-	if id != "001" {
-		t.Fatalf("wrap=%q want 001", id)
+	if id != "01" {
+		t.Fatalf("wrap=%q want 01", id)
 	}
 }
 

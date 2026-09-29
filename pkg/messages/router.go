@@ -40,6 +40,9 @@ type RouterConfig struct {
 	IGateSender IGateLineSender
 	OurCall     func() string // returns our primary callsign (possibly with SSID)
 	LocalTxRing *LocalTxRing
+	// ReplyAcks records the message number of reply-ack capable
+	// messages received, for piggybacking on later outgoing messages.
+	ReplyAcks   *ReplyAcks
 	TacticalSet *TacticalSet
 	// BlockedSet is the enabled call-sign blocklist. Optional: when nil
 	// the router constructs an empty set so nothing is blocked. Swapped
@@ -442,7 +445,14 @@ func (r *Router) classify(ctx context.Context, pkt *aprs.DecodedAPRSPacket) {
 		effMsg.MessageID != "" &&
 		!effMsg.IsAck && !effMsg.IsRej &&
 		!effMsg.IsBulletin && !effMsg.IsNWS {
-		r.preflight.SendAutoAck(ctx, pkt, source, effMsg.MessageID)
+		ackID := effMsg.MessageID
+		if effMsg.HasReplyAck {
+			// replyacks.txt step 4: the ack is the exact copy
+			// "ackMM}AA"; step 5: MM becomes our pending reply-ack.
+			ackID = effMsg.MessageID + "}" + effMsg.ReplyAck
+			r.cfg.ReplyAcks.Observe(source, effMsg.MessageID)
+		}
+		r.preflight.SendAutoAck(ctx, pkt, source, ackID)
 	}
 
 	if dedupHit {

@@ -73,6 +73,13 @@ func parseMessage(pkt *DecodedAPRSPacket, info []byte) error {
 	// sits at the very end of the field, so the CR lands there instead —
 	// trim it too or correlateReplyAck misses the same way.
 	msg.MessageID = strings.TrimRight(msg.MessageID, " \r\n\t")
+	// replyacks.txt step 7: an old-style ack of a reply-ack message is
+	// "ackMM}AA"; only MM identifies our outstanding message.
+	if msg.IsAck || msg.IsRej {
+		if closeIdx := strings.IndexByte(msg.MessageID, '}'); closeIdx >= 0 {
+			msg.MessageID = msg.MessageID[:closeIdx]
+		}
+	}
 	msg.ReplyAck = strings.TrimRight(msg.ReplyAck, " \r\n\t")
 	msg.Text = rest
 	if strings.HasPrefix(addressee, "BLN") {

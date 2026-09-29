@@ -144,6 +144,7 @@ func NewService(cfg ServiceConfig) (*Service, error) {
 	if ring == nil {
 		ring = NewLocalTxRing(DefaultLocalTxRingSize, DefaultLocalTxRingTTL)
 	}
+	replyAcks := NewReplyAcks()
 	tactSet := cfg.TacticalSet
 	if tactSet == nil {
 		tactSet = NewTacticalSet()
@@ -189,6 +190,7 @@ func NewService(cfg ServiceConfig) (*Service, error) {
 		IGateSender:   cfg.IGate,
 		Bridge:        cfg.Bridge,
 		LocalTxRing:   ring,
+		ReplyAcks:     replyAcks,
 		Preferences:   prefs,
 		EventHub:      hub,
 		Logger:        logger.With("component", "messages-sender"),
@@ -219,6 +221,7 @@ func NewService(cfg ServiceConfig) (*Service, error) {
 		IGateSender: cfg.IGate,
 		OurCall:     cfg.OurCall,
 		LocalTxRing: ring,
+		ReplyAcks:   replyAcks,
 		TacticalSet: tactSet,
 		BlockedSet:  blockSet,
 		EventHub:    hub,

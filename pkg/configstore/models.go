@@ -881,7 +881,7 @@ type Message struct {
 func (Message) TableName() string { return "messages" }
 
 // MessageCounter is a singleton (id=1) holding the next msgid to
-// allocate. NextID rolls 1..999; allocation skips values currently
+// allocate. NextID rolls 1..1295 (base-36 "01".."ZZ"); allocation skips values currently
 // held by outstanding outbound DM rows (see pkg/messages/store.go
 // AllocateMsgID). Separate from MessagePreferences so bumping the
 // counter does not touch the preferences row.

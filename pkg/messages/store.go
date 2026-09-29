@@ -59,11 +59,11 @@ const (
 
 // Sentinel errors surfaced to callers.
 var (
-	// ErrMsgIDExhausted is returned by AllocateMsgID when every 001..999
+	// ErrMsgIDExhausted is returned by AllocateMsgID when every 01..ZZ
 	// slot for the target peer is held by an outstanding outbound DM
 	// row. The sender treats this as back-pressure (retry later or drop
 	// with a user-visible failure).
-	ErrMsgIDExhausted = errors.New("messages: no msgid available for peer (all 999 outstanding)")
+	ErrMsgIDExhausted = errors.New("messages: no msgid available for peer (all 1295 outstanding)")
 
 	// ErrInvalidThreadKind is returned by Insert when a caller provides
 	// a ThreadKind not in the accepted set.
@@ -437,6 +437,14 @@ func (s *Store) UpdateSentAtAndAckState(ctx context.Context, id uint64, sentAt t
 		Where("id = ?", id).Updates(fields).Error
 }
 
+// UpdateRawTNC2 writes only raw_tnc2, the frame actually transmitted
+// for an outbound row. Field-selective for the same TxHook race as
+// UpdateSentAtAndAckState.
+func (s *Store) UpdateRawTNC2(ctx context.Context, id uint64, raw string) error {
+	return s.db.WithContext(ctx).Model(&configstore.Message{}).
+		Where("id = ?", id).Update("raw_tnc2", raw).Error
+}
+
 // UpdateRetrySchedule writes only attempts + next_retry_at via a
 // field-selective update. Pass nextRetryAt=nil to clear the
 // schedule (e.g. on soft-delete or ack). Avoids the whole-row Save
@@ -555,13 +563,14 @@ func (s *Store) ConversationRollup(ctx context.Context, limit int) ([]Conversati
 	return out, nil
 }
 
-// AllocateMsgID returns the next 3-digit decimal msgid ("001".."999")
-// for a DM outbound to peerCall. Runs in a transaction: reads the
+// AllocateMsgID returns the next two-character base-36 msgid
+// ("01".."ZZ") for a DM outbound to peerCall. Two characters are the
+// message-number size of the APRS11 reply-ack form "{MM}AA". Runs in a transaction: reads the
 // counter, finds an unused slot (skipping values currently held by
 // outstanding outbound DM rows to this peer), writes the counter back,
-// and returns the chosen id. Wraps 999→1.
+// and returns the chosen id. Wraps ZZ→01.
 //
-// Returns ErrMsgIDExhausted when all 999 slots for the peer are held
+// Returns ErrMsgIDExhausted when all msgIDSlots for the peer are held
 // by outstanding rows. Caller treats this as back-pressure.
 //
 // Transaction scope is tight: one SELECT + one UPDATE + one in-memory
@@ -599,20 +608,20 @@ func (s *Store) AllocateMsgID(ctx context.Context, peerCall string) (string, err
 		}
 
 		// Find the first free slot starting at NextID, scanning at
-		// most 999 candidates. The counter value is always in
-		// [1, 999]; we tolerate zero by clamping to 1.
+		// most msgIDSlots candidates. The counter value is always in
+		// [1, msgIDSlots]; we tolerate zero by clamping to 1.
 		start := counter.NextID
-		if start == 0 || start > 999 {
+		if start == 0 || start > msgIDSlots {
 			start = 1
 		}
 		cur := start
-		for i := 0; i < 999; i++ {
-			candidate := fmt.Sprintf("%03d", cur)
+		for i := 0; i < msgIDSlots; i++ {
+			candidate := formatMsgID(cur)
 			if _, busy := held[candidate]; !busy {
 				chosen = cur
 				// Advance counter to the slot *after* the chosen one.
 				next := cur + 1
-				if next > 999 {
+				if next > msgIDSlots {
 					next = 1
 				}
 				counter.NextID = next
@@ -622,7 +631,7 @@ func (s *Store) AllocateMsgID(ctx context.Context, peerCall string) (string, err
 				return nil
 			}
 			cur++
-			if cur > 999 {
+			if cur > msgIDSlots {
 				cur = 1
 			}
 		}
@@ -631,7 +640,17 @@ func (s *Store) AllocateMsgID(ctx context.Context, peerCall string) (string, err
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("%03d", chosen), nil
+	return formatMsgID(chosen), nil
+}
+
+// msgIDSlots is the number of two-character base-36 message numbers,
+// "01".."ZZ" ("00" is not used).
+const msgIDSlots = 36*36 - 1
+
+// formatMsgID renders n in [1, msgIDSlots] as two base-36 characters.
+func formatMsgID(n uint32) string {
+	const digits = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	return string([]byte{digits[n/36], digits[n%36]})
 }
 
 // FindOutstandingByMsgID returns every outbound row matching

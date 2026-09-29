@@ -1875,6 +1875,11 @@ definitions:
         type: string
       peer_call:
         type: string
+      raw_tnc2:
+        description: |-
+          RawTNC2 is the frame as received, or as last transmitted for an
+          outbound message. Empty for rows stored before it was recorded.
+        type: string
       received_at:
         type: string
       received_by_call:

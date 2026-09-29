@@ -231,6 +231,9 @@ type MessageResponse struct {
 	ThreadKind     string     `json:"thread_kind"`
 	ThreadKey      string     `json:"thread_key"`
 	ReceivedByCall string     `json:"received_by_call,omitempty"`
+	// RawTNC2 is the frame as received, or as last transmitted for an
+	// outbound message. Empty for rows stored before it was recorded.
+	RawTNC2 string `json:"raw_tnc2,omitempty"`
 	// Kind is the body classification. Always populated — "text" for
 	// normal messages, "invite" for tactical invitations. Never omitted
 	// so clients can use a simple equality check without worrying about
@@ -282,6 +285,7 @@ func MessageFromModel(m configstore.Message) MessageResponse {
 		ThreadKind:       m.ThreadKind,
 		ThreadKey:        m.ThreadKey,
 		ReceivedByCall:   m.ReceivedByCall,
+		RawTNC2:          m.RawTNC2,
 		Kind:             m.Kind,
 		InviteTactical:   m.InviteTactical,
 		InviteAcceptedAt: nilUTC(m.InviteAcceptedAt),

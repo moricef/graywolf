@@ -779,7 +779,7 @@ func TestBuildMessageTNC2(t *testing.T) {
 		{
 			name: "padded addressee with msg id",
 			row:  &configstore.Message{FromCall: "NW5W-13", ToCall: "NW5W-5", Text: "TEST", MsgID: "015"},
-			want: "NW5W-13>APGRWO,TCPIP*::NW5W-5   :TEST{015",
+			want: "NW5W-13>APGRWO,TCPIP*::NW5W-5   :TEST{015}",
 		},
 		{
 			name: "no msg id",
@@ -789,14 +789,42 @@ func TestBuildMessageTNC2(t *testing.T) {
 		{
 			name: "9-char addressee (no padding)",
 			row:  &configstore.Message{FromCall: "K1ABC", ToCall: "WB6VVV-15", Text: "x", MsgID: "001"},
-			want: "K1ABC>APGRWO,TCPIP*::WB6VVV-15:x{001",
+			want: "K1ABC>APGRWO,TCPIP*::WB6VVV-15:x{001}",
 		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := buildMessageTNC2(tc.row)
+			got := buildMessageTNC2(tc.row, wireMessageID(tc.row.MsgID, ""))
 			if got != tc.want {
 				t.Fatalf("buildMessageTNC2 = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// The detail view shows raw_tnc2: it must be the frame actually sent,
+// both on RF and on APRS-IS, not a reconstruction.
+func TestSender_RecordsTransmittedRawTNC2(t *testing.T) {
+	for _, policy := range []string{FallbackPolicyRFOnly, FallbackPolicyISOnly} {
+		t.Run(policy, func(t *testing.T) {
+			rig := buildSender(t, policy, true)
+			defer rig.close()
+			row := newOutboundDM(t, rig, "N0CALL", "W1ABC", "hi")
+			if res := rig.sender.Send(context.Background(), row); res.Err != nil {
+				t.Fatalf("Send: %v", res.Err)
+			}
+			var want string
+			if policy == FallbackPolicyISOnly {
+				want = rig.igate.list()[0]
+			} else {
+				want = rig.sink.list()[0].Frame.String()
+			}
+			got, err := rig.store.GetByID(context.Background(), row.ID)
+			if err != nil {
+				t.Fatalf("GetByID: %v", err)
+			}
+			if got.RawTNC2 != want || !strings.Contains(want, "{"+row.MsgID+"}") {
+				t.Fatalf("raw_tnc2 = %q, want transmitted %q with reply-ack id", got.RawTNC2, want)
 			}
 		})
 	}

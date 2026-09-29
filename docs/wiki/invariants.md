@@ -2046,3 +2046,32 @@ Source: [`../../pkg/rxttelemetry/service.go`](../../pkg/rxttelemetry/service.go)
 [`../../pkg/tnc2ax25/adapter.go`](../../pkg/tnc2ax25/adapter.go),
 [`../../pkg/app/rxfanout.go`](../../pkg/app/rxfanout.go)
 (`aprsJSONProduce`).
+
+### 69. Outgoing APRS messages use the reply-ack message-number form
+
+Every outgoing DM carries `{MM}AA` (aprs.org/aprs11/replyacks.txt): `MM` is
+a two-character base-36 number `01`..`ZZ` allocated per peer by
+`Store.AllocateMsgID`; `AA` is the last `MM` received from that peer in the
+reply-ack form, or empty (`{MM}`), added at each transmission so a retry
+carries the latest value. A received `{MM}AA` is auto-acked with the exact
+copy `ackMM}AA`, and an incoming `ackMM}AA` or `rejMM}AA` correlates on `MM`
+only. Stations that never send the reply-ack form get no piggybacked ack; the
+per-peer state is in memory and is rebuilt by the next reply-ack message
+after a restart. Outstanding rows created before this change keep their
+three-digit ids, which still correlate.
+
+The message row's `raw_tnc2` holds the frame as received, or as last
+transmitted for an outbound message (written field-selectively by
+`Sender.recordWire` on every RF, text-RF and APRS-IS send). The message
+details drawer shows it and falls back to a reconstruction only for rows
+stored before it was recorded.
+
+*Why:* the trailing `}` advertises reply-ack support, and `AA` lets a reply
+acknowledge the peer's message when a separate ack is lost. Three-digit ids
+cannot use this form.
+
+Source: [`../../pkg/messages/replyack.go`](../../pkg/messages/replyack.go),
+[`../../pkg/messages/sender.go`](../../pkg/messages/sender.go) (`wireID`),
+[`../../pkg/messages/router.go`](../../pkg/messages/router.go) (step 9),
+[`../../pkg/messages/store.go`](../../pkg/messages/store.go)
+(`AllocateMsgID`), [`../../pkg/aprs/message.go`](../../pkg/aprs/message.go).

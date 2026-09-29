@@ -1484,3 +1484,23 @@ func TestBuildAckTNC2(t *testing.T) {
 		})
 	}
 }
+
+// replyacks.txt steps 4 and 5: a "{MM}AA" message is acked with the exact
+// copy "ackMM}AA", and MM becomes the ack piggybacked on our next message.
+func TestRouterReplyAckAutoAckExactCopyAndObserve(t *testing.T) {
+	r, _, sink, _, _, _, cleanup := buildRouter(t, "N0CALL", nil)
+	defer cleanup()
+	r.cfg.ReplyAcks = NewReplyAcks()
+
+	pkt := makeReplyAckPacket(t, "W1ABC-9", "N0CALL", "hello", "12", "AB")
+	_ = r.SendPacket(context.Background(), pkt)
+	waitFor(t, time.Second, func() bool { return len(sink.list()) == 1 }, "auto-ACK submitted")
+
+	want := ":W1ABC-9  :ack12}AB"
+	if got := string(sink.list()[0].Frame.Info); got != want {
+		t.Fatalf("ack info = %q, want %q", got, want)
+	}
+	if got := r.cfg.ReplyAcks.Pending("W1ABC-9"); got != "12" {
+		t.Fatalf("pending reply-ack = %q, want 12", got)
+	}
+}

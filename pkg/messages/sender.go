@@ -101,6 +101,9 @@ type SenderConfig struct {
 	IGateSender IGateLineSender // may be nil when operator runs no igate
 	Bridge      RFAvailability  // may be nil in tests
 	LocalTxRing *LocalTxRing
+	// ReplyAcks supplies the APRS11 reply-ack piggybacked on outgoing
+	// messages. Nil disables piggybacking; "{MM}" is still sent.
+	ReplyAcks   *ReplyAcks
 	Preferences *Preferences
 	EventHub    *EventHub
 	Logger      *slog.Logger
@@ -326,6 +329,7 @@ func (s *Sender) sendRF(ctx context.Context, row *configstore.Message, rfAvailab
 			"kind", row.ThreadKind, "channel", ch, "error", err)
 		return SendResult{Path: SendPathRF, Err: err}
 	}
+	s.recordWire(ctx, row, frame.String())
 	// Record (source, msg_id) in the LocalTxRing BEFORE submit so a
 	// simultaneous re-heard digi copy is recognized as local.
 	s.cfg.LocalTxRing.Add(row.FromCall, row.MsgID)
@@ -398,7 +402,7 @@ func (s *Sender) sendRF(ctx context.Context, row *configstore.Message, rfAvailab
 }
 
 func (s *Sender) sendTextRF(ctx context.Context, row *configstore.Message, ch uint32) SendResult {
-	info, err := aprs.EncodeMessage(row.ToCall, row.Text, row.MsgID)
+	info, err := aprs.EncodeMessage(row.ToCall, row.Text, s.wireID(row))
 	if err != nil {
 		row.FailureReason = truncReason("encode: " + err.Error())
 		_ = s.cfg.Store.Update(ctx, row)
@@ -411,6 +415,7 @@ func (s *Sender) sendTextRF(ctx context.Context, row *configstore.Message, ch ui
 		}
 	}
 	raw := []byte(aprs.FormatTNC2(row.FromCall, "APGRWO", path, info))
+	s.recordWire(ctx, row, string(raw))
 	s.cfg.LocalTxRing.Add(row.FromCall, row.MsgID)
 	err = s.cfg.TextRF.Submit(ctx, ch, raw, txgovernor.SubmitSource{
 		Kind: SubmitKindMessages, Detail: fmt.Sprintf("%d", row.ID),
@@ -472,7 +477,8 @@ func (s *Sender) sendIS(ctx context.Context, row *configstore.Message) SendResul
 			"kind", row.ThreadKind)
 		return SendResult{Path: SendPathIS, Err: err}
 	}
-	line := buildMessageTNC2(row)
+	line := buildMessageTNC2(row, s.wireID(row))
+	s.recordWire(ctx, row, line)
 	if err := s.cfg.IGateSender.SendLine(line); err != nil {
 		row.FailureReason = truncReason(fmt.Sprintf("igate: %v", err))
 		_ = s.cfg.Store.Update(ctx, row)
@@ -609,7 +615,7 @@ func (s *Sender) channelFor(row *configstore.Message) uint32 {
 // for row. Uses APGRWO as destination (graywolf's software identifier)
 // — matches the router's auto-ACK convention.
 func (s *Sender) buildFrame(row *configstore.Message) (*ax25.Frame, error) {
-	info, err := aprs.EncodeMessage(row.ToCall, row.Text, row.MsgID)
+	info, err := aprs.EncodeMessage(row.ToCall, row.Text, s.wireID(row))
 	if err != nil {
 		return nil, fmt.Errorf("messages: encode: %w", err)
 	}
@@ -663,7 +669,7 @@ func parsePath(p string) ([]ax25.Address, error) {
 // Addressee is padded to 9 chars. Wire-format glue (the path-terminator
 // colon, the message DTI colon) lives in aprs.FormatTNC2 — both
 // encoders share that helper so neither can drop a structural byte.
-func buildMessageTNC2(row *configstore.Message) string {
+func buildMessageTNC2(row *configstore.Message, wireID string) string {
 	addr := row.ToCall
 	if len(addr) > 9 {
 		addr = addr[:9]
@@ -672,10 +678,29 @@ func buildMessageTNC2(row *configstore.Message) string {
 		addr = addr + strings.Repeat(" ", 9-len(addr))
 	}
 	info := ":" + addr + ":" + row.Text
-	if row.MsgID != "" {
-		info = info + "{" + row.MsgID
+	if wireID != "" {
+		info = info + "{" + wireID
 	}
 	return aprs.FormatTNC2(row.FromCall, "APGRWO", []string{"TCPIP*"}, []byte(info))
+}
+
+// wireID returns the on-air message number of row, built at each
+// transmission so a retry carries the latest reply-ack for the peer.
+func (s *Sender) wireID(row *configstore.Message) string {
+	return wireMessageID(row.MsgID, s.cfg.ReplyAcks.Pending(row.PeerCall))
+}
+
+// recordWire keeps the on-air TNC-2 text of the latest transmission of
+// row, so the UI shows the real frame (reply-ack AA and path included)
+// instead of a reconstruction.
+func (s *Sender) recordWire(ctx context.Context, row *configstore.Message, raw string) {
+	row.RawTNC2 = raw
+	if row.ID == 0 {
+		return
+	}
+	if err := s.cfg.Store.UpdateRawTNC2(ctx, row.ID, raw); err != nil {
+		s.logger.Warn("messages sender raw_tnc2 update failed", "error", err, "id", row.ID)
+	}
 }
 
 // recordPending stores metadata keyed by frame pointer for the TxHook.

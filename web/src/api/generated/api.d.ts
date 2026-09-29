@@ -3164,6 +3164,11 @@ export interface components {
             our_call?: string;
             path?: string;
             peer_call?: string;
+            /**
+             * @description RawTNC2 is the frame as received, or as last transmitted for an
+             *     outbound message. Empty for rows stored before it was recorded.
+             */
+            raw_tnc2?: string;
             received_at?: string;
             received_by_call?: string;
             sent_at?: string;
