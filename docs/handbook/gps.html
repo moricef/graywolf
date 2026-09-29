@@ -73,11 +73,12 @@
       <a href="beacons.html">tracker beacons</a> and SmartBeacon rate
       adaptation. Graywolf supports three GPS source types: direct serial
       NMEA, the gpsd daemon, and a fixed coordinate you enter by hand for a
-      stationary station.
+      stationary station. On Android, the phone&rsquo;s own location is used
+      automatically; see <a href="#android">Android</a> below.
     </p>
 
     <div class="screenshot">
-      <img src="img/gps.png" alt="GPS page showing serial port configuration with device path and baud rate" />
+      <img src="img/gps.png" alt="GPS page showing detected devices and the Configure GPS button" />
       <div class="caption">GPS configuration using a serial NMEA receiver</div>
     </div>
 
@@ -85,8 +86,8 @@
 
     <p>
       Click <strong>Detect Devices</strong> to scan attached serial ports.
-      Recognised GPS receivers (u-blox modules, common USB-serial GPS
-      pucks) get flagged so you can configure them with one click. Use
+      Many common GPS receivers (u-blox modules, USB-serial GPS
+      pucks) are identified and if present can be configured them with one click. Use
       <strong>+ Configure GPS</strong> if you&rsquo;d rather enter device,
       baud, or gpsd host yourself.
     </p>
@@ -101,11 +102,6 @@
           </thead>
           <tbody>
             <tr>
-              <td><code>enabled</code></td>
-              <td><code>false</code></td>
-              <td>Enable GPS receiver</td>
-            </tr>
-            <tr>
               <td><code>source_type</code></td>
               <td><code>none</code></td>
               <td><code>none</code>, <code>serial</code>, <code>gpsd</code>, or <code>fixed</code></td>
@@ -114,6 +110,12 @@
         </table>
       </div>
     </div>
+
+    <p>
+      There is no separate on/off switch. GPS is active whenever a source is
+      configured. To turn it off, click <strong>Disable</strong> on the
+      configured GPS card; this sets the source back to <code>none</code>.
+    </p>
 
     <h2>Serial NMEA</h2>
 
@@ -136,8 +138,8 @@
             </tr>
             <tr>
               <td><code>baud_rate</code></td>
-              <td><code>4800</code></td>
-              <td>Serial baud rate (most GPS modules use 4800 or 9600)</td>
+              <td><code>9600</code></td>
+              <td>Serial baud rate. Choose from 4800, 9600, 38400, or 115200; most GPS modules use 4800 or 9600.</td>
             </tr>
           </tbody>
         </table>
@@ -255,7 +257,9 @@
       GPS positions are cached in memory and made available to beacons and
       the REST API. When a beacon has <code>use_gps: true</code>, it pulls
       the latest cached position at transmission time. If no GPS fix is
-      available, the beacon falls back to its configured static coordinates.
+      available, the beacon is skipped and a warning is written to the log;
+      it does not fall back to static coordinates. The beacon sends normally
+      again the next time it is due once a fix is available.
     </p>
 
     <h2>Hot Reload</h2>
@@ -265,6 +269,53 @@
       graywolf. When you update GPS settings through the web UI or API, the
       GPS receiver is stopped and restarted with the new configuration.
     </p>
+
+    <h2 id="android">Android</h2>
+
+    <p>
+      On Android, graywolf uses the phone&rsquo;s own location services.
+      There is nothing to configure: the serial, gpsd, and fixed-coordinate
+      sources described above do not apply. Position data starts flowing as
+      soon as the phone has a fix.
+    </p>
+
+    <div class="screenshot">
+      <img src="img/gps-android.png" alt="GPS page on Android showing the fix status pill, latitude and longitude, altitude, speed, course, and a satellite signal chart" />
+      <div class="caption">GPS status on Android</div>
+    </div>
+
+    <p>
+      Instead of configuration, the GPS page shows live status:
+    </p>
+
+    <ul>
+      <li><strong>Fix status</strong> &mdash; <strong>FIX LOCKED</strong>,
+        <strong>SEARCHING</strong>, or <strong>NO FIX</strong>, with the
+        accuracy in metres and how long ago the last update arrived.</li>
+      <li><strong>Position</strong> &mdash; latitude and longitude of the
+        current fix.</li>
+      <li><strong>Movement</strong> &mdash; altitude, speed, and course.</li>
+      <li><strong>Satellites</strong> &mdash; how many satellites are used in
+        the fix out of those in view, with one bar per satellite showing its
+        signal strength.</li>
+    </ul>
+
+    <p>
+      The readouts refresh once a second while the page is visible and pause
+      when the screen is off or the app is in the background.
+    </p>
+
+    <div class="callout info">
+      <span class="callout-icon">&#9432;</span>
+      <div class="callout-body">
+        <p>
+          Indoors or right after launch you will see <strong>NO FIX</strong>
+          or <strong>SEARCHING</strong> with dashes in the readouts. That is
+          normal; it clears once the phone can see enough satellites. The
+          fixed-coordinate source is not available on Android.
+        </p>
+      </div>
+    </div>
 
     <nav class="page-nav">
       <a href="agwpe.html">
