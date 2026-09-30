@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/chrissnell/graywolf/pkg/internal/backoff"
+	"github.com/chrissnell/graywolf/pkg/internal/tcpstall"
 	"github.com/chrissnell/graywolf/pkg/tnc2"
 	"go.bug.st/serial"
 )
@@ -154,7 +155,12 @@ func (c *Client) open(ctx context.Context) (io.ReadWriteCloser, error) {
 		return c.cfg.OpenFunc(ctx)
 	}
 	if c.cfg.Transport == TransportTCP {
-		return (&net.Dialer{Timeout: 10 * time.Second}).DialContext(ctx, "tcp", c.cfg.Address)
+		conn, err := (&net.Dialer{Timeout: 10 * time.Second}).DialContext(ctx, "tcp", c.cfg.Address)
+		if err == nil {
+			// Abort the link if the TNC stops reading it, so Run reconnects.
+			_ = tcpstall.Set(conn, 20*time.Second)
+		}
+		return conn, err
 	}
 	return serial.Open(c.cfg.Device, &serial.Mode{
 		BaudRate: int(c.cfg.BaudRate),
