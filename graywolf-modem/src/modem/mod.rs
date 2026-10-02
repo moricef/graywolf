@@ -1967,7 +1967,7 @@ fn collect_input_devices_linux(
 
         let dev = find_dev(&pcm);
         let (mut sample_rates, mut channel_counts) =
-            dev.map(&configs_for).unwrap_or_default();
+            dev.map(configs_for).unwrap_or_default();
         if sample_rates.is_empty() || channel_counts.is_empty() {
             if recommended {
                 // Streamed fine but cpal won't report ranges: fall back
@@ -2112,7 +2112,7 @@ fn collect_output_devices_linux(
             None => continue,
         };
         let dev = find_dev(&pcm);
-        let (sample_rates, channel_counts) = dev.map(&configs_for).unwrap_or_default();
+        let (sample_rates, channel_counts) = dev.map(configs_for).unwrap_or_default();
         if sample_rates.is_empty() || channel_counts.is_empty() {
             continue;
         }

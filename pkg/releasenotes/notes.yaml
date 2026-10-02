@@ -7,6 +7,46 @@
 # route the body references via [text](link) markdown; renderer only
 # accepts internal #/... routes.
 
+- version: "0.14.14"
+  date: "2026-10-01"
+  style: info
+  schema_version: 1
+  link: "#/gps"
+  title: "Fixed GPS location, AGWPE connected mode, regional APRS-IS servers, Mic-E fixes"
+  body: |
+    Home stations without a GPS receiver can enter a fixed latitude,
+    longitude, and altitude on the [GPS page](#/gps). Graywolf uses it
+    everywhere it would use a satellite fix: distance and bearing to stations
+    you hear, position beacons, and the station list.
+
+    AGWPE clients can make connected-mode sessions. Programs like Paracon,
+    AGWTerm, and EasyTerm can now connect through graywolf to BBSes and
+    other connected packet systems. Xastir and other programs that ask for
+    raw packet data over AGWPE now get it.
+
+    The iGate page offers a dropdown with the regional APRS-IS servers
+    for North America, South America, Europe and Africa, Asia, and
+    Oceania. The default rotate.aprs2.net shows up as Worldwide. You can
+    still choose Custom and pick whatever server you want.
+
+    A new Storage page under Preferences shows how much disk space offline
+    map tiles, position history, and configuration are using, and where
+    they live.
+
+    Messages now use the same Inconsolata font as the rest of graywolf.
+
+    Fixes: valid Mic-E position packets from some radios were being thrown
+    away and never gated to APRS-IS, and now decode normally; the packet
+    inspector no longer flags valid Mic-E packets as broken; packets heard
+    from APRS-IS no longer show up in the packet log as if they were heard
+    on RF; AGWPE clients now see monitored packets on the port you actually
+    configured instead of one port higher; a KISS TCP server keeps
+    forwarding client transmissions to APRS-IS and keeps accepting
+    connections after you save KISS settings; busy chat threads no longer
+    drop the newest messages; map popups follow your metric units setting;
+    and the live map's heatmap opacity slider and radar animation work
+    properly again.
+
 - version: "0.14.13"
   date: "2026-08-24"
   style: info
