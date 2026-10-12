@@ -8,6 +8,7 @@
   import { onDestroy, onMount } from 'svelte';
   import maplibregl from 'maplibre-gl';
   import MaplibreMap from '../lib/map/maplibre-map.svelte';
+  import { mapLayout } from '../lib/map/map-layout.svelte.js';
   import InfoPanel from '../lib/map/info-panel.svelte';
   import MapContextMenu from '../lib/map/map-context-menu.svelte';
   import { COMPACT_LAYOUT_QUERY } from '../lib/compactLayout.js';
@@ -52,6 +53,8 @@
   import MapPinPlus from 'lucide-svelte/icons/map-pin-plus';
   import MapPinned from 'lucide-svelte/icons/map-pinned';
   import Copy from 'lucide-svelte/icons/copy';
+  import PanelLeftClose from 'lucide-svelte/icons/panel-left-close';
+  import PanelLeftOpen from 'lucide-svelte/icons/panel-left-open';
 
   // Values are seconds (data store wants ms; multiplied at dispatch).
   const TIMERANGES_S = [
@@ -1333,6 +1336,7 @@
   }
 
   onDestroy(() => {
+    mapLayout.navigationHidden = false;
     teardownMapGeneration();
     radarFrames.destroy();
     stopFrontsPolling();
@@ -1346,6 +1350,20 @@
 </script>
 
 <div class="livemap-shell">
+  <button
+    type="button"
+    class="map-navigation-toggle"
+    onclick={() => (mapLayout.navigationHidden = !mapLayout.navigationHidden)}
+    aria-label={mapLayout.navigationHidden ? 'Show navigation' : 'Hide navigation'}
+    title={mapLayout.navigationHidden ? 'Show navigation' : 'Hide navigation'}
+    aria-pressed={mapLayout.navigationHidden}
+  >
+    {#if mapLayout.navigationHidden}
+      <PanelLeftOpen size={20} aria-hidden="true" />
+    {:else}
+      <PanelLeftClose size={20} aria-hidden="true" />
+    {/if}
+  </button>
   <!-- Start at planet view; onMapReady fits to recent stations after first poll.
        Keyed on mapGeneration so an unrecoverable WebGL context loss remounts the
        map with a fresh context instead of leaving a black canvas (graywolf#461). -->
@@ -1701,8 +1719,9 @@
   /* FAB (mobile only). Anchored top-LEFT so it clears MapLibre's
      NavigationControl (compass) at top-right; in a narrow portrait window
      the two used to overlap and the FAB hid the north-up reset (GH #348).
-     The desktop layer-card never renders on mobile, so the left corner is
-     free. */
+     It sits beside the navigation toggle; desktop uses that same space
+     for the independently collapsible layer card. */
+  .map-navigation-toggle,
   .map-fab {
     position: absolute;
     top: 12px;
@@ -1722,8 +1741,16 @@
     justify-content: center;
     z-index: 60;
   }
+  .map-navigation-toggle:hover,
   .map-fab:hover {
     color: var(--color-text);
+  }
+  .map-navigation-toggle:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .map-fab {
+    left: 68px;
   }
 
   /* Desktop layer card (top-left, perma-visible — matches the legacy
@@ -1731,7 +1758,7 @@
   .layer-card {
     position: absolute;
     top: 12px;
-    left: 12px;
+    left: 68px;
     width: 200px;
     background: var(--map-overlay-bg);
     -webkit-backdrop-filter: blur(var(--map-overlay-blur, 0));

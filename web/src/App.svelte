@@ -4,6 +4,7 @@
   import { Toaster } from '@chrissnell/chonky-ui';
   import { Platform } from './lib/platform.js';
   import Sidebar from './components/Sidebar.svelte';
+  import { mapLayout } from './lib/map/map-layout.svelte.js';
   import NewsPopup from './components/NewsPopup.svelte';
   import ServerUpdatedBanner from './components/ServerUpdatedBanner.svelte';
   import { serverVersion } from './lib/stores/server-version.svelte.js';
@@ -93,6 +94,7 @@
   // `full-bleed` (padding:0) on the next page, rendering it flush against
   // the sidebar with no gap.
   let currentPath = $derived($location);
+  let navigationHidden = $derived(currentPath === '/map' && mapLayout.navigationHidden);
 
   let isLoginPage = $derived(currentPath === '/login' && Platform.kind !== 'android');
 
@@ -168,10 +170,12 @@
 {#if isLoginPage}
   <Router {routes} />
 {:else if authChecked}
-  <ServerUpdatedBanner />
+  <ServerUpdatedBanner {navigationHidden} />
   <div class="app-layout">
-    <Sidebar />
-    <main class="main-content" class:full-bleed={currentPath === '/map' || currentPath === '/messages' || currentPath.startsWith('/messages/')}>
+    <div class="app-navigation" class:hidden={navigationHidden}>
+      <Sidebar />
+    </div>
+    <main class="main-content" class:map-expanded={navigationHidden} class:full-bleed={currentPath === '/map' || currentPath === '/messages' || currentPath.startsWith('/messages/')}>
       <Router {routes} />
       <footer class="app-footer">
         <a href="https://github.com/chrissnell/graywolf" target="_blank" rel="noopener">
@@ -186,6 +190,12 @@
 {/if}
 
 <style>
+  .app-navigation {
+    display: contents;
+  }
+  .app-navigation.hidden {
+    display: none;
+  }
   .app-layout {
     display: flex;
     min-height: 100vh;
@@ -258,5 +268,12 @@
       height: 100vh;
       height: 100dvh;
     }
+  }
+  /* Override both the desktop sidebar and the mobile top bar/icon rail. */
+  .main-content.full-bleed.map-expanded {
+    margin-left: 0;
+    margin-top: 0;
+    height: 100vh;
+    height: 100dvh;
   }
 </style>

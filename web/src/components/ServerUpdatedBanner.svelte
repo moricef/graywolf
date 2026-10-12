@@ -1,6 +1,7 @@
 <script>
   import { Icon } from '@chrissnell/chonky-ui';
   import { serverVersion } from '../lib/stores/server-version.svelte.js';
+  let { navigationHidden = false } = $props();
 
   // The server build changed underneath this tab. We prompt rather than
   // auto-reload so the operator doesn't lose in-flight work (a half-typed
@@ -29,6 +30,7 @@
   -->
   <aside
     class="server-updated-banner"
+    class:navigation-hidden={navigationHidden}
     role="alert"
     aria-labelledby="server-updated-title"
     tabindex="-1"
@@ -194,5 +196,9 @@
          portrait top offset for the narrow phones that match both. */
       top: 0;
     }
+  }
+  .server-updated-banner.navigation-hidden {
+    margin-left: 0;
+    top: 0;
   }
 </style>
