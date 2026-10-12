@@ -237,13 +237,15 @@ Source: [`../../pkg/igate/filters/filters.go`](../../pkg/igate/filters/filters.g
 Source: [`../../pkg/txgovernor/governor.go`](../../pkg/txgovernor/governor.go)
 (package comment).
 
-### 16b. KISS `tcp-client` defaults to a TX-capable TNC link
+### 16b. KISS hardware-TNC types default to a TX-capable TNC link
 
-*Why:* A `tcp-client` KISS interface dials OUT to a hardware TNC, so its only useful default is `Mode=tnc` + `AllowTxFromGovernor=true` -- otherwise it registers no TX backend and silently transmits nothing while still receiving (issue #128). When `Mode` is **omitted from the request**, both the API boundary (`dto.KissRequest.ToModel`) and the store backstop (`normalizeKissInterface`) apply this default for `tcp-client` only; every other interface type keeps the historical `modem` default. An *explicitly supplied* `Mode` is always honored verbatim. Note `POST`/`PUT /api/kiss` is full-resource replace (`Store.UpdateKissInterface` does `db.Save`, like every DTO in the codebase): a `PUT` that omits `mode` re-applies the default exactly as create does -- it does NOT merge against the persisted row. This is consistent with how every other KISS field default (reconnect bounds, ingress rates) already behaves on `PUT`. The one hazardous case -- silently enabling TX on a `tcp-client` whose channel also has an audio input device (a modem backend), which would double-transmit -- cannot occur on either path: `validateKissInterface` independently rejects `tnc`+`AllowTxFromGovernor` on a modem-backed channel before the row is written. Migration 20 (`kiss_tcp_client_tx_default`) repairs pre-existing `tcp-client` rows stuck at the old `modem`/`false` default, and likewise skips any row whose channel has an audio input device.
+*Why:* A `tcp-client`, `serial`, or `usb-serial` KISS interface connects to a device that IS the radio (a hardware TNC, LoRa modem, or radio with a built-in KISS TNC), so its only useful default is `Mode=tnc` + `AllowTxFromGovernor=true` -- otherwise it registers no TX backend and silently transmits nothing (beacons fail with `no backend registered for channel`, issue #128) **and** misroutes its RX into the TX governor so the operator sees no received packets (the recurring "serial KISS receives nothing" report). When `Mode` is **omitted from the request**, both the API boundary (`dto.KissRequest.ToModel`) and the store backstop (`normalizeKissInterface`) apply this default via the shared predicate `configstore.KissTypeDefaultsTnc` (true for `tcp-client`/`serial`/`usbserial`). Only `tcp` (server) keeps the historical `modem` default -- its peer is an APRS app; `bluetooth` is force-`tnc`'d at the wiring layer (and by the UI). The web UI mirrors this: selecting any of these types on a new row sets `Mode=tnc` + governor-TX via the shared `$effect` in `Kiss.svelte` (the UI always sends `mode` explicitly, so this -- not the backend default -- is the operative path for interactive creation). An *explicitly supplied* `Mode` is always honored verbatim. Note `POST`/`PUT /api/kiss` is full-resource replace (`Store.UpdateKissInterface` does `db.Save`): a `PUT` that omits `mode` re-applies the default exactly as create does -- it does NOT merge against the persisted row. The one hazardous case -- silently enabling TX on a channel that also has an audio input device (a modem backend), which would double-transmit -- cannot occur: `validateKissInterface` independently rejects `tnc`+`AllowTxFromGovernor` on a modem-backed channel before the row is written (so the rare legitimate "graywolf-as-soundmodem over a serial/PTY link" setup must pick `Mode=modem` explicitly). Migration 20 (`kiss_tcp_client_tx_default`) and Migration 30 (`kiss_serial_tnc_default`) repair pre-existing rows of their respective types stuck at the old `modem`/`false` default, both skipping any row whose channel has an audio input device.
 
-Source: [`../../pkg/webapi/dto/kiss.go`](../../pkg/webapi/dto/kiss.go),
+Source: [`../../pkg/configstore/models.go`](../../pkg/configstore/models.go) (`KissTypeDefaultsTnc`),
+[`../../pkg/webapi/dto/kiss.go`](../../pkg/webapi/dto/kiss.go),
 [`../../pkg/configstore/store.go`](../../pkg/configstore/store.go) (`normalizeKissInterface`),
-[`../../pkg/configstore/migrate.go`](../../pkg/configstore/migrate.go) (`migrateKissTcpClientTxDefault`).
+[`../../pkg/configstore/migrate.go`](../../pkg/configstore/migrate.go) (`migrateKissTcpClientTxDefault`, `migrateKissSerialTncDefault`),
+[`../../web/src/routes/Kiss.svelte`](../../web/src/routes/Kiss.svelte) (TNC-defaults `$effect`).
 
 ### 16c. `resolveTxChannel` honors KISS-TNC channels, not just modem channels
 
@@ -2014,7 +2016,110 @@ Source: [`../../pkg/kiss/manager.go`](../../pkg/kiss/manager.go)
 `serveShutdownGrace`);
 [`../../pkg/kiss/manager_rebind_test.go`](../../pkg/kiss/manager_rebind_test.go).
 
-### 68. LoRa APRS JSON reception is lossless and receive-only before AX.25
+### 68. 32-bit ARM builds are time32; ALSA timestamps cross an ABI boundary
+
+The armv6/armv7 (`armhf`) modem is built with the **default 32-bit
+`time_t`** (no `RUST_LIBC_UNSTABLE_GNU_TIME_BITS`), because the cross-rs
+images ship glibc 2.27 and a time64 build does not link. That has three
+consequences that must hold together:
+
+1. **Keep the `alsa` fork pinned** in the root `Cargo.toml`
+   `[patch.crates-io]`. On a t64 userland (current 32-bit Pi OS)
+   `libasound` writes a 16-byte `struct timespec` into what Rust thinks is
+   an 8-byte slot; the fork's `Status` htstamp accessors read into a
+   zeroed 16-byte buffer and decode per ABI. Without it: SIGSEGV
+   crash-loop (#231). With a wrong decode: htstamp error floods (#336).
+2. **cpal must be >= 0.18.** cpal 0.17's ALSA backend computed
+   `tv_sec * 1_000_000_000` in the native `time_t` width, which on a
+   time32 build is `i32` and wraps after ~2 s of uptime. The negative
+   result tripped "get_htstamp ... was earlier than get_trigger_htstamp"
+   on every output period, so the TX stream rebuilt continuously: PTT
+   keyed on time but audio arrived late, truncated, or not at all (#628).
+   0.18 widens to `i64` before multiplying and clamps instead of erroring.
+3. **Any of our own code doing `timespec`/`time_t`/`c_long` arithmetic, or
+   keeping long-running `usize` totals, must widen to 64-bit first.** On
+   armhf `usize` is 32 bits: the TX sink's cumulative sample counters
+   (`AudioSink::submitted`/`drained`) are `AtomicU64` because a `usize`
+   total wraps after ~24.8 h of cumulative TX audio at 48 kHz. The Go side
+   has the matching rule in invariant 43, and CI vets with `GOARCH=arm`.
+
+*Why:* every failure here is invisible on amd64/arm64 (where `time_t` and
+`usize` are 64-bit) and only shows up on real 32-bit hardware, so this
+area has regressed three times. If you bump `alsa` or `cpal`, re-check that
+the fork still applies (`Cargo.lock` must show the `git+...alsa-rs` source)
+and that cpal's ALSA timestamp math is still 64-bit.
+
+Source: [`../../Cargo.toml`](../../Cargo.toml) (`[patch.crates-io]` comment);
+[`../../graywolf-modem/src/audio/soundcard.rs`](../../graywolf-modem/src/audio/soundcard.rs)
+(`AudioSink`, `StreamErrorPolicy`);
+[`../../.github/workflows/armhf-t64-htstamp.yml`](../../.github/workflows/armhf-t64-htstamp.yml);
+`docs/plans/2026-06-11-armhf-t64-alsa-htstamp-fix.md`.
+
+### 69. KISS FEND is a frame delimiter: the decoder syncs once, then never discards frame bytes
+
+`kiss.Decoder` (`pkg/kiss/framing.go`) discards leading bytes only until the
+**first** FEND on a stream (`synced` flag) — that handles a TNC text banner or
+a mid-stream connect. After that first delimiter it never discards again: the
+byte immediately following a frame's closing FEND is the *start of the next
+frame*, and the read loop's `len(buf)==0` skip absorbs any run of delimiters
+(leading FENDs, empty frames, a shared single FEND between back-to-back
+frames).
+
+*Why:* KISS FEND (0xC0) is a delimiter, not a per-frame wrapper. Real TNCs vary:
+some send `C0 <frame> C0 C0 <frame> C0` (double FEND), some share one FEND
+(`C0 f1 C0 f2 C0`), and some emit only a trailing FEND per frame with no
+leading FEND at all. The original decoder re-ran "skip until the next FEND" on
+every `Next()` call, so after emitting a frame it threw away the following
+frame's bytes while hunting for a leading FEND that shared/trailing-only TNCs
+never send — silent RX loss (every-other frame, or effectively all frames when
+packets arrive with idle gaps). This was the "connects fine but sees no
+packets" report against the tcp-client path; the server/serial paths share the
+same decoder and had the same latent bug. Only the first pre-sync frame in
+trailing-FEND-only framing is (unavoidably) lost.
+
+*How to apply:* do not reintroduce a discard-until-FEND step that runs per
+frame. Regression guards: `TestDecodeSharedDelimiter`, `TestDecodeTrailingFendOnly`,
+`TestDecodeMultipleFrames`, `TestDecodeSkipsLeadingFends` in
+[`../../pkg/kiss/framing_test.go`](../../pkg/kiss/framing_test.go).
+
+Source: [`../../pkg/kiss/framing.go`](../../pkg/kiss/framing.go) (`Decoder.synced`, `Decoder.Next`).
+
+### 70. Message unread counts update optimistically on mark-read, not only via the rollup poll
+
+`MessageThread.svelte`'s `flushBatch` calls `store.adjustUnread(threadId, -n)`
+for every thread in the batch *before* the `markRead` requests resolve,
+and rolls back (`adjustUnread(threadId, +n)`) any message whose request
+fails. The 30s `refreshConversations()` poll in `messagesTransport.js`
+is reconciliation for drift, not the primary signal path. Each batched
+message carries its own `thread_kind`/`thread_key`, because the
+component is not remounted on a thread switch and a batch can straddle
+two threads.
+
+A message's `unread` flag is cleared the moment it is batched (and
+restored if its `markRead` fails). `msgs` is loaded once per thread
+visit, so without that, scrolling a read message out of view and back,
+or a tab switch that runs `rebuildIO()`, would batch it again and lower
+the count a second time.
+
+Each `MessageBubble` hands its element back on unmount
+(`registerRef(el, false)`) so `MessageThread` can unobserve it and drop
+it from `bubbleByEl`; otherwise every thread switch leaves the old
+thread's detached bubbles in the map and re-observed on each
+`rebuildIO()`.
+
+*Why:* `messages.Service.MarkRead` is plain REST and publishes no event,
+so an unread badge that waits on the poll lags up to 30s behind what the
+operator already read. Any future unread surface should follow the same pattern:
+optimistic update, rollback on failure.
+
+Source: [`../../web/src/components/messages/MessageThread.svelte`](../../web/src/components/messages/MessageThread.svelte)
+(`flushBatch`, `observe`/`unobserve`),
+[`../../web/src/components/messages/MessageBubble.svelte`](../../web/src/components/messages/MessageBubble.svelte),
+[`../../web/src/lib/messagesStore.svelte.js`](../../web/src/lib/messagesStore.svelte.js)
+(`adjustUnread`),
+[`../../web/src/lib/unread-batch-core.js`](../../web/src/lib/unread-batch-core.js).
+
+### 71. LoRa APRS JSON reception is lossless and receive-only before AX.25
 
 Every accepted `rx` record first becomes an
 `rxttelemetry.RawReception`. `packet.raw_tnc2_base64` and the raw NDJSON
@@ -2049,7 +2154,7 @@ Source: [`../../pkg/rxttelemetry/service.go`](../../pkg/rxttelemetry/service.go)
 [`../../pkg/app/rxfanout.go`](../../pkg/app/rxfanout.go)
 (`aprsJSONProduce`).
 
-### 69. Outgoing APRS messages use the reply-ack message-number form
+### 72. Outgoing APRS messages use the reply-ack message-number form
 
 Every outgoing DM carries `{MM}AA` (aprs.org/aprs11/replyacks.txt): `MM` is
 a two-character base-36 number `01`..`ZZ` allocated per peer by

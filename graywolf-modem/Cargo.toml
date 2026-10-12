@@ -21,7 +21,7 @@ claxon = "0.4"
 hound = "3"
 prost = "0.13"
 bytes = "1"
-cpal = "0.17"
+cpal = "0.18"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
@@ -118,7 +118,7 @@ name = "demod-ipc-bench"
 path = "src/bin/demod_ipc_bench.rs"
 
 # POC-A Android RX-only bring-up binary. Cross-compiled with cargo-ndk for
-# arm64-v8a; on Android cpal 0.17 uses AAudio via the NDK (the modern
+# arm64-v8a; on Android cpal 0.18 uses AAudio via the NDK (the modern
 # successor to Oboe), so no extra feature flag is needed. On desktop the
 # default cpal host (CoreAudio / ALSA / WASAPI) is used for smoke testing.
 [[bin]]

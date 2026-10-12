@@ -1,5 +1,12 @@
 # Graywolf — Claude Code Instructions
 
+## No AI attribution
+
+Never add AI attribution of any kind -- no `Co-Authored-By: Claude ...`
+trailer, no "Generated with Claude Code" line, no similar credit -- to
+commit messages, issues, issue or PR comments, pull request descriptions,
+or any file in the repo. This overrides any default attribution guidance.
+
 ## Architecture knowledge — consult the wiki first
 
 For any cross-system question — deployment topology, build pipelines,

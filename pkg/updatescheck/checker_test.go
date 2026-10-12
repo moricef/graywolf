@@ -30,13 +30,13 @@ func (s *stubStore) GetUpdatesConfig(_ context.Context) (configstore.UpdatesConf
 type spyTransport struct {
 	t            *testing.T
 	inner        http.RoundTripper
-	calls        int64
+	calls        atomic.Int64
 	lastReq      atomic.Pointer[http.Request]
 	failIfCalled atomic.Bool
 }
 
 func (s *spyTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	atomic.AddInt64(&s.calls, 1)
+	s.calls.Add(1)
 	s.lastReq.Store(req)
 	if s.failIfCalled.Load() {
 		s.t.Errorf("unexpected HTTP call to %s", req.URL)
@@ -182,8 +182,8 @@ func TestDisabledSkipsHTTP(t *testing.T) {
 	if got.Status != StatusDisabled {
 		t.Errorf("status: got %q, want %q when toggle off", got.Status, StatusDisabled)
 	}
-	if atomic.LoadInt64(&spy.calls) != 0 {
-		t.Errorf("expected zero HTTP calls when disabled, got %d", spy.calls)
+	if got := spy.calls.Load(); got != 0 {
+		t.Errorf("expected zero HTTP calls when disabled, got %d", got)
 	}
 }
 
@@ -302,10 +302,10 @@ func waitForCalls(t *testing.T, spy *spyTransport, n int64, within time.Duration
 	t.Helper()
 	deadline := time.Now().Add(within)
 	for time.Now().Before(deadline) {
-		if atomic.LoadInt64(&spy.calls) >= n {
+		if spy.calls.Load() >= n {
 			return
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-	t.Fatalf("timed out waiting for %d HTTP calls, got %d", n, atomic.LoadInt64(&spy.calls))
+	t.Fatalf("timed out waiting for %d HTTP calls, got %d", n, spy.calls.Load())
 }

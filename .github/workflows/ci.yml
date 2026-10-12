@@ -65,6 +65,13 @@ jobs:
       - name: go vet
         run: go vet ./...
 
+      # We ship 32-bit ARM (GOARM=6/7) builds, where Go `int` is 32 bits.
+      # Vetting for that target type-checks every file (tests included)
+      # with 32-bit int, catching constant overflows that the amd64 vet
+      # above cannot see. See issue #628 and wiki invariant 43.
+      - name: go vet (32-bit ARM)
+        run: GOOS=linux GOARCH=arm GOARM=6 go vet ./...
+
       # Regenerate the prior-release migration fixture so
       # TestMigrateFromPriorRelease has real coverage on every run.
       # Non-fatal: if the generator fails (e.g. previous release has a

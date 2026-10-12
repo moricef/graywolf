@@ -32,6 +32,7 @@
   } from '../../lib/settings/messages-preferences-store.svelte.js';
   import { dayHeader, dayKey } from './time.js';
   import { messages as store } from '../../lib/messagesStore.svelte.js';
+  import { countByThread } from '../../lib/unread-batch-core.js';
   import {
     listMessages, markRead, markUnread, resendMessage,
   } from '../../api/messages.js';
@@ -230,16 +231,30 @@
   // --- IntersectionObserver: mark inbound messages as read on dwell.
   /** @type {Map<number, number>} */
   const dwellStart = new Map();
-  /** @type {Set<number>} */
-  const batchedIds = new Set();
+  // id -> {kind, key, msg} taken from the message row itself, not from
+  // the `thread` prop: this component persists across thread switches, so
+  // the prop may already point at another thread when the batch flushes.
+  /** @type {Map<number, {kind: string, key: string, msg: any}>} */
+  const batchedIds = new Map();
   let batchTimer = null;
 
   function flushBatch() {
-    for (const id of batchedIds) {
-      markRead(id).catch(() => { /* ignore */ });
-    }
+    const entries = [...batchedIds];
     batchedIds.clear();
     batchTimer = null;
+    if (entries.length === 0) return;
+
+    // Update the unread count now rather than on the next 30s rollup;
+    // roll back any message whose markRead fails. The row's `unread`
+    // flag was cleared when it was batched, so restore it on failure.
+    const threadIdFor = (kind, key) => store.threadIdFor(kind, key);
+    for (const [tid, n] of countByThread(entries, threadIdFor)) store.adjustUnread(tid, -n);
+
+    Promise.allSettled(entries.map(([id]) => markRead(id))).then((results) => {
+      const failed = entries.filter((_, i) => results[i].status === 'rejected');
+      for (const [, t] of failed) if (t.msg) t.msg.unread = true;
+      for (const [tid, n] of countByThread(failed, threadIdFor)) store.adjustUnread(tid, n);
+    });
   }
 
   function scheduleFlush() {
@@ -266,7 +281,11 @@
           setTimeout(() => {
             if (!dwellStart.has(m.id)) return;
             if (Date.now() - started < 500) return;
-            batchedIds.add(m.id);
+            batchedIds.set(m.id, { kind: m.thread_kind, key: m.thread_key, msg: m });
+            // msgs is loaded once per thread visit, so clear the flag here or
+            // scrolling back over this row (or a tab-switch rebuildIO) would
+            // batch it again and lower the count a second time.
+            m.unread = false;
             dwellStart.delete(m.id);
             scheduleFlush();
           }, 520);
@@ -433,7 +452,7 @@
                 onReplyPrivate={replyPrivately}
                 onContextMenu={openMenu}
                 onResend={resendDirect}
-                registerRef={(el) => el ? observe(el, m) : null}
+                registerRef={(el, mounted) => (mounted ? observe(el, m) : unobserve(el))}
               />
             {/each}
           </div>

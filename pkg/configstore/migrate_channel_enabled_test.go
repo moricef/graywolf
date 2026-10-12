@@ -70,9 +70,9 @@ func TestMigrateChannelsEnabled_BackfillsTrue(t *testing.T) {
 func TestChannelEnabled_CreateAndToggle(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
-	s, err := OpenMemory()
+	s, err := Open(filepath.Join(t.TempDir(), "channel-toggle.db"))
 	if err != nil {
-		t.Fatalf("OpenMemory: %v", err)
+		t.Fatalf("Open: %v", err)
 	}
 	defer s.Close()
 

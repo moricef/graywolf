@@ -24,6 +24,10 @@ resolver = "2"
 # (time32) libasound, flooding cpal with "get_htstamp was earlier than
 # get_trigger_htstamp" errors. The decode is now ABI-aware, so one time32
 # binary is correct on both pre-t64 and t64 userlands.
+#
+# The fork alone is not enough on time32: cpal must be >= 0.18, whose ALSA
+# backend widens tv_sec to i64 before multiplying (0.17 overflowed i32 after
+# ~2 s of uptime and broke TX audio, issue #628). See wiki invariant 68.
 # See docs/plans/2026-06-11-armhf-t64-alsa-htstamp-fix.md. Drop once the fix
 # is released upstream.
 [patch.crates-io]

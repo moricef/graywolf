@@ -320,3 +320,17 @@ Unit tests cover both layouts (alsa-rs PR #1).
 Test-gap note: the original plan added only a t64 canary (Layer 2). A time32 /
 pre-t64 canary is still missing and is what would have caught this -- worth
 adding alongside the t64 one.
+
+## Postscript 2: the cpal i32 overflow (#628)
+
+With the fork's ABI-aware decode in place, 32-bit Pi users still saw a
+continuous `get_htstamp ... was earlier than get_trigger_htstamp` flood on
+the **output** stream (TX audio late or truncated; PTT on time). The decode
+was correct; the arithmetic was not. cpal 0.17.3's `timespec_to_nanos` did
+`ts.tv_sec * 1_000_000_000 + ts.tv_nsec` in the native `time_t` width,
+which on our time32 armhf build is `i32` -- it wraps once uptime passes
+~2 s. Section 4 had listed cpal as "fixed in 0.18" only in the context of
+the abandoned time64 build; going back to time32 made the overflow live.
+Fix: bump cpal to 0.18 (widens to `i64`, clamps instead of erroring). The
+fork is still required and still applies (cpal 0.18 pins `alsa ^0.11`).
+See wiki invariant 68.

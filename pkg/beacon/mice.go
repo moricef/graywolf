@@ -92,11 +92,7 @@ func MicEPositionInfo(lat, lon float64, course int, speedKt float64, altM float6
 //	110..179        10..79      +100
 func micELonFields(lon float64) (degAdjusted int, offset100 bool, west bool) {
 	west = lon < 0
-	absLon := lon
-	if absLon < 0 {
-		absLon = -absLon
-	}
-	d := int(absLon)
+	d, _, _ := micELonParts(lon)
 	switch {
 	case d < 10:
 		return d + 90, true, west
@@ -107,6 +103,19 @@ func micELonFields(lon float64) (degAdjusted int, offset100 bool, west bool) {
 	default:
 		return d - 100, true, west
 	}
+}
+
+// micELonParts rounds once to the wire precision before separating degrees
+// and minutes. Both the destination offset and info bytes must use that same
+// rounding, including a carry across a degree-range boundary. Mic-E cannot
+// represent 180 degrees; saturate at 179 degrees 59.99 minutes.
+func micELonParts(lon float64) (degrees, minutes, hundredths int) {
+	total := int(math.Round(math.Abs(lon) * 6000))
+	const maxTotal = 180*6000 - 1
+	if total > maxTotal {
+		total = maxTotal
+	}
+	return total / 6000, (total % 6000) / 100, total % 100
 }
 
 // micELonBytes returns the 3-byte longitude info-field bytes per
@@ -132,23 +141,7 @@ func micELonFields(lon float64) (degAdjusted int, offset100 bool, west bool) {
 func micELonBytes(lon float64, ambiguity int) [3]byte {
 	degAdjusted, _, _ := micELonFields(lon)
 
-	absLon := lon
-	if absLon < 0 {
-		absLon = -absLon
-	}
-	// Recover the minutes portion from the fractional degrees.
-	frac := absLon - math.Trunc(absLon)
-	minF := frac * 60.0
-	minWhole := int(minF)
-	minFrac := int(math.Round((minF - float64(minWhole)) * 100.0))
-	// Float carry guard: rounding may push minFrac to 100.
-	if minFrac >= 100 {
-		minFrac = 0
-		minWhole++
-	}
-	if minWhole >= 60 {
-		minWhole = 0 // wrap; the degree byte already covers this case
-	}
+	_, minWhole, minFrac := micELonParts(lon)
 
 	// Coarsen by truncation to match the destination's K/L/Z blanking.
 	// Truncation (rather than round-to-nearest) keeps the encoded value

@@ -1569,19 +1569,14 @@ fn alsa_card_description(_cpal_name: &str) -> String {
 }
 
 /// On Windows, pull a device-specific friendly string out of cpal's
-/// `DeviceDescription`. `description().name()` itself prefers
-/// `DEVPKEY_Device_DeviceDesc` (the device class label, e.g.
-/// `"Speakers"`), which is shared by every endpoint of that class —
-/// so it can't disambiguate two soundcards. We try, in order:
+/// `DeviceDescription`. We try, in order:
 ///
-/// 1. `extended()[0]` — cpal stores `DEVPKEY_Device_FriendlyName`
-///    there when it differs from the class name (see
-///    `cpal/host/wasapi/device.rs:419-423`), e.g.
-///    `"Speakers (Realtek(R) Audio)"`.
-/// 2. `driver()` — `DEVPKEY_DeviceInterface_FriendlyName`, e.g.
+/// 1. `name()` -- since cpal 0.18 this is `DEVPKEY_Device_FriendlyName`
+///    (e.g. `"Speakers (Realtek(R) Audio)"`), falling back to the
+///    class label `DEVPKEY_Device_DeviceDesc` (e.g. `"Speakers"`).
+/// 2. `driver()` -- `DEVPKEY_DeviceInterface_FriendlyName`, e.g.
 ///    `"USB PnP Sound Device"`.
-/// 3. empty string — caller's UI fallback (`description || name`)
-///    will render the class label.
+/// 3. empty string -- caller's UI fallback (`description || name`).
 ///
 /// The result is surfaced as the proto `description` field. Issue #100.
 #[cfg(target_os = "windows")]
@@ -1590,10 +1585,8 @@ fn windows_friendly_name(dev: &cpal::Device) -> String {
     let Ok(desc) = dev.description() else {
         return String::new();
     };
-    if let Some(s) = desc.extended().first() {
-        if !s.is_empty() {
-            return s.clone();
-        }
+    if !desc.name().is_empty() {
+        return desc.name().to_string();
     }
     if let Some(driver) = desc.driver() {
         if !driver.is_empty() {
@@ -1610,7 +1603,7 @@ fn windows_friendly_name(dev: &cpal::Device) -> String {
 #[cfg(target_os = "windows")]
 fn windows_device_id(dev: &cpal::Device) -> Option<String> {
     use cpal::traits::DeviceTrait;
-    dev.id().ok().map(|id| id.1)
+    dev.id().ok().map(|id| id.id().to_string())
 }
 
 /// On Windows, report whether audio "enhancements" (system effects /
@@ -1734,13 +1727,12 @@ fn is_useful_alsa_device(_pcm_id: &str) -> bool {
 /// `collect_input_devices_linux` / `collect_output_devices_linux`, which
 /// add physical-card dedup, capture probing, and the in-use cache.
 #[cfg(not(target_os = "linux"))]
-#[allow(deprecated)] // DeviceTrait::name() gives the raw pcm_id we need
 fn collect_devices<I>(
     devices: impl Iterator<Item = cpal::Device>,
     kind: i32,
     default_display_name: Option<&str>,
     host_api: &str,
-    get_configs: impl Fn(&cpal::Device) -> Result<I, cpal::SupportedStreamConfigsError>,
+    get_configs: impl Fn(&cpal::Device) -> Result<I, cpal::Error>,
 ) -> Vec<AudioDeviceInfo>
 where
     I: Iterator<Item = cpal::SupportedStreamConfigRange>,
@@ -1749,9 +1741,8 @@ where
 
     let mut out = Vec::new();
     for dev in devices {
-        let pcm_id = match dev.name() {
-            Ok(id) => id,
-            Err(_) => continue,
+        let Some(pcm_id) = crate::audio::soundcard::device_name(&dev) else {
+            continue;
         };
         if pcm_id == "null" || !is_useful_alsa_device(&pcm_id) {
             continue;
@@ -1790,8 +1781,9 @@ where
 
         // On Windows, key both the stable id and the default-device
         // match on the IMMDevice endpoint id (cpal `Device::id()`).
-        // `pcm_id` (cpal `name()`) is just the device class label there
-        // and would flag every output of the class as default. The
+        // A device name is not unique there (two cards can share a
+        // FriendlyName, and cpal 0.17 reported only the class label),
+        // so it would flag every matching output as default. The
         // proto `description` carries the WASAPI FriendlyName so the
         // UI's `description || name` fallback renders a disambiguated
         // string; `recommended` is always false on Windows (no plughw).
@@ -1852,7 +1844,6 @@ where
 ///    stream is never probed (would disrupt the running radio) and
 ///    surfaced from `in_use` cache, so a rescan no longer loses it.
 #[cfg(target_os = "linux")]
-#[allow(deprecated)] // DeviceTrait::name() gives the raw pcm_id we need
 fn collect_input_devices_linux(
     inputs: impl Iterator<Item = cpal::Device>,
     in_use: &HashMap<String, (u32, u32)>,
@@ -1868,9 +1859,8 @@ fn collect_input_devices_linux(
     // (pcm_id, Device) for every useful ALSA capture node cpal reports.
     let mut devs: Vec<(String, cpal::Device)> = Vec::new();
     for dev in inputs {
-        let pcm_id = match dev.name() {
-            Ok(id) => id,
-            Err(_) => continue,
+        let Some(pcm_id) = crate::audio::soundcard::device_name(&dev) else {
+            continue;
         };
         if pcm_id == "null" || !is_useful_alsa_device(&pcm_id) {
             continue;
@@ -2018,7 +2008,6 @@ fn collect_input_devices_linux(
 /// card surfaces its top-ranked alias (`plughw:CARD=<name>` first).
 /// `recommended` stays the string heuristic for outputs.
 #[cfg(target_os = "linux")]
-#[allow(deprecated)] // DeviceTrait::name() gives the raw pcm_id we need
 fn collect_output_devices_linux(
     outputs: impl Iterator<Item = cpal::Device>,
     in_use: &HashMap<String, (u32, u32)>,
@@ -2033,9 +2022,8 @@ fn collect_output_devices_linux(
 
     let mut devs: Vec<(String, cpal::Device)> = Vec::new();
     for dev in outputs {
-        let pcm_id = match dev.name() {
-            Ok(id) => id,
-            Err(_) => continue,
+        let Some(pcm_id) = crate::audio::soundcard::device_name(&dev) else {
+            continue;
         };
         if pcm_id == "null" || !is_useful_alsa_device(&pcm_id) {
             continue;
@@ -2144,7 +2132,6 @@ fn collect_output_devices_linux(
 /// instead of probing (input) or instead of letting a busy-device
 /// `supported_*_configs()` failure drop them (output); other platforms
 /// ignore them.
-#[allow(deprecated)]
 #[cfg_attr(not(target_os = "linux"), allow(unused_variables))]
 fn enumerate_audio_devices(
     include_output: bool,
@@ -2227,7 +2214,6 @@ fn enumerate_audio_devices(
 /// Open one input device, capture for `duration`, return its peak level.
 /// Errors (busy device, bad config, unsupported format) come back inside
 /// the `error` field rather than as a panic — the scanner reports them.
-#[allow(deprecated)] // DeviceTrait::name() returns the raw pcm_id we need
 fn measure_input_level(
     dev: &cpal::Device,
     pcm_id: &str,
@@ -2258,19 +2244,19 @@ fn measure_input_level(
     let stream = match sample_format {
         SampleFormat::F32 => {
             let pw = peak.clone();
-            dev.build_input_stream(&stream_cfg,
+            dev.build_input_stream(stream_cfg,
                 move |data: &[f32], _| update_peak_f32(&pw, data),
                 |e| eprintln!("scan level error: {}", e), None)
         }
         SampleFormat::I16 => {
             let pw = peak.clone();
-            dev.build_input_stream(&stream_cfg,
+            dev.build_input_stream(stream_cfg,
                 move |data: &[i16], _| update_peak_i16(&pw, data),
                 |e| eprintln!("scan level error: {}", e), None)
         }
         SampleFormat::U16 => {
             let pw = peak.clone();
-            dev.build_input_stream(&stream_cfg,
+            dev.build_input_stream(stream_cfg,
                 move |data: &[u16], _| update_peak_u16(&pw, data),
                 |e| eprintln!("scan level error: {}", e), None)
         }
@@ -2308,13 +2294,12 @@ fn measure_input_level(
 /// status instead of cpal's misleading "device no longer available" —
 /// you cannot independently scan a device a running channel holds; its
 /// live level shows on the device card.
-#[allow(deprecated)] // DeviceTrait::name() returns the raw pcm_id we need
 #[cfg_attr(not(target_os = "linux"), allow(unused_variables))]
 fn scan_input_levels(
     duration_ms: u32,
     in_use: &HashMap<String, (u32, u32)>,
 ) -> Vec<InputDeviceLevel> {
-    use cpal::traits::{DeviceTrait, HostTrait};
+    use cpal::traits::HostTrait;
 
     let host = cpal::default_host();
     let inputs = match host.input_devices() {
@@ -2325,9 +2310,8 @@ fn scan_input_levels(
 
     let mut devs: Vec<(String, cpal::Device)> = Vec::new();
     for dev in inputs {
-        let pcm_id = match dev.name() {
-            Ok(id) => id,
-            Err(_) => continue,
+        let Some(pcm_id) = crate::audio::soundcard::device_name(&dev) else {
+            continue;
         };
         // Skip virtual/plugin ALSA devices that can poison the ALSA
         // backend when their PCM open fails.

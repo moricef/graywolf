@@ -6,7 +6,7 @@
 //! dropping it releases the device.
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -56,6 +56,48 @@ fn backoff_wait(idx: &mut usize, stop: &Arc<AtomicBool>) {
     }
     if *idx + 1 < REBUILD_BACKOFF.len() {
         *idx += 1;
+    }
+}
+
+/// More than this many xruns inside [`XRUN_BURST_WINDOW`] means the
+/// device is stuck in a recovery loop rather than hiccuping.
+const XRUN_BURST_LIMIT: u32 = 10;
+const XRUN_BURST_WINDOW: Duration = Duration::from_secs(1);
+
+/// Decides whether a cpal stream error should tear the stream down.
+///
+/// cpal recovers an xrun in place (re-prepares the PCM and keeps the
+/// stream running) and reports a separate error if that recovery fails,
+/// so a lone xrun is not fatal. Since cpal 0.18 every backend reports
+/// xruns through the error callback (0.17 did so only on ALSA); a
+/// rebuild per xrun would drop queued TX audio on every scheduling
+/// hiccup. A burst of xruns still escalates to a rebuild so a device
+/// stuck in a recovery loop (e.g. the #227 POLLERR storm) goes through
+/// the backoff path instead of spinning.
+struct StreamErrorPolicy {
+    window_start: Instant,
+    xruns: u32,
+}
+
+impl StreamErrorPolicy {
+    fn new() -> Self {
+        Self {
+            window_start: Instant::now(),
+            xruns: 0,
+        }
+    }
+
+    /// Returns `true` when the stream should be rebuilt.
+    fn is_fatal(&mut self, kind: cpal::ErrorKind, now: Instant) -> bool {
+        if kind != cpal::ErrorKind::Xrun {
+            return true;
+        }
+        if now.saturating_duration_since(self.window_start) >= XRUN_BURST_WINDOW {
+            self.window_start = now;
+            self.xruns = 0;
+        }
+        self.xruns += 1;
+        self.xruns > XRUN_BURST_LIMIT
     }
 }
 
@@ -109,7 +151,7 @@ pub(crate) fn negotiate_channels<F, I>(
     get_configs: F,
 ) -> Result<u16, String>
 where
-    F: Fn(&Device) -> Result<I, cpal::SupportedStreamConfigsError>,
+    F: Fn(&Device) -> Result<I, cpal::Error>,
     I: Iterator<Item = cpal::SupportedStreamConfigRange>,
 {
     let configs = get_configs(device)
@@ -260,16 +302,21 @@ pub fn spawn(
 
             while !stop_for_thread.load(Ordering::Relaxed) {
                 let stream_failed_for_err = stream_failed_for_thread.clone();
-                let err_fn = move |e| {
+                let mut policy = StreamErrorPolicy::new();
+                let err_fn = move |e: cpal::Error| {
+                    if !policy.is_fatal(e.kind(), Instant::now()) {
+                        eprintln!("cpal input stream xrun (recovered): {}", e);
+                        return;
+                    }
                     eprintln!("cpal input stream error: {}", e);
                     stream_failed_for_err.store(true, Ordering::Relaxed);
                 };
 
-                let build_result: Result<cpal::Stream, cpal::BuildStreamError> = match sample_format {
+                let build_result: Result<cpal::Stream, cpal::Error> = match sample_format {
                     SampleFormat::F32 => {
                         let sink = sink.clone();
                         device.build_input_stream(
-                            &stream_config,
+                            stream_config,
                             move |data: &[f32], _| {
                                 let chunk = extract_channel_f32(data, channels as usize, want_ch);
                                 let _ = sink.try_send(chunk);
@@ -281,7 +328,7 @@ pub fn spawn(
                     SampleFormat::I16 => {
                         let sink = sink.clone();
                         device.build_input_stream(
-                            &stream_config,
+                            stream_config,
                             move |data: &[i16], _| {
                                 let chunk = extract_channel_i16(data, channels as usize, want_ch);
                                 let _ = sink.try_send(chunk);
@@ -293,7 +340,7 @@ pub fn spawn(
                     SampleFormat::U16 => {
                         let sink = sink.clone();
                         device.build_input_stream(
-                            &stream_config,
+                            stream_config,
                             move |data: &[u16], _| {
                                 let chunk = extract_channel_u16(data, channels as usize, want_ch);
                                 let _ = sink.try_send(chunk);
@@ -865,12 +912,12 @@ pub fn probe_capture(dev: &Device, timeout: Duration) -> bool {
     let failed = Arc::new(AtomicBool::new(false));
     let got_data = Arc::new(AtomicBool::new(false));
 
-    let build: Result<cpal::Stream, cpal::BuildStreamError> = match fmt {
+    let build: Result<cpal::Stream, cpal::Error> = match fmt {
         SampleFormat::F32 => {
             let gd = got_data.clone();
             let ef = failed.clone();
             dev.build_input_stream(
-                &cfg,
+                cfg,
                 move |_d: &[f32], _| gd.store(true, Ordering::Relaxed),
                 move |e| {
                     eprintln!("probe_capture stream error: {}", e);
@@ -883,7 +930,7 @@ pub fn probe_capture(dev: &Device, timeout: Duration) -> bool {
             let gd = got_data.clone();
             let ef = failed.clone();
             dev.build_input_stream(
-                &cfg,
+                cfg,
                 move |_d: &[i16], _| gd.store(true, Ordering::Relaxed),
                 move |e| {
                     eprintln!("probe_capture stream error: {}", e);
@@ -896,7 +943,7 @@ pub fn probe_capture(dev: &Device, timeout: Duration) -> bool {
             let gd = got_data.clone();
             let ef = failed.clone();
             dev.build_input_stream(
-                &cfg,
+                cfg,
                 move |_d: &[u16], _| gd.store(true, Ordering::Relaxed),
                 move |e| {
                     eprintln!("probe_capture stream error: {}", e);
@@ -951,21 +998,39 @@ pub fn resolve_output_device(pcm_id: &str) -> Result<Device, String> {
     }
 }
 
+/// The device name graywolf persists in operator configs and matches
+/// against on non-Windows hosts. This must stay byte-identical to what
+/// cpal 0.17's (since removed) `DeviceTrait::name()` returned, or saved
+/// configs stop resolving after an upgrade:
+///
+/// - ALSA: the raw PCM id (`plughw:CARD=AllInOneCable,DEV=0`), which
+///   cpal 0.18 exposes as `Device::id()`.
+/// - Everything else (CoreAudio, AAudio): the description name, which
+///   is what 0.17's default `name()` returned.
+///
+/// Windows matches by endpoint id instead (see [`find_device_by_id`]);
+/// there this is only a display string.
+pub fn device_name(d: &Device) -> Option<String> {
+    #[cfg(target_os = "linux")]
+    return d.id().ok().map(|id| id.id().to_string());
+    #[cfg(not(target_os = "linux"))]
+    return d.description().ok().map(|desc| desc.name().to_string());
+}
+
 /// Find a cpal device whose stable id matches `id`.
 ///
-/// On Linux/macOS the stable id is the cpal `name()` value (the ALSA
-/// hw identifier like `hw:CARD=AllInOneCable,DEV=0`). On Windows it is
-/// the IMMDevice endpoint id surfaced via cpal `Device::id()`; cpal's
-/// `name()` there returns only the device class label (e.g.
-/// `"Speakers"`) which is shared by every endpoint of that class, so
-/// matching by `name()` would resolve to the wrong card. Issue #100.
-#[allow(deprecated)] // DeviceTrait::name() gives the raw pcm_id we need on non-Windows
+/// On Linux/macOS the stable id is [`device_name`] (the ALSA hw
+/// identifier like `hw:CARD=AllInOneCable,DEV=0`). On Windows it is
+/// the IMMDevice endpoint id surfaced via cpal `Device::id()`; a name
+/// is not unique there (cpal 0.17 returned only the class label, e.g.
+/// `"Speakers"`, shared by every endpoint of that class), so matching
+/// by name would resolve to the wrong card. Issue #100.
 pub fn find_device_by_id(devices: impl Iterator<Item = Device>, id: &str) -> Option<Device> {
     for d in devices {
         #[cfg(target_os = "windows")]
-        let matches = d.id().ok().map(|did| did.1 == id).unwrap_or(false);
+        let matches = d.id().ok().map(|did| did.id() == id).unwrap_or(false);
         #[cfg(not(target_os = "windows"))]
-        let matches = d.name().ok().map(|n| n == id).unwrap_or(false);
+        let matches = device_name(&d).is_some_and(|n| n == id);
         if matches {
             return Some(d);
         }
@@ -983,7 +1048,6 @@ pub fn find_device_by_id(devices: impl Iterator<Item = Device>, id: &str) -> Opt
 /// only fires after the exact pass fails, so working configs are unaffected;
 /// non hw/plughw ids (`default`, custom `~/.asoundrc` PCMs, Windows endpoint
 /// ids) never alias-match and fall through to the caller's "not found" error.
-#[allow(deprecated)] // DeviceTrait::name() gives the raw pcm_id we canonicalize against
 pub fn find_device_by_id_or_alias(
     devices: &[Device],
     id: &str,
@@ -995,9 +1059,8 @@ pub fn find_device_by_id_or_alias(
     parse_alsa_hw_id(id)?;
     let resolver = build_card_resolver(cards);
     for d in devices {
-        let name = match d.name() {
-            Ok(n) => n,
-            Err(_) => continue,
+        let Some(name) = device_name(d) else {
+            continue;
         };
         if alsa_alias_matches(id, &name, &resolver) {
             return Some(d.clone());
@@ -1095,11 +1158,15 @@ pub fn read_proc_asound_cards() -> Vec<(u32, String)> {
 /// unkey through naturally.
 pub struct AudioSink {
     submit_tx: Sender<Vec<i16>>,
-    /// Running total of samples the caller has ever submitted.
-    submitted: Arc<AtomicUsize>,
+    /// Running total of samples the caller has ever submitted. `u64`, not
+    /// `usize`: the sink lives as long as the modem, and on 32-bit targets
+    /// a `usize` total wraps after ~24.8 h of cumulative TX audio at 48 kHz
+    /// (weeks of uptime on a busy digipeater), breaking the watermark
+    /// comparison in the TX worker's drain wait.
+    submitted: Arc<AtomicU64>,
     /// Running total of samples the stream callback has copied into the
     /// DAC output buffer. Monotonically non-decreasing.
-    drained: Arc<AtomicUsize>,
+    drained: Arc<AtomicU64>,
     stop: Arc<AtomicBool>,
     join: Option<JoinHandle<()>>,
 }
@@ -1108,8 +1175,8 @@ impl AudioSink {
     /// Queue samples for playback. Returns the cumulative sample watermark
     /// the caller should wait for via [`AudioSink::drained_samples`] before
     /// considering this submission fully rendered by the callback.
-    pub fn submit(&self, samples: Vec<i16>) -> Result<usize, String> {
-        let n = samples.len();
+    pub fn submit(&self, samples: Vec<i16>) -> Result<u64, String> {
+        let n = samples.len() as u64;
         let total = self.submitted.fetch_add(n, Ordering::Relaxed) + n;
         self.submit_tx
             .send(samples)
@@ -1124,7 +1191,7 @@ impl AudioSink {
     /// milliseconds in its DAC pipeline after the callback releases samples;
     /// callers that need sample-accurate tail behavior should also wait the
     /// expected audio duration.
-    pub fn drained_samples(&self) -> usize {
+    pub fn drained_samples(&self) -> u64 {
         self.drained.load(Ordering::Relaxed)
     }
 }
@@ -1176,8 +1243,8 @@ pub fn spawn_output(cfg: SoundcardOutputConfig, device: Option<Device>) -> Resul
 
     let (submit_tx, submit_rx) = channel::<Vec<i16>>();
     let shared_rx = Arc::new(Mutex::new(submit_rx));
-    let submitted = Arc::new(AtomicUsize::new(0));
-    let drained = Arc::new(AtomicUsize::new(0));
+    let submitted = Arc::new(AtomicU64::new(0));
+    let drained = Arc::new(AtomicU64::new(0));
     let stop = Arc::new(AtomicBool::new(false));
     let stream_failed = Arc::new(AtomicBool::new(false));
 
@@ -1246,7 +1313,12 @@ pub fn spawn_output(cfg: SoundcardOutputConfig, device: Option<Device>) -> Resul
 
             while !stop_for_thread.load(Ordering::Relaxed) {
                 let stream_failed_for_err = stream_failed_for_thread.clone();
-                let err_fn = move |e| {
+                let mut policy = StreamErrorPolicy::new();
+                let err_fn = move |e: cpal::Error| {
+                    if !policy.is_fatal(e.kind(), Instant::now()) {
+                        eprintln!("cpal output stream xrun (recovered): {}", e);
+                        return;
+                    }
                     eprintln!("cpal output stream error: {}", e);
                     stream_failed_for_err.store(true, Ordering::Relaxed);
                 };
@@ -1261,9 +1333,9 @@ pub fn spawn_output(cfg: SoundcardOutputConfig, device: Option<Device>) -> Resul
                 let mut ptt_tone =
                     ptt_tone_spec.map(|(hz, ch)| PttTone::new(hz, tone_sample_rate, ch));
 
-                let build_result: Result<cpal::Stream, cpal::BuildStreamError> = match sample_format {
+                let build_result: Result<cpal::Stream, cpal::Error> = match sample_format {
                     SampleFormat::F32 => device.build_output_stream(
-                        &stream_config,
+                        stream_config,
                         move |data: &mut [f32], _| {
                             let mut next = || state.next_sample();
                             fill_output_f32(data, ch_usize, want_ch, &mut next, ptt_tone.as_mut());
@@ -1272,7 +1344,7 @@ pub fn spawn_output(cfg: SoundcardOutputConfig, device: Option<Device>) -> Resul
                         None,
                     ),
                     SampleFormat::I16 => device.build_output_stream(
-                        &stream_config,
+                        stream_config,
                         move |data: &mut [i16], _| {
                             let mut next = || state.next_sample();
                             fill_output_i16(data, ch_usize, want_ch, &mut next, ptt_tone.as_mut());
@@ -1281,7 +1353,7 @@ pub fn spawn_output(cfg: SoundcardOutputConfig, device: Option<Device>) -> Resul
                         None,
                     ),
                     SampleFormat::U16 => device.build_output_stream(
-                        &stream_config,
+                        stream_config,
                         move |data: &mut [u16], _| {
                             let mut next = || state.next_sample();
                             fill_output_u16(data, ch_usize, want_ch, &mut next, ptt_tone.as_mut());
@@ -1390,15 +1462,15 @@ struct OutputState {
     rx: Arc<Mutex<Receiver<Vec<i16>>>>,
     current: Vec<i16>,
     pos: usize,
-    drained: Arc<AtomicUsize>,
-    submitted: Arc<AtomicUsize>,
+    drained: Arc<AtomicU64>,
+    submitted: Arc<AtomicU64>,
 }
 
 impl OutputState {
     fn new(
         rx: Arc<Mutex<Receiver<Vec<i16>>>>,
-        drained: Arc<AtomicUsize>,
-        submitted: Arc<AtomicUsize>,
+        drained: Arc<AtomicU64>,
+        submitted: Arc<AtomicU64>,
     ) -> Self {
         Self {
             rx,
@@ -1587,6 +1659,42 @@ mod tests {
     use super::*;
 
     #[test]
+    fn stream_error_policy_tolerates_isolated_xruns() {
+        let mut p = StreamErrorPolicy::new();
+        let t0 = p.window_start;
+        for i in 0..XRUN_BURST_LIMIT {
+            assert!(
+                !p.is_fatal(cpal::ErrorKind::Xrun, t0 + Duration::from_millis(i as u64)),
+                "xrun {} inside the burst limit must not rebuild",
+                i
+            );
+        }
+        // A fresh window resets the count, so steady occasional xruns
+        // never escalate.
+        let later = t0 + XRUN_BURST_WINDOW;
+        assert!(!p.is_fatal(cpal::ErrorKind::Xrun, later));
+    }
+
+    #[test]
+    fn stream_error_policy_escalates_xrun_burst() {
+        let mut p = StreamErrorPolicy::new();
+        let t0 = p.window_start;
+        for _ in 0..XRUN_BURST_LIMIT {
+            assert!(!p.is_fatal(cpal::ErrorKind::Xrun, t0));
+        }
+        assert!(p.is_fatal(cpal::ErrorKind::Xrun, t0));
+    }
+
+    #[test]
+    fn stream_error_policy_non_xrun_is_always_fatal() {
+        let mut p = StreamErrorPolicy::new();
+        let t0 = p.window_start;
+        assert!(p.is_fatal(cpal::ErrorKind::DeviceNotAvailable, t0));
+        assert!(p.is_fatal(cpal::ErrorKind::BackendError, t0));
+        assert!(p.is_fatal(cpal::ErrorKind::Other, t0));
+    }
+
+    #[test]
     fn pick_input_format_prefers_i16_over_f32_at_rate() {
         // The real AIOC case: a synthetic plug PCM advertises F32 (and
         // a huge range) alongside the native I16/48k config. Must pick
@@ -1744,8 +1852,8 @@ mod tests {
     #[test]
     fn output_state_yields_samples_across_submissions_and_bumps_drained() {
         let (tx, rx) = channel::<Vec<i16>>();
-        let drained = Arc::new(AtomicUsize::new(0));
-        let submitted = Arc::new(AtomicUsize::new(0));
+        let drained = Arc::new(AtomicU64::new(0));
+        let submitted = Arc::new(AtomicU64::new(0));
         let shared_rx = Arc::new(Mutex::new(rx));
         let mut state = OutputState::new(shared_rx, drained.clone(), submitted.clone());
 
@@ -1773,8 +1881,8 @@ mod tests {
         // worker unblocks; (3) a fresh OutputState plays new audio
         // submitted after recovery.
         let (tx, rx) = channel::<Vec<i16>>();
-        let drained = Arc::new(AtomicUsize::new(0));
-        let submitted = Arc::new(AtomicUsize::new(0));
+        let drained = Arc::new(AtomicU64::new(0));
+        let submitted = Arc::new(AtomicU64::new(0));
         let shared_rx = Arc::new(Mutex::new(rx));
 
         submitted.fetch_add(2, Ordering::Relaxed);
@@ -2185,14 +2293,13 @@ pub mod listing {
                 }
             };
 
-            // cpal deprecated `.name()` in favor of `.description()`,
-            // which returns a structured DeviceDescription. We carry
-            // its `.name()` field (an owned String) on the wire — the
-            // JSON field stays `name` for the schema contract.
+            // We carry `description().name()` (an owned String) on the
+            // wire as the display name -- the JSON field stays `name`
+            // for the schema contract.
             //
-            // Windows exception: `description().name()` returns only the
-            // device class label (e.g. `"Speakers"`), shared by every
-            // soundcard of that class.
+            // Windows exception: a description name is not unique per
+            // endpoint (two cards can share one, and cpal 0.17 returned
+            // only the class label, e.g. `"Speakers"`).
             // Source the default-device match key from `Device::id()`
             // (the IMMDevice endpoint id, unique per endpoint) and have
             // `collect_devices` key its `is_default` comparison the
@@ -2200,11 +2307,11 @@ pub mod listing {
             #[cfg(target_os = "windows")]
             let default_input = host
                 .default_input_device()
-                .and_then(|d| d.id().ok().map(|id| id.1));
+                .and_then(|d| d.id().ok().map(|id| id.id().to_string()));
             #[cfg(target_os = "windows")]
             let default_output = host
                 .default_output_device()
-                .and_then(|d| d.id().ok().map(|id| id.1));
+                .and_then(|d| d.id().ok().map(|id| id.id().to_string()));
             #[cfg(not(target_os = "windows"))]
             let default_input = host
                 .default_input_device()
@@ -2246,7 +2353,6 @@ pub mod listing {
         }
     }
 
-    #[allow(deprecated)] // DeviceTrait::name() gives the raw pcm_id we need for `recommended`.
     fn collect_devices(
         host: &cpal::Host,
         direction: &str,
@@ -2281,46 +2387,31 @@ pub mod listing {
             // modem-side `collect_devices`: a phantom `<unknown>` row
             // confuses operator triage when comparing the live UI to
             // the flare bundle.
-            let pcm_id = match dev.name() {
-                Ok(id) => id,
-                Err(_) => continue,
+            let Some(pcm_id) = super::device_name(&dev) else {
+                continue;
             };
-            // Windows: build a unique display `name` from the WASAPI
-            // FriendlyName (`description().extended()[0]`, e.g.
-            // `"Speakers (Realtek(R) Audio)"`) or the interface friendly
-            // name (`description().driver()`, e.g. `"USB PnP Sound
-            // Device"`). cpal's `description().name()` returns only the
-            // class label (e.g. `"Speakers"`), shared by every endpoint
-            // of that class — two cards of the same class would
-            // otherwise produce identical rows in the flare bundle.
+            // Windows: the display `name` is the WASAPI FriendlyName,
+            // which cpal 0.18 reports as `description().name()` (e.g.
+            // `"Speakers (Realtek(R) Audio)"`), falling back to the
+            // interface friendly name (`description().driver()`, e.g.
+            // `"USB PnP Sound Device"`) and then the endpoint id.
             // `is_default` is keyed on the IMMDevice endpoint id
             // surfaced by `Device::id()`, matching the
             // `default_input`/`default_output` source above. Issue #100.
             #[cfg(target_os = "windows")]
             let (name, is_default) = {
                 let desc = dev.description().ok();
-                let class = desc.as_ref().map(|d| d.name().to_string());
-                let friendly = desc
+                let endpoint_id = dev.id().ok().map(|id| id.id().to_string());
+                let display = desc
                     .as_ref()
-                    .and_then(|d| d.extended().first().cloned())
+                    .map(|d| d.name().to_string())
                     .filter(|s| !s.is_empty())
                     .or_else(|| {
                         desc.as_ref()
                             .and_then(|d| d.driver().map(|s| s.to_string()))
                             .filter(|s| !s.is_empty())
-                    });
-                let endpoint_id = dev.id().ok().map(|id| id.1);
-                let display = friendly
-                    .or_else(|| {
-                        // Fall back to "ClassName (endpoint id)" so two
-                        // identical class labels still differ.
-                        match (class, endpoint_id.as_ref()) {
-                            (Some(c), Some(id)) => Some(format!("{} ({})", c, id)),
-                            (Some(c), None) => Some(c),
-                            (None, Some(id)) => Some(id.clone()),
-                            (None, None) => None,
-                        }
                     })
+                    .or_else(|| endpoint_id.clone())
                     .unwrap_or_else(|| pcm_id.clone());
                 let is_default = match (default_name, endpoint_id.as_deref()) {
                     (Some(d), Some(id)) => d == id,

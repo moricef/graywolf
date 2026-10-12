@@ -93,16 +93,16 @@ enum TxMessage {
 /// `pub(crate)` so the android module can provide `AndroidTxSink` on
 /// the Android target without the trait leaking to downstream crates.
 pub(crate) trait TxSink {
-    fn submit(&self, samples: Vec<i16>) -> Result<usize, String>;
-    fn drained_samples(&self) -> usize;
+    fn submit(&self, samples: Vec<i16>) -> Result<u64, String>;
+    fn drained_samples(&self) -> u64;
 }
 
 impl TxSink for AudioSink {
-    fn submit(&self, samples: Vec<i16>) -> Result<usize, String> {
+    fn submit(&self, samples: Vec<i16>) -> Result<u64, String> {
         AudioSink::submit(self, samples)
     }
 
-    fn drained_samples(&self) -> usize {
+    fn drained_samples(&self) -> u64 {
         AudioSink::drained_samples(self)
     }
 }
@@ -491,15 +491,15 @@ mod tests {
 
     use super::*;
     use crate::tx::ptt::tests::{MockPtt, PttCall};
-    use std::sync::atomic::AtomicUsize;
+    use std::sync::atomic::AtomicU64;
     use std::sync::Mutex;
 
     /// Zero-latency fake that "drains" every submission immediately,
     /// so the drain loop exits on its first check. Optionally fails
     /// on submit to exercise the SubmitFailed error path.
     struct InstantDrainSink {
-        submitted: AtomicUsize,
-        drained: AtomicUsize,
+        submitted: AtomicU64,
+        drained: AtomicU64,
         fail_submit: bool,
         submit_log: Arc<Mutex<Vec<usize>>>,
     }
@@ -507,8 +507,8 @@ mod tests {
     impl InstantDrainSink {
         fn new() -> Self {
             Self {
-                submitted: AtomicUsize::new(0),
-                drained: AtomicUsize::new(0),
+                submitted: AtomicU64::new(0),
+                drained: AtomicU64::new(0),
                 fail_submit: false,
                 submit_log: Arc::new(Mutex::new(Vec::new())),
             }
@@ -523,12 +523,12 @@ mod tests {
     }
 
     impl TxSink for InstantDrainSink {
-        fn submit(&self, samples: Vec<i16>) -> Result<usize, String> {
+        fn submit(&self, samples: Vec<i16>) -> Result<u64, String> {
             if self.fail_submit {
                 return Err("fake sink submit failure".into());
             }
-            let n = samples.len();
-            self.submit_log.lock().unwrap().push(n);
+            self.submit_log.lock().unwrap().push(samples.len());
+            let n = samples.len() as u64;
             let total = self.submitted.fetch_add(n, Ordering::Relaxed) + n;
             // Advance drained counter in lockstep so the drain loop's
             // `drained_samples() >= watermark` check is satisfied on
@@ -537,7 +537,7 @@ mod tests {
             Ok(total)
         }
 
-        fn drained_samples(&self) -> usize {
+        fn drained_samples(&self) -> u64 {
             self.drained.load(Ordering::Relaxed)
         }
     }

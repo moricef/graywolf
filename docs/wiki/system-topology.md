@@ -24,6 +24,7 @@ sibling of the graywolf binary, `./target/release/graywolf-modem`, `$PATH`
 | Server entry | `pkg/webapi/server.go` | [`../../pkg/webapi/`](../../pkg/webapi/) |
 | SPA fallback | `web/embed.go::SPAHandler` | [`../../web/embed.go`](../../web/embed.go) |
 | Public (no-auth) endpoints | `/api/version`, `/api/auth/setup` | [`../../pkg/webapi/server.go`](../../pkg/webapi/server.go) |
+| Auth for external clients | Desktop/Pi: `graywolf_session` cookie from `POST /api/auth/login`, enforced by `webauth.RequireAuth` on `/api/*` and `/tiles/*`. Android only: per-launch `Authorization: Bearer` gate (`wrapWithBearerIfSet`, token from env). **No CORS headers are emitted**, so a third-party browser app on another origin cannot call the API directly -- serve it same-origin behind a reverse proxy, or call graywolf from the app's own backend holding the session cookie. Non-browser integrations can skip HTTP entirely and use KISS TCP or AGWPE. | [`../../pkg/webauth/`](../../pkg/webauth/), [`../../pkg/app/wiring.go`](../../pkg/app/wiring.go) |
 | WebSocket endpoint | `GET /api/ax25/terminal` (auth required, same-origin only). One WS per active LAPB session; multi-tab via multiple WS. JSON envelopes (`pkg/ax25termws/envelope.go`) carry connect/data/disconnect/abort and state/data_rx/link_stats/error in both directions. | [`../../pkg/webapi/ax25_terminal.go`](../../pkg/webapi/ax25_terminal.go) |
 | OpenAPI reference | [`../handbook/api.html`](../handbook/api.html), [`../handbook/openapi.yaml`](../handbook/openapi.yaml) | (handbook copy of swag-generated spec) |
 | Prometheus metrics | `GET /metrics` on the main HTTP listener (no auth, same bind as UI) | [`../../pkg/app/wiring.go`](../../pkg/app/wiring.go) |
@@ -203,9 +204,10 @@ and `store.MigrateMapsDownloadSlugs` (DB row update); both idempotent.
 
 The `/tiles/{multi-segment}.pmtiles` route on the outer mux strips the
 prefix and `.pmtiles` suffix, sets the rest as the slug, and delegates
-to `webapi.Server.ServeTilesPMTiles`. Catalog membership is rechecked
-on every tile request; the cache is in-process so the cost is a map
-lookup.
+to `webapi.Server.ServeTilesPMTiles`. Tile serving checks slug
+*grammar* only (`validSlugGrammar`), not catalog membership, so a Worker
+outage never bricks an already-downloaded archive; catalog lookups
+(`resolveSlug`) are reserved for start/delete/status handlers.
 
 The offline-safe render-bounds source `GET /api/maps/local-bounds`
 returns, per completed slug, `{ bbox, maxZoom }` snapshotted into
@@ -247,11 +249,31 @@ is left untouched — DEM/hillshading is out of scope for the offline
 path.
 
 Failure modes:
-- Never-online + no cache: 502 from the proxy; the map fails visibly
-  in the browser. Acceptable: a never-online host also has no tiles.
+- Graywolf host can't reach upstream + no cache: 502 from the proxy.
+  This also happens when the *browser* is online but the graywolf host
+  isn't (DNS, firewall, Pi-hole). `Cache.Get` logs a WARN
+  (`mapsstyle: upstream fetch failed and no usable cached copy`), throttled
+  globally to one line per minute with a `suppressed` count; canceled
+  browser requests aren't logged. The browser falls back to the OSM
+  raster style with a toast (`web/src/lib/map/basemap-style.js`), and
+  every later style rebuild retries the graywolf style. Upstream errors
+  have the `*url.Error` wrapper removed in `fetchUpstream` because its
+  URL carries the `?t=` bearer token.
 - Online + no cache: first request hydrates upstream-to-disk in a few
   hundred ms, then renders normally. Concurrent first requests for the
   same asset are coalesced (one upstream call, all callers share).
+- Corrupt cache: a cached `.json` asset that isn't valid JSON is
+  treated as a miss (WARN `mapsstyle: cached copy is corrupt,
+  refetching`) and overwritten by the upstream copy; with upstream down
+  it 502s rather than serving the bad copy. An upstream 200 whose
+  `.json` body isn't valid JSON (captive portal) is rejected and never
+  written to disk. Binary assets (PNG, PBF) aren't validated.
+- Unwritable style dir: startup calls `styleCache.CheckWritable()`
+  (`pkg/app/wiring.go`) and logs a WARN naming
+  `<TileCacheDir>/style` if it can't create the dir or write a probe
+  file. Not fatal: the map works online (every request re-fetches
+  upstream and logs `mapsstyle: write disk failed`), but nothing is
+  cached, so there's no style offline.
 - Online + stale cache: cache copies survive across restarts; refresh
   happens implicitly on the next map download via the prewarm hook,
   which re-fetches the eagerly-needed assets.

@@ -55,7 +55,7 @@ func TestCollectLogs_DBMissingEmitsIssue(t *testing.T) {
 func TestCollectLogs_OrdersOldestFirstUpToLimit(t *testing.T) {
 	path := freshLogDB(t, 0)
 	for i := 1; i <= 5; i++ {
-		if err := writeOneLogRow(path, int64(1714000000000000000+i), "INFO", "x", "row", `{}`); err != nil {
+		if err := writeOneLogRow(path, int64(1714000000000000000)+int64(i), "INFO", "x", "row", `{}`); err != nil {
 			t.Fatalf("writeOneLogRow: %v", err)
 		}
 	}

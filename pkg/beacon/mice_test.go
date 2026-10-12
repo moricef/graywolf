@@ -1,6 +1,8 @@
 package beacon
 
 import (
+	"fmt"
+	"math/rand"
 	"strings"
 	"testing"
 
@@ -156,7 +158,10 @@ func TestMicELongitudeDegreeEncoding(t *testing.T) {
 			if err != nil {
 				t.Fatalf("ParseAddress(%q): %v", dest, err)
 			}
-			srcAddr, _ := ax25.ParseAddress("F4MLV-2")
+			srcAddr, err := ax25.ParseAddress("F4MLV-2")
+			if err != nil {
+				t.Fatalf("ParseAddress(F4MLV-2): %v", err)
+			}
 			frame, err := ax25.NewUIFrame(srcAddr, destAddr, nil, info)
 			if err != nil {
 				t.Fatalf("NewUIFrame: %v", err)
@@ -172,6 +177,127 @@ func TestMicELongitudeDegreeEncoding(t *testing.T) {
 				t.Fatalf("decoded longitude = %.6f, want %.6f", packet.Position.Longitude, tc.lon)
 			}
 		})
+	}
+}
+
+func TestMicELongitudeBoundariesAndCarry(t *testing.T) {
+	const maxLon = 179 + 59.99/60
+	cases := []struct {
+		lon, wantLon float64
+		wantDegree   byte
+		offset       bool
+	}{
+		{0, 0, 118, true},
+		{9.5, 9.5, 127, true},
+		{10, 10, 38, false},
+		{99.5, 99.5, 127, false},
+		{100, 100, 108, true},
+		{109.5, 109.5, 117, true},
+		{110, 110, 38, true},
+		{179.5, 179.5, 107, true},
+		{1.99995, 2, 120, true},
+		{9.99995, 10, 38, false},
+		{99.99995, 100, 108, true},
+		{109.99995, 110, 38, true},
+		{179.99995, maxLon, 107, true},
+		{180, maxLon, 107, true},
+	}
+	for _, tc := range cases {
+		for _, sign := range []float64{1, -1} {
+			t.Run(fmt.Sprintf("lon=%+.5f", sign*tc.lon), func(t *testing.T) {
+				lon := sign * tc.lon
+				dest := MicEDestination(42.9606, lon, 0)
+				wantDest := "TRUW63"
+				if tc.offset {
+					wantDest = "TRUWV3"
+				}
+				if lon < 0 {
+					wantDest = wantDest[:5] + "S"
+				}
+				if dest != wantDest {
+					t.Fatalf("destination = %q, want %q", dest, wantDest)
+				}
+				info := []byte(MicEPositionInfo(42.9606, lon, 0, 0, 0, '/', '>', false, 0, ""))
+				if info[1] != tc.wantDegree {
+					t.Fatalf("degree byte = 0x%02x, want 0x%02x", info[1], tc.wantDegree)
+				}
+				src, err := ax25.ParseAddress("F4MLV-2")
+				if err != nil {
+					t.Fatal(err)
+				}
+				dst, err := ax25.ParseAddress(dest)
+				if err != nil {
+					t.Fatal(err)
+				}
+				frame, err := ax25.NewUIFrame(src, dst, nil, info)
+				if err != nil {
+					t.Fatal(err)
+				}
+				pkt, err := aprs.Parse(frame)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if pkt.Position == nil {
+					t.Fatal("missing decoded position")
+				}
+				if absf(pkt.Position.Longitude-sign*tc.wantLon) > 1e-9 {
+					t.Fatalf("decoded longitude = %.9f, want %.9f", pkt.Position.Longitude, sign*tc.wantLon)
+				}
+			})
+		}
+	}
+}
+
+// TestMicELongitudeRoundTripFullRange encodes longitudes across the whole
+// -180..180 range with the beacon encoder and decodes them with
+// aprs.Parse. Every one must decode, to within the half hundredth of a
+// minute the encoder rounds to. Random values hit every hundredths digit,
+// including 04, which encodes to SPACE (GH #652); the near-carry values
+// exercise the .99995 rounding across degree and range boundaries.
+func TestMicELongitudeRoundTripFullRange(t *testing.T) {
+	const maxLon = 179 + 59.99/60
+	const tol = 0.5/6000 + 1e-9
+	src, err := ax25.ParseAddress("N0CALL")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := rand.New(rand.NewSource(652))
+	for i := 0; i < 20000; i++ {
+		lon := (r.Float64()*2 - 1) * 180
+		if i%7 == 0 {
+			d := float64(int(lon))
+			if lon < 0 {
+				lon = d - 0.99995 - r.Float64()*0.00005
+			} else {
+				lon = d + 0.99995 + r.Float64()*0.00005
+			}
+		}
+		dest := MicEDestination(42.9606, lon, 0)
+		info := []byte(MicEPositionInfo(42.9606, lon, 0, 0, 0, '/', '>', false, 0, ""))
+		dst, err := ax25.ParseAddress(dest)
+		if err != nil {
+			t.Fatalf("lon=%.7f: ParseAddress(%q): %v", lon, dest, err)
+		}
+		frame, err := ax25.NewUIFrame(src, dst, nil, info)
+		if err != nil {
+			t.Fatalf("lon=%.7f: NewUIFrame: %v", lon, err)
+		}
+		pkt, err := aprs.Parse(frame)
+		if err != nil {
+			t.Fatalf("lon=%.7f (info % x): aprs.Parse: %v", lon, info[1:4], err)
+		}
+		if pkt.Position == nil {
+			t.Fatalf("lon=%.7f: decoded position is nil", lon)
+		}
+		want := lon
+		if want > maxLon {
+			want = maxLon
+		} else if want < -maxLon {
+			want = -maxLon
+		}
+		if absf(pkt.Position.Longitude-want) > tol {
+			t.Fatalf("lon=%.7f: decoded %.7f, want within %.2g of %.7f", lon, pkt.Position.Longitude, tol, want)
+		}
 	}
 }
 

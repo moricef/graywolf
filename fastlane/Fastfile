@@ -7,6 +7,9 @@
 #
 # Auth: supply reads the service account from SUPPLY_JSON_KEY (file path,
 # local) or SUPPLY_JSON_KEY_DATA (raw JSON, CI from the GH secret).
+#
+# PLAY_RELEASE_STATUS overrides the promoted release's status (default
+# `completed`); see docs/wiki/android-play-store.md for why CI sets it.
 
 default_platform(:android)
 
@@ -19,9 +22,16 @@ platform :android do
     version_code = (options[:version_code] || ENV["VERSION_CODE"]).to_i
     from_track   = options[:from] || ENV["FROM_TRACK"] || "alpha"
     to_track     = options[:to]   || ENV["TO_TRACK"]   || "beta"
+    # Play rejects a non-draft release while the app itself is a draft in
+    # the Console, so this follows the same knob as the tag-push upload:
+    # android.yml passes PLAY_RELEASE_STATUS from the repo variable
+    # GRAYWOLF_PLAY_RELEASE_STATUS (default `draft`). Unset or blank -- a
+    # local run -- keeps the historical `completed`.
+    status = ENV["PLAY_RELEASE_STATUS"].to_s.strip
+    status = "completed" if status.empty?
     UI.user_error!("version_code is required (e.g. version_code:130800)") if version_code.zero?
 
-    UI.message("Promoting versionCode #{version_code}: #{from_track} -> #{to_track}")
+    UI.message("Promoting versionCode #{version_code}: #{from_track} -> #{to_track} (status #{status})")
     supply(
       package_name:      PACKAGE,
       version_code:      version_code,
@@ -34,7 +44,7 @@ platform :android do
       skip_upload_changelogs:  true,
       skip_upload_images:      true,
       skip_upload_screenshots: true,
-      release_status: "completed",
+      release_status: status,
     )
   end
 

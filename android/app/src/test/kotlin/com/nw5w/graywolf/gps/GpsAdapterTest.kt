@@ -78,6 +78,25 @@ class GpsAdapterTest {
         assertFalse(fix.hasCourse)
     }
 
+    @Test fun toGpsFix_omitsUnconvertedAltitudeWithoutDroppingPosition() {
+        val loc = mock(Location::class.java)
+        `when`(loc.latitude).thenReturn(51.48)
+        `when`(loc.longitude).thenReturn(7.22)
+        `when`(loc.hasAltitude()).thenReturn(true)
+        `when`(loc.altitude).thenReturn(131.0)
+        `when`(loc.time).thenReturn(1_700_000_000_000L)
+
+        val adapter = GpsAdapter(mock(Context::class.java), mock(PlatformServer::class.java))
+        val fix = adapter.toGpsFix(loc, 8, includeAltitude = false)
+
+        assertFalse(fix.hasAlt)
+        assertEquals(0.0, fix.altM, 1e-9)
+        assertEquals(51.48, fix.lat, 1e-9)
+        assertEquals(7.22, fix.lon, 1e-9)
+        assertEquals(1_700_000_000_000L, fix.timeUnixMs)
+        assertEquals(8, fix.numSats.toInt())
+    }
+
     // unitTests.isReturnDefaultValues makes the host-JVM permission check
     // return GRANTED (0), so start() runs past the permission gate and we can
     // drive its provider handling with a mocked LocationManager.

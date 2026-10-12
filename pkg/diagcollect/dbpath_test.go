@@ -113,6 +113,9 @@ func TestDiscoverConfigDB_RealFileSystem(t *testing.T) {
 	if err := os.WriteFile(dbPath, []byte{}, 0o600); err != nil {
 		t.Fatal(err)
 	}
+	// Point the service and user-config candidates at nonexistent paths so
+	// an installed graywolf.db cannot win discovery ahead of the test's
+	// working-directory database.
 	got, src, err := DiscoverConfigDB(DiscoverOptions{
 		ServiceInstall: filepath.Join(dir, "missing-service.db"),
 		UserConfigDir:  filepath.Join(dir, "missing-user-config"),

@@ -22,13 +22,13 @@
 /// loop exits immediately on the first `drained_samples() >= watermark`
 /// check.
 pub struct AndroidTxSink {
-    drained: std::sync::atomic::AtomicUsize,
+    drained: std::sync::atomic::AtomicU64,
 }
 
 impl AndroidTxSink {
     pub fn new() -> Self {
         Self {
-            drained: std::sync::atomic::AtomicUsize::new(0),
+            drained: std::sync::atomic::AtomicU64::new(0),
         }
     }
 }
@@ -40,14 +40,14 @@ impl Default for AndroidTxSink {
 }
 
 impl crate::modem::TxSink for AndroidTxSink {
-    fn submit(&self, samples: Vec<i16>) -> Result<usize, String> {
-        let n = tx_emit_samples(&samples)?;
+    fn submit(&self, samples: Vec<i16>) -> Result<u64, String> {
+        let n = tx_emit_samples(&samples)? as u64;
         self.drained
             .fetch_add(n, std::sync::atomic::Ordering::Release);
         Ok(n)
     }
 
-    fn drained_samples(&self) -> usize {
+    fn drained_samples(&self) -> u64 {
         self.drained.load(std::sync::atomic::Ordering::Acquire)
     }
 }

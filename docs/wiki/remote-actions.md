@@ -61,7 +61,10 @@ persistent counter and exact command. Supported v1 commands are `EM=ON`,
 
 The sender implementation is in `command_auth.go`. One 32-byte Base64URL key
 and one monotonically increasing counter are stored per target in
-`remote_command_credentials` (configstore migration 30). The REST read shape
+`remote_command_credentials` (fork migration 30, consolidated by migration 31).
+Upstream independently used version 30 for the serial KISS default repair.
+Migration 31 runs both idempotent steps so databases from either history
+converge without replacing stored keys or counters. The REST read shape
 never contains the secret. `ReserveEnvelope` advances the counter transactionally
 before returning the signed body; an ambiguous send failure consumes the
 counter instead of risking reuse. The server then submits the body through

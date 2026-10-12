@@ -3,8 +3,10 @@ name: Android
 # PR / push:main: build an unsigned debug APK and upload as an artifact.
 # Tag pushes (v*): also build a release-signed AAB + APK and attach them
 # to the GitHub Release (which goreleaser/release.yml creates in parallel),
-# then auto-publish the AAB to the Play Closed Testing track (the `alpha`
-# track) so every tagged release reaches the private beta testers.
+# then upload the AAB to the Play Closed Testing track (the `alpha` track)
+# so every tagged release reaches the private beta testers. The release
+# status there is `draft` until the app's first Play publish completes --
+# see the `status:` comment on the upload step.
 
 on:
   push:
@@ -18,7 +20,7 @@ on:
   # Manual trigger. Two uses: (a) re-run the build on transient network
   # failures, and (b) promote an already-released version to a different
   # track via the promote job (provide `version`). Closed testing (alpha)
-  # is auto-published on tag push, so the manual promote is mainly for
+  # is uploaded on tag push, so the manual promote is mainly for
   # graduating a build to open testing (beta).
   workflow_dispatch:
     inputs:
@@ -317,10 +319,11 @@ jobs:
           echo "---- whatsnew-en-US ----"
           cat staging/whatsnew/whatsnew-en-US
 
-      # Auto-publish the signed AAB to Play Closed Testing -- the `alpha`
+      # Publish the signed AAB to Play Closed Testing -- the `alpha`
       # track (Play's track IDs are fixed: internal, alpha=closed,
-      # beta=open, production). Every v* tag now reaches the private beta
-      # testers. Gated on the service-account secret so it safely skips
+      # beta=open, production). Every v* tag uploads there; whether testers
+      # get it immediately or after a Console rollout depends on `status:`
+      # below. Gated on the service-account secret so it safely skips
       # (not fails) when GRAYWOLF_PLAY_SERVICE_ACCOUNT_JSON is absent. The
       # service account still lacks production permission, so a CI tag can
       # never reach production.
@@ -332,9 +335,27 @@ jobs:
           packageName: com.nw5w.graywolf
           releaseFiles: staging/graywolf-*.aab
           track: alpha
-          status: completed
+          # `draft` while com.nw5w.graywolf is still a draft app in the
+          # Console: Play rejects any non-draft release on one ("Only
+          # releases with status draft may be created on draft app.", GH
+          # #619). Set the repo variable to `completed` after the first
+          # publish. See docs/wiki/android-play-store.md#release-status-and-the-draft-app.
+          status: ${{ vars.GRAYWOLF_PLAY_RELEASE_STATUS || 'draft' }}
           # Per-locale release notes (whatsnew-en-US) generated above.
           whatsNewDirectory: staging/whatsnew
+
+      # A draft upload is green but reaches nobody until someone rolls it
+      # out, so say so in the run log instead of failing silently-green.
+      - name: Report the Play release status
+        if: env.HAVE_PLAY_SA == 'true'
+        env:
+          PLAY_RELEASE_STATUS: ${{ vars.GRAYWOLF_PLAY_RELEASE_STATUS || 'draft' }}
+        run: |
+          set -euo pipefail
+          echo "Play release status: ${PLAY_RELEASE_STATUS}"
+          if [ "${PLAY_RELEASE_STATUS}" = draft ]; then
+            echo "::notice::AAB landed on closed testing (alpha) as a DRAFT release -- testers get nothing until it is rolled out in Play Console. See docs/wiki/android-play-store.md#release-status-and-the-draft-app"
+          fi
 
       - name: Upload signed AAB as workflow artifact (manual fallback)
         uses: actions/upload-artifact@v5
@@ -346,9 +367,9 @@ jobs:
   # ------------------------------------------------------------------
   # promote — manual (workflow_dispatch) promotion of an already-released
   # version from closed testing (alpha) to another Play track (default:
-  # beta = open testing). Closed testing is auto-published on tag push, so
-  # this is the deliberate human step for graduating a vetted build to
-  # open testing. Run from the Actions tab (or:
+  # beta = open testing). Closed testing is uploaded on tag push, so this
+  # is the deliberate human step for graduating a vetted build to open
+  # testing. Run from the Actions tab (or:
   #   gh workflow run android.yml --field version=X.Y.Z --field track=beta).
   # Job id stays `promote-to-closed` for stability (external `gh`/Actions
   # references); the job now promotes *from* closed onward, not into it.
@@ -382,16 +403,22 @@ jobs:
           ruby-version: '3.3'
           bundler-cache: true
 
-      # Promote (not re-upload): the version is already in Play (from the
-      # tag-push auto-publish to closed testing / alpha). fastlane supply
-      # moves that versionCode to the chosen track. Re-uploading the AAB
-      # would fail with "version code already used", which is why this
-      # isn't an upload action. versionCode is derived from X.Y.Z the same
-      # way android/app/build.gradle.kts derives it (M*1e6 + m*1e4 + p*100).
+      # Promote (not re-upload): the versionCode is already in Play from
+      # the tag-push upload to closed testing / alpha -- which requires
+      # that upload's edit to have committed, so a tag whose Play step
+      # failed has nothing to promote. fastlane supply moves that
+      # versionCode to the chosen track. Re-uploading the AAB would fail
+      # with "version code already used", which is why this isn't an
+      # upload action. versionCode is derived from X.Y.Z the same way
+      # android/app/build.gradle.kts derives it (M*1e6 + m*1e4 + p*100).
       - name: Promote to the chosen track via fastlane
         if: env.HAVE_PLAY_SA == 'true'
         env:
           SUPPLY_JSON_KEY_DATA: ${{ secrets.GRAYWOLF_PLAY_SERVICE_ACCOUNT_JSON }}
+          # Same knob as the tag-push upload: a promotion is a new release
+          # on the target track, so Play rejects it as `completed` while
+          # the app is still a draft.
+          PLAY_RELEASE_STATUS: ${{ vars.GRAYWOLF_PLAY_RELEASE_STATUS || 'draft' }}
         run: |
           set -euo pipefail
           IFS=. read -r MAJ MIN PAT <<< "${{ github.event.inputs.version }}"
