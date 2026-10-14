@@ -21,15 +21,28 @@ function writeStored(v) {
 }
 
 export const unitsState = (() => {
-  let system = $state(readStored());
+  const initial = readStored();
+  let system = $state(initial);
+  let confirmedSystem = initial;
+  let revision = 0;
+  let fetchSequence = 0;
+  let pendingSaves = 0;
+  let saveQueue = Promise.resolve();
 
   async function fetchConfig() {
+    // A page mount must not read the old database value during a save.
+    if (pendingSaves > 0) return;
+    const startedRevision = revision;
+    const sequence = ++fetchSequence;
     try {
       const res = await fetch('/api/preferences/units', { credentials: 'same-origin' });
       if (res.status === 401) return;
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
+      // Ignore reads that started before a choice or a newer reload.
+      if (startedRevision !== revision || sequence !== fetchSequence || pendingSaves > 0) return;
       const next = normalize(data?.system);
+      confirmedSystem = next;
       system = next;
       writeStored(next);
     } catch {
@@ -38,28 +51,39 @@ export const unitsState = (() => {
     }
   }
 
-  async function setSystem(next) {
+  function setSystem(next) {
     const v = normalize(next);
-    const prev = system;
+    const choiceRevision = ++revision;
     system = v;
     writeStored(v);
-    try {
-      const res = await fetch('/api/preferences/units', {
-        method: 'PUT',
-        credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ system: v }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      const stored = normalize(data?.system);
-      system = stored;
-      writeStored(stored);
-    } catch {
-      system = prev;
-      writeStored(prev);
-      toasts.error("Couldn't save units preference — try again.");
-    }
+    pendingSaves++;
+    // Serialize writes so rapid changes also reach SQLite in choice order.
+    saveQueue = saveQueue.then(async () => {
+      try {
+        const res = await fetch('/api/preferences/units', {
+          method: 'PUT',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ system: v }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        confirmedSystem = normalize(data?.system);
+        if (choiceRevision === revision) {
+          system = confirmedSystem;
+          writeStored(confirmedSystem);
+        }
+      } catch {
+        if (choiceRevision === revision) {
+          system = confirmedSystem;
+          writeStored(confirmedSystem);
+          toasts.error("Couldn't save units preference — try again.");
+        }
+      } finally {
+        pendingSaves--;
+      }
+    });
+    return saveQueue;
   }
 
   return {
