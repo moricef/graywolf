@@ -113,6 +113,8 @@ type WeatherDTO struct {
 	Rain1h *float64 `json:"rain_1h_in,omitempty"`
 	// Rain24h is rainfall in the last 24 hours in inches; nil when not reported.
 	Rain24h *float64 `json:"rain_24h_in,omitempty"`
+	// RainToday is rainfall since local midnight at the reporting station, in inches; nil when not reported.
+	RainToday *float64 `json:"rain_today_in,omitempty"`
 	// Snow24h is snowfall in the last 24 hours in inches; nil when not reported.
 	Snow24h *float64 `json:"snow_24h_in,omitempty"`
 	// Luminosity is solar radiation in watts per square meter; nil when not reported.
@@ -426,6 +428,10 @@ func weatherToDTO(w *stationcache.Weather) *WeatherDTO {
 	if w.HasRain24h {
 		v := w.Rain24h
 		dto.Rain24h = &v
+	}
+	if w.HasRainToday {
+		v := w.RainToday
+		dto.RainToday = &v
 	}
 	if w.HasSnow24h {
 		v := w.Snow24h

@@ -3321,6 +3321,9 @@ definitions:
       rain_24h_in:
         description: Rain24h is rainfall in the last 24 hours in inches; nil when not reported.
         type: number
+      rain_today_in:
+        description: RainToday is rainfall since local midnight at the reporting station, in inches; nil when not reported.
+        type: number
       snow_24h_in:
         description: Snow24h is snowfall in the last 24 hours in inches; nil when not reported.
         type: number

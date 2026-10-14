@@ -89,24 +89,26 @@ type Position struct {
 const MaxTrailLen = 200
 
 type Weather struct {
-	Temp       float64
-	HasTemp    bool
-	WindSpeed  float64
-	HasWindSpeed bool
-	WindDir    int
-	HasWindDir bool
-	WindGust   float64
-	HasWindGust bool
-	Humidity   int
-	HasHumidity bool
-	Pressure   float64
-	HasPressure bool
-	Rain1h     float64
-	HasRain1h  bool
-	Rain24h    float64
-	HasRain24h bool
-	Snow24h    float64
-	HasSnow24h bool
-	Luminosity int
+	Temp          float64
+	HasTemp       bool
+	WindSpeed     float64
+	HasWindSpeed  bool
+	WindDir       int
+	HasWindDir    bool
+	WindGust      float64
+	HasWindGust   bool
+	Humidity      int
+	HasHumidity   bool
+	Pressure      float64
+	HasPressure   bool
+	Rain1h        float64
+	HasRain1h     bool
+	Rain24h       float64
+	HasRain24h    bool
+	RainToday     float64
+	HasRainToday  bool
+	Snow24h       float64
+	HasSnow24h    bool
+	Luminosity    int
 	HasLuminosity bool
 }

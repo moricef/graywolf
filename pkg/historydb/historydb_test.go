@@ -66,6 +66,35 @@ func TestRainBackfillMigration(t *testing.T) {
 	}
 }
 
+func TestWeatherRainTodayRoundTrip(t *testing.T) {
+	db, err := Open(filepath.Join(t.TempDir(), "h.db"))
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer db.Close()
+
+	now := time.Now()
+	entry := stationcache.CacheEntry{
+		Key: "stn:WX1ABC", Callsign: "WX1ABC", HasPos: true,
+		Lat: 40, Lon: -105, Symbol: [2]byte{'/', '_'}, Timestamp: now,
+		Weather: &stationcache.Weather{
+			RainToday: 0.3, HasRainToday: true,
+		},
+	}
+	if err := db.WriteEntries([]stationcache.CacheEntry{entry}); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	stations, err := db.LoadRecent(time.Hour, 10)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	wx := stations["stn:WX1ABC"].Weather
+	if wx == nil || !wx.HasRainToday || wx.RainToday != 0.3 {
+		t.Fatalf("rain today not preserved: %+v", wx)
+	}
+}
+
 // TestStaticRebeaconDirectNotMasked is the persistence-layer counterpart to
 // issue #130: a static station heard directly (hops 0) then via a digipeater
 // (hops > 0) must keep the direct reception on its single stored position so

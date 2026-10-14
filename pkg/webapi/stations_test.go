@@ -414,6 +414,7 @@ func TestStations_WeatherIncluded(t *testing.T) {
 					WindDir: 180, HasWindDir: true,
 					Humidity: 65, HasHumidity: true,
 					Pressure: 1013.2, HasPressure: true,
+					RainToday: 0.3, HasRainToday: true,
 				},
 			},
 		},
@@ -446,6 +447,9 @@ func TestStations_WeatherIncluded(t *testing.T) {
 	}
 	if w.Pressure == nil || *w.Pressure != 1013.2 {
 		t.Errorf("pressure = %v", w.Pressure)
+	}
+	if w.RainToday == nil || *w.RainToday != 0.3 {
+		t.Errorf("rain_today = %v", w.RainToday)
 	}
 	// Fields not set should be nil
 	if w.WindGust != nil {

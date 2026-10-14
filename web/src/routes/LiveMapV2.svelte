@@ -556,7 +556,7 @@
 
     activePopup = new maplibregl.Popup({
       offset: 18,
-      maxWidth: '320px',
+      maxWidth: '360px',
       className: 'gw-station-popup',
       closeButton: true,
       closeOnClick: true,
@@ -2325,17 +2325,94 @@
     text-decoration: none;
     outline: none;
   }
-  :global(.stn-weather) { font-size: 12px; }
-  :global(.stn-weather-row) {
+  :global(.stn-weather) {
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--map-overlay-muted) 35%, transparent);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--map-overlay-bg) 88%, var(--color-accent) 12%);
+    font-size: 12px;
+  }
+  :global(.stn-weather-head) {
     display: flex;
     justify-content: space-between;
-    gap: 12px;
-    line-height: 1.4;
+    align-items: center;
+    padding: 6px 8px;
+    border-bottom: 1px solid color-mix(in srgb, var(--map-overlay-muted) 25%, transparent);
+    color: var(--map-overlay-muted);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
   }
-  :global(.stn-weather-label) { color: var(--color-text-dim); }
-  :global(.stn-weather-val) {
-    color: var(--color-text);
+  :global(.stn-weather-body) {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 8px;
+  }
+  :global(.stn-weather-compass) {
+    flex: 0 0 78px;
+    color: var(--map-overlay-muted);
+    text-align: center;
+    font-size: 10px;
     font-variant-numeric: tabular-nums;
+  }
+  :global(.stn-weather-compass svg) {
+    display: block;
+    width: 74px;
+    height: 74px;
+    overflow: visible;
+  }
+  :global(.stn-weather-compass text) {
+    fill: currentColor;
+    font-size: 8px;
+    font-weight: 700;
+    text-anchor: middle;
+  }
+  :global(.stn-compass-ring) {
+    fill: none;
+    stroke: color-mix(in srgb, var(--map-overlay-muted) 55%, transparent);
+    stroke-width: 1;
+  }
+  :global(.stn-compass-needle line) {
+    stroke: var(--color-accent);
+    stroke-width: 2;
+  }
+  :global(.stn-compass-needle path),
+  :global(.stn-compass-center) {
+    fill: var(--color-accent);
+  }
+  :global(.stn-weather-grid) {
+    display: grid;
+    flex: 1 1 auto;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 5px;
+    min-width: 0;
+  }
+  :global(.stn-weather-metric) {
+    min-width: 0;
+    padding: 5px 6px;
+    border-radius: 5px;
+    background: color-mix(in srgb, var(--map-overlay-fg) 6%, transparent);
+  }
+  :global(.stn-weather-label) {
+    display: block;
+    overflow: hidden;
+    color: var(--map-overlay-muted);
+    font-size: 9px;
+    line-height: 1.2;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  :global(.stn-weather-val) {
+    display: block;
+    overflow: hidden;
+    color: var(--map-overlay-fg);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.35;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   :global(.stn-popup .badge) {

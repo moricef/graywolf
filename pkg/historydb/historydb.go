@@ -235,8 +235,8 @@ func upsertWeather(tx *gorm.DB, key string, w *stationcache.Weather) error {
 		INSERT INTO weather (station_key, temp, has_temp, wind_speed, has_wind_speed,
 			wind_dir, has_wind_dir, wind_gust, has_wind_gust, humidity, has_humidity,
 			pressure, has_pressure, rain_1h, has_rain_1h, rain_24h, has_rain_24h,
-			snow_24h, has_snow_24h, luminosity, has_luminosity)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			rain_today, has_rain_today, snow_24h, has_snow_24h, luminosity, has_luminosity)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(station_key) DO UPDATE SET
 			temp=excluded.temp, has_temp=excluded.has_temp,
 			wind_speed=excluded.wind_speed, has_wind_speed=excluded.has_wind_speed,
@@ -246,6 +246,7 @@ func upsertWeather(tx *gorm.DB, key string, w *stationcache.Weather) error {
 			pressure=excluded.pressure, has_pressure=excluded.has_pressure,
 			rain_1h=excluded.rain_1h, has_rain_1h=excluded.has_rain_1h,
 			rain_24h=excluded.rain_24h, has_rain_24h=excluded.has_rain_24h,
+			rain_today=excluded.rain_today, has_rain_today=excluded.has_rain_today,
 			snow_24h=excluded.snow_24h, has_snow_24h=excluded.has_snow_24h,
 			luminosity=excluded.luminosity, has_luminosity=excluded.has_luminosity`,
 		key,
@@ -253,6 +254,7 @@ func upsertWeather(tx *gorm.DB, key string, w *stationcache.Weather) error {
 		w.WindDir, w.HasWindDir, w.WindGust, w.HasWindGust,
 		w.Humidity, w.HasHumidity, w.Pressure, w.HasPressure,
 		w.Rain1h, w.HasRain1h, w.Rain24h, w.HasRain24h,
+		w.RainToday, w.HasRainToday,
 		w.Snow24h, w.HasSnow24h, w.Luminosity, w.HasLuminosity,
 	).Error
 }
@@ -359,6 +361,8 @@ func (d *DB) LoadRecent(maxAge time.Duration, trailLimit int) (map[string]*stati
 			HasRain1h     bool
 			Rain24h       float64
 			HasRain24h    bool
+			RainToday     float64
+			HasRainToday  bool
 			Snow24h       float64
 			HasSnow24h    bool
 			Luminosity    int
@@ -367,7 +371,7 @@ func (d *DB) LoadRecent(maxAge time.Duration, trailLimit int) (map[string]*stati
 		var wx wxRow
 		res := d.db.Raw(`SELECT temp, has_temp, wind_speed, has_wind_speed, wind_dir, has_wind_dir,
 			wind_gust, has_wind_gust, humidity, has_humidity, pressure, has_pressure,
-			rain_1h, has_rain_1h, rain_24h, has_rain_24h, snow_24h, has_snow_24h,
+			rain_1h, has_rain_1h, rain_24h, has_rain_24h, rain_today, has_rain_today, snow_24h, has_snow_24h,
 			luminosity, has_luminosity FROM weather WHERE station_key = ?`, r.Key).Scan(&wx)
 		if res.Error == nil && res.RowsAffected > 0 {
 			s.Weather = &stationcache.Weather{
@@ -379,6 +383,7 @@ func (d *DB) LoadRecent(maxAge time.Duration, trailLimit int) (map[string]*stati
 				Pressure: wx.Pressure, HasPressure: wx.HasPressure,
 				Rain1h: wx.Rain1h, HasRain1h: wx.HasRain1h,
 				Rain24h: wx.Rain24h, HasRain24h: wx.HasRain24h,
+				RainToday: wx.RainToday, HasRainToday: wx.HasRainToday,
 				Snow24h: wx.Snow24h, HasSnow24h: wx.HasSnow24h,
 				Luminosity: wx.Luminosity, HasLuminosity: wx.HasLuminosity,
 			}
@@ -536,6 +541,7 @@ func bootstrap(db *gorm.DB) error {
 			pressure      REAL, has_pressure INTEGER NOT NULL DEFAULT 0,
 			rain_1h       REAL, has_rain_1h INTEGER NOT NULL DEFAULT 0,
 			rain_24h      REAL, has_rain_24h INTEGER NOT NULL DEFAULT 0,
+			rain_today    REAL, has_rain_today INTEGER NOT NULL DEFAULT 0,
 			snow_24h      REAL, has_snow_24h INTEGER NOT NULL DEFAULT 0,
 			luminosity    INTEGER, has_luminosity INTEGER NOT NULL DEFAULT 0
 		)`,
@@ -566,6 +572,8 @@ func bootstrap(db *gorm.DB) error {
 		`ALTER TABLE positions ADD COLUMN direction TEXT NOT NULL DEFAULT 'RX'`,
 		`ALTER TABLE positions ADD COLUMN channel INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE positions ADD COLUMN comment TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE weather ADD COLUMN rain_today REAL`,
+		`ALTER TABLE weather ADD COLUMN has_rain_today INTEGER NOT NULL DEFAULT 0`,
 	} {
 		_ = db.Exec(m).Error
 	}

@@ -4056,6 +4056,8 @@ export interface components {
             rain_1h_in?: number;
             /** @description Rain24h is rainfall in the last 24 hours in inches; nil when not reported. */
             rain_24h_in?: number;
+            /** @description RainToday is rainfall since local midnight at the reporting station, in inches; nil when not reported. */
+            rain_today_in?: number;
             /** @description Snow24h is snowfall in the last 24 hours in inches; nil when not reported. */
             snow_24h_in?: number;
             /** @description Temperature is the ambient temperature in degrees Fahrenheit; nil when not reported. */

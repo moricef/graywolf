@@ -4,7 +4,16 @@
 // .stn-comment, .badge, .b-rx, .b-tx, .b-is, .via-is, .via-rf,
 // .via-rf-hops, .path-link) are defined :global() in LiveMapV2.svelte.
 
-import { esc, timeAgo, fmtLat, fmtLon, viaCls, viaText, formatWeatherRows } from './popup-helpers.js';
+import {
+  esc,
+  timeAgo,
+  fmtLat,
+  fmtLon,
+  viaCls,
+  viaText,
+  formatWeatherRows,
+  formatWindDirection,
+} from './popup-helpers.js';
 import { rfReachableDespiteNonRfLatest } from './rf-only-core.js';
 import { unitsState } from '../settings/units-store.svelte.js';
 import { formatSpeed, formatAltitude } from '../settings/units.js';
@@ -87,11 +96,15 @@ export function renderStationPopupHTML(s, { hasStation = null } = {}) {
   const wxRows = formatWeatherRows(s.weather, unitsState.isMetric);
   if (wxRows.length) {
     html += `<div class="stn-sep"></div>`;
-    html += `<div class="stn-weather">`;
+    html += `<section class="stn-weather">`;
+    html += `<div class="stn-weather-head"><span>Weather</span><span>${esc(ago)}</span></div>`;
+    html += `<div class="stn-weather-body">`;
+    html += renderWeatherCompassHTML(s.weather);
+    html += `<div class="stn-weather-grid">`;
     for (const [label, val] of wxRows) {
-      html += `<div class="stn-weather-row"><span class="stn-weather-label">${esc(label)}</span><span class="stn-weather-val">${esc(val)}</span></div>`;
+      html += `<div class="stn-weather-metric"><span class="stn-weather-label">${esc(label)}</span><span class="stn-weather-val">${esc(val)}</span></div>`;
     }
-    html += `</div>`;
+    html += `</div></div></section>`;
   }
 
   if (s.comment) {
@@ -107,6 +120,23 @@ export function renderStationPopupHTML(s, { hasStation = null } = {}) {
 
   html += `</div>`;
   return html;
+}
+
+function renderWeatherCompassHTML(wx) {
+  if (!wx || wx.wind_dir == null || !Number.isFinite(Number(wx.wind_dir))) return '';
+  const direction = ((Number(wx.wind_dir) % 360) + 360) % 360;
+  const label = formatWindDirection(direction);
+  return (
+    `<div class="stn-weather-compass" title="Wind from ${esc(label)}" aria-label="Wind from ${esc(label)}">` +
+    `<svg viewBox="0 0 80 80" role="img" aria-hidden="true">` +
+    `<circle class="stn-compass-ring" cx="40" cy="40" r="29"/>` +
+    `<text x="40" y="9">N</text><text x="73" y="43">E</text>` +
+    `<text x="40" y="78">S</text><text x="7" y="43">W</text>` +
+    `<g class="stn-compass-needle" transform="rotate(${direction} 40 40)">` +
+    `<line x1="40" y1="55" x2="40" y2="19"/><path d="M40 13 L34 23 L46 23 Z"/>` +
+    `</g><circle class="stn-compass-center" cx="40" cy="40" r="3"/>` +
+    `</svg><span>${esc(label)}</span></div>`
+  );
 }
 
 // Inline lucide-style icon. Mirrors the markup lucide-svelte emits so the
