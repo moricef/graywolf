@@ -36,7 +36,16 @@
   import { mountFixedPointsLayer } from '../lib/map/layers/fixed-points.js';
   import { fixedPointsStore } from '../lib/map/fixed-points-store.svelte.js';
   import FixedPointDialog from '../lib/map/fixed-point-dialog.svelte';
+  import StationWindows from '../lib/map/station-windows.svelte';
   import { renderStationPopupHTML } from '../lib/map/popup.js';
+  import {
+    closeStationWindow,
+    frontStationWindow,
+    moveStationWindow,
+    pinStationWindow,
+    refreshStationWindows,
+    toggleStationWindow,
+  } from '../lib/map/station-windows-core.js';
   import { unitsState } from '../lib/settings/units-store.svelte.js';
   import { mapState, MY_POSITION_ZOOM } from '../lib/map/map-store.svelte.js';
   import {
@@ -409,6 +418,17 @@
 
   let mapRef = null;
   let activePopup = null;
+  let mapShell = null;
+  let pinnedStationWindows = $state([]);
+
+  // Keep each detached card's fallback snapshot current. If the station later
+  // ages out of the selected map interval, its last observation remains in the
+  // floating window instead of jumping back to the value captured when pinned.
+  $effect(() => {
+    void dataStore.stations.size;
+    const refreshed = refreshStationWindows(pinnedStationWindows, dataStore.stations);
+    if (refreshed !== pinnedStationWindows) pinnedStationWindows = refreshed;
+  });
 
   // Operator chrome state.
   // On desktop the layer card is a perma-card (top-left); on mobile we
@@ -545,6 +565,33 @@
     }
   }
 
+  function pinStation(station) {
+    pinnedStationWindows = pinStationWindow(pinnedStationWindows, station, {
+      width: mapShell?.clientWidth,
+      height: mapShell?.clientHeight,
+    });
+    closePopup();
+  }
+
+  function movePinnedStation(callsign, x, y, viewport) {
+    pinnedStationWindows = moveStationWindow(
+      pinnedStationWindows,
+      callsign,
+      x,
+      y,
+      viewport
+    );
+  }
+
+  function locatePinnedStation(callsign) {
+    const target = dataStore.stations.get(callsign);
+    const card = pinnedStationWindows.find((entry) => entry.callsign === callsign);
+    const station = target || card?.snapshot;
+    const pos = station?.positions?.[0];
+    if (!pos || !mapRef) return;
+    mapRef.panTo([pos.lon, pos.lat]);
+  }
+
   function openStationPopup(map, station) {
     const pos = station && station.positions && station.positions[0];
     if (!pos) return;
@@ -552,6 +599,7 @@
 
     const html = renderStationPopupHTML(station, {
       hasStation: (callsign) => dataStore.stations.has(callsign),
+      pinnable: true,
     });
 
     activePopup = new maplibregl.Popup({
@@ -577,6 +625,12 @@
     const el = activePopup.getElement();
     if (el) {
       el.addEventListener('click', (ev) => {
+        const pin = ev.target && ev.target.closest && ev.target.closest('.stn-pin-button');
+        if (pin) {
+          ev.preventDefault();
+          pinStation(station);
+          return;
+        }
         const link = ev.target && ev.target.closest && ev.target.closest('.path-link');
         if (!link) return;
         ev.preventDefault();
@@ -1349,7 +1403,7 @@
   });
 </script>
 
-<div class="livemap-shell">
+<div class="livemap-shell" bind:this={mapShell}>
   <button
     type="button"
     class="map-navigation-toggle"
@@ -1375,6 +1429,17 @@
       oncontextlost={handleMapContextLost}
     />
   {/key}
+
+  <StationWindows
+    windows={pinnedStationWindows}
+    stations={dataStore.stations}
+    nowMs={tickNow}
+    onclose={(callsign) => (pinnedStationWindows = closeStationWindow(pinnedStationWindows, callsign))}
+    ontoggle={(callsign) => (pinnedStationWindows = toggleStationWindow(pinnedStationWindows, callsign))}
+    onfront={(callsign) => (pinnedStationWindows = frontStationWindow(pinnedStationWindows, callsign))}
+    onmove={movePinnedStation}
+    onlocate={locatePinnedStation}
+  />
 
   {#snippet panelBody()}
     <!-- APRS: station/trail/position layers + the time-range filter. -->
@@ -2248,7 +2313,29 @@
      which lives outside this component, so these rules must be :global. */
   :global(.stn-popup) { font-family: var(--font-mono); }
   :global(.stn-hdr) { display: flex; align-items: center; gap: 8px; }
+  :global(.gw-station-popup .stn-hdr) { padding-right: 24px; }
   :global(.stn-call) { color: #d4a040; font-size: 13px; font-weight: 700; }
+  :global(.stn-pin-button) {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
+    padding: 3px 6px;
+    border: 1px solid var(--map-overlay-border);
+    border-radius: 4px;
+    background: transparent;
+    color: var(--map-overlay-muted);
+    font: inherit;
+    font-size: 10px;
+    cursor: pointer;
+  }
+  :global(.stn-pin-button:hover),
+  :global(.stn-pin-button:focus-visible) {
+    background: color-mix(in srgb, var(--map-overlay-fg) 10%, transparent);
+    color: var(--map-overlay-fg);
+    outline: none;
+  }
+  :global(.stn-pin-icon) { flex: 0 0 auto; }
   :global(.stn-sub) { color: var(--color-text-dim); font-size: 11px; margin-top: 2px; }
   /* Object/item "from CALLSIGN" line: the originating station beneath the
      object name. Sits directly under the title so source reads first,

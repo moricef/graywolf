@@ -23,7 +23,10 @@ import { formatSpeed, formatAltitude } from '../settings/units.js';
 // hasStation(callsign) is an optional predicate used to decide whether a
 // digipeater entry in the path field renders as a clickable .path-link
 // or plain text. Pass null to render every entry as plain text.
-export function renderStationPopupHTML(s, { hasStation = null } = {}) {
+export function renderStationPopupHTML(
+  s,
+  { hasStation = null, pinnable = false, showHeader = true, isMetric = unitsState.isMetric } = {}
+) {
   const pos = s.positions && s.positions[0];
   if (!pos) return '';
 
@@ -32,12 +35,17 @@ export function renderStationPopupHTML(s, { hasStation = null } = {}) {
     s.direction === 'RX' ? 'b-rx' : s.direction === 'TX' ? 'b-tx' : 'b-is';
 
   let html = `<div class="stn-popup">`;
-  html += `<div class="stn-hdr">`;
-  html += `<span class="stn-call">${esc(s.callsign)}</span>`;
-  if (s.direction !== 'IS') {
-    html += `<span class="badge ${dirCls}">${esc(s.direction)}</span>`;
+  if (showHeader) {
+    html += `<div class="stn-hdr">`;
+    html += `<span class="stn-call">${esc(s.callsign)}</span>`;
+    if (s.direction !== 'IS') {
+      html += `<span class="badge ${dirCls}">${esc(s.direction)}</span>`;
+    }
+    if (pinnable) {
+      html += `<button class="stn-pin-button" type="button" title="Open as floating window" aria-label="Open ${esc(s.callsign)} as floating window">${ICON_PIN}<span>Pin</span></button>`;
+    }
+    html += `</div>`;
   }
-  html += `</div>`;
 
   // For an object/item, the header is the object NAME, not a station — so
   // surface the originating station (the AX.25 source that created and
@@ -93,7 +101,7 @@ export function renderStationPopupHTML(s, { hasStation = null } = {}) {
     html += `<div class="stn-path">${pathHtml}</div>`;
   }
 
-  const wxRows = formatWeatherRows(s.weather, unitsState.isMetric);
+  const wxRows = formatWeatherRows(s.weather, isMetric);
   if (wxRows.length) {
     html += `<div class="stn-sep"></div>`;
     html += `<section class="stn-weather">`;
@@ -186,6 +194,11 @@ const ICON_LOGS = icon(
 const ICON_QRZ = icon(
   '<path d="M15 3h6v6"/><path d="M10 14 21 3"/>' +
     '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>'
+);
+const ICON_PIN = icon(
+  '<path d="M12 17v5"/><path d="M5 17h14"/>' +
+    '<path d="m15 2-1 5 4 4H6l4-4-1-5z"/>',
+  'stn-pin-icon'
 );
 
 // renderStationActionsHTML(station) -> HTML string (or '' to suppress)
