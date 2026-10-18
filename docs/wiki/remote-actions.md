@@ -53,6 +53,14 @@ auditor sees one outbound message of kind `text`.
 
 ## CA2RXU authenticated control
 
+Operator setup and the distinction between ordinary queries and signed setting
+changes are documented in [Send an authenticated iGate command](../handbook/remote-actions.html#ca2rxu-control).
+The sender resolves its controller identity from Graywolf's Station Callsign
+(`pkg/webapi/messages.go::resolveOurCall`); the iGate checks that exact source
+against `remoteManagement.authController` and signs/verifies its target using
+`Config.callsign`, not its tactical name. The legacy managers list still gates
+`?TX=?` and `?EM=?` queries, independently of the signed-command controller.
+
 The same drawer also contains a separate controller for CA2RXU iGates using
 the `!RC1` protocol. It is deliberately independent from the `@@`/TOTP macro
 system: CA2RXU commands use HMAC-SHA-256 over the controller, target, key ID,

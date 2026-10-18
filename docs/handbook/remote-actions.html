@@ -64,6 +64,13 @@
     <h1>Remote Actions</h1>
     <p class="subtitle">Send Actions and authenticated CA2RXU control commands from inside Messages</p>
 
+    <p class="note">
+      <strong>Controlling an RXT / CA2RXU iGate?</strong>
+      Go directly to <a href="#ca2rxu-control">Send an authenticated iGate command</a>.
+      That procedure uses the iGate&rsquo;s shared key. The TOTP credentials
+      and macros described below belong to Graywolf Actions.
+    </p>
+
     <p>
       A <strong>Remote Action</strong> is the outbound side of the same
       grammar described on the <a href="actions.html">Actions</a> page.
@@ -75,7 +82,8 @@
     </p>
 
     <p>
-      Both sides have to be set up. The receiving station must already
+      For the TOTP Actions workflow, both sides have to be set up.
+      The receiving station must already
       have a matching Action defined; this page covers the sender side
       and walks through the credential copy-paste between the two.
     </p>
@@ -295,44 +303,157 @@
       preferred over false positives.
     </p>
 
-    <h2>Authenticated CA2RXU iGate control</h2>
+    <h2 id="ca2rxu-control">Send an authenticated iGate command</h2>
 
     <p>
-      A CA2RXU iGate with Remote Command Authentication enabled uses a
-      different protocol from the TOTP Actions above. Its commands are signed
-      with HMAC-SHA-256 and a persistent counter, so a captured radio packet
-      cannot be changed or executed again. The supported commands are
-      <code>EM=ON</code>, <code>EM=OFF</code>, <code>TX=ON</code>,
-      <code>TX=OFF</code>, and <code>COMMIT</code>.
+      Use this procedure with the RXT iGate firmware&rsquo;s
+      <strong>Remote Command Authentication</strong> feature.
+      In Graywolf, open <strong>Messages</strong>, select a direct conversation
+      with the iGate, and click the <strong>lightning bolt (&#9889;)</strong>
+      in the conversation header. The <strong>CA2RXU authenticated control</strong>
+      panel is inside that drawer. You do not configure these commands on
+      Graywolf&rsquo;s Actions page.
     </p>
+
+    <h3>Before the first command</h3>
+
+    <p>
+      The controller is Graywolf; the target is the iGate you want to control.
+      For example, Graywolf may use <code>N7UV-13</code> to control
+      <code>W9EN-44</code>. These are two different fields:
+    </p>
+
+    <table>
+      <thead><tr><th>Where</th><th>Setting</th></tr></thead>
+      <tbody>
+        <tr><td>Graywolf: Station Callsign</td><td>Your controller callsign, including SSID, for example <code>N7UV-13</code>.</td></tr>
+        <tr><td>iGate: Remote Management</td><td><strong>Authorized Graywolf controller (Callsign-SSID)</strong> must contain that exact controller callsign.</td></tr>
+        <tr><td>Graywolf: Messages recipient</td><td>The iGate&rsquo;s own Callsign-SSID, for example <code>W9EN-44</code>.</td></tr>
+        <tr><td>Both devices</td><td>The same 43-character Base64URL remote command secret, installed and saved on the iGate and stored for that target in Graywolf.</td></tr>
+      </tbody>
+    </table>
+
+    <p>
+      On the iGate, configure the authorized controller and install the secret
+      in <strong>Remote Management</strong>, then save the configuration.
+      Keep a copy of the secret for the next step. If authentication is already
+      configured, use the existing secret; generating a different secret only
+      on one device will not work.
+    </p>
+
+    <h3>Install the matching key in Graywolf</h3>
 
     <ol>
-      <li>Open a direct-message thread to the iGate callsign.</li>
-      <li>Open the Remote Actions drawer with the zap icon.</li>
-      <li>In <strong>CA2RXU authenticated control</strong>, choose
+      <li>Open <strong>Messages</strong> and create or select a direct
+        conversation addressed to the iGate&rsquo;s Callsign-SSID.</li>
+      <li>Click the <strong>lightning bolt (&#9889;)</strong> in the conversation
+        header. It is available in direct conversations, not tactical group
+        conversations.</li>
+      <li>Find <strong>CA2RXU authenticated control</strong> and click
         <strong>Install key</strong>.</li>
-      <li>Paste the same 43-character Base64URL key installed locally on the
-        iGate, then save.</li>
-      <li>For a LoRa-only asset, open the conversation routing menu, select
-        <strong>RF only</strong>, and select the LoRa TNC channel below the
-        conversation.</li>
-      <li>Use the control buttons. Graywolf signs the command and sends it
-        through that conversation route and channel.</li>
+      <li>Enter a descriptive <strong>Name</strong>, paste the secret installed
+        on that iGate into <strong>43-character Base64URL key</strong>, then
+        click <strong>Install</strong>. This is not the APRS-IS passcode or
+        your Graywolf login password.</li>
+      <li>Select the conversation&rsquo;s send path. For a LoRa RF connection,
+        select <strong>RF only</strong> in the conversation routing menu and
+        select the intended LoRa TNC channel below the conversation. The TNC
+        connection must allow transmission. If the iGate accepts management
+        commands only via RF, an APRS-IS route cannot deliver a command it
+        will accept.</li>
     </ol>
 
+    <p>
+      Key installation is a one-time setup for each target. On later visits,
+      open the same conversation and the lightning-bolt drawer; the control
+      buttons are available without pasting the key again.
+    </p>
+
+    <h3>Queries and commands use different controls</h3>
+
+    <table>
+      <thead><tr><th>What you want</th><th>How to send it</th></tr></thead>
+      <tbody>
+        <tr><td>Read the firmware version</td><td>Type <code>?APRSV</code> in the normal message composer and send.</td></tr>
+        <tr><td>Read TX or eco-mode state</td><td>Type <code>?TX=?</code> or <code>?EM=?</code> in the normal composer. These queries require the sender to match the iGate&rsquo;s managers list and obey its RF-only restriction.</td></tr>
+        <tr><td>Change a setting on an authenticated iGate</td><td>Use one of the signed-command buttons below.</td></tr>
+      </tbody>
+    </table>
+
+    <p>
+      Installing an authentication key does not make Graywolf sign ordinary
+      typed messages. For example, typing <code>?TX=OFF</code> in the composer
+      still sends an unsigned command. An iGate with authentication enabled
+      will not execute that unsigned setting change.
+    </p>
+
+    <table>
+      <thead><tr><th>Button</th><th>Signed command</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td>Eco mode on</td><td><code>EM=ON</code></td><td>Enable eco mode, when supported by the iGate&rsquo;s current operating mode.</td></tr>
+        <tr><td>Eco mode off</td><td><code>EM=OFF</code></td><td>Leave eco mode.</td></tr>
+        <tr><td>TX on</td><td><code>TX=ON</code></td><td>Enable radio transmission.</td></tr>
+        <tr><td>TX off</td><td><code>TX=OFF</code></td><td>Disable radio transmission. Graywolf asks for confirmation.</td></tr>
+        <tr><td>Save config</td><td><code>COMMIT</code></td><td>Save the current configuration for the next reboot.</td></tr>
+      </tbody>
+    </table>
+
+    <p>
+      Click the button for the setting you want to change. Graywolf signs the
+      command with the saved key and a new counter, then sends it through
+      that conversation&rsquo;s route and selected channel. You do not type
+      the signature, counter or <code>!RC1</code> envelope yourself.
+    </p>
+
     <p class="note">
-      <strong>Queued is not applied.</strong> The confirmation shown by
-      Graywolf means the APRS message entered its transmit path. An APRS ACK
-      confirms transport only; it is not an authenticated result from the
-      remote command processor.
+      <strong>Queued is not applied.</strong> Graywolf&rsquo;s confirmation
+      means the APRS message entered its transmit path. Look for the iGate&rsquo;s
+      response and check the resulting setting. An APRS ACK confirms transport
+      only; neither it nor the ordinary text reply is a cryptographically
+      authenticated execution result.
+    </p>
+
+    <h3>If it does not work</h3>
+
+    <ul>
+      <li><strong>No control buttons:</strong> check that this is a direct
+        conversation and install the key under <strong>CA2RXU authenticated
+        control</strong>. A TOTP Secret or a macro does not install an iGate key.</li>
+      <li><strong>AUTH REQUIRED:</strong> an unsigned setting change reached
+        the iGate from a recognized manager. Use the control button instead
+        of the normal composer.</li>
+      <li><strong>AUTH FAILED:</strong> check the matching secrets and exact
+        controller and target Callsign-SSIDs. It can also indicate an invalid
+        command envelope; it does not identify one specific cause.</li>
+      <li><strong>No reply:</strong> check the selected route, channel and
+        iGate transport restrictions. A source that is not the authorized
+        controller can be ignored without an authentication-error reply.</li>
+    </ul>
+
+    <h3>Changing callsigns or keys</h3>
+
+    <p>
+      Changing an iGate&rsquo;s Station fields does not change its Remote
+      Management settings or its secret. Changing only its tactical callsign
+      does not change the signed-command identity. If its Callsign-SSID
+      changes, both the message recipient and Graywolf&rsquo;s saved credential
+      target must match the new callsign. The current <strong>Key settings</strong>
+      dialog does not rename targets. Do not delete and reinstall the same key
+      to work around this: the new sender counter would restart while the iGate
+      still remembers the old counter. To provision the new target through the
+      UI, install a fresh matching key on both devices. If only Graywolf&rsquo;s
+      Station Callsign changes, update the authorized controller on the iGate;
+      the shared secret and existing target credential can remain the same.
     </p>
 
     <p>
-      Graywolf never returns the installed key through its API. Its persistent
-      counter is advanced before each send. If transmission fails after that
-      point, the counter remains consumed so it can never be reused. Replacing
-      a key resets Graywolf&rsquo;s sender counter and must be coordinated with
-      installing the same new key on the iGate.
+      Graywolf keeps the key and sender counter in its configuration database.
+      Restarting Graywolf or closing the browser does not require reinstalling
+      the key. In <strong>Key settings</strong>, leave the secret field blank
+      to keep the installed key and counter. A transmission failure may consume
+      a counter; this is expected. Replacing a key resets Graywolf&rsquo;s
+      sender counter and must be coordinated with installing the same new
+      key on the iGate.
     </p>
 
     <h2>Troubleshooting</h2>
