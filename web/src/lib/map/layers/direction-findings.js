@@ -9,9 +9,32 @@ const GLOW = 'gw-direction-findings-glow';
 const LINE = 'gw-direction-findings-line';
 const HIT = 'gw-direction-findings-hit';
 const ELLIPSE = 'gw-direction-findings-ellipse';
+const ELLIPSE_OUTLINE = 'gw-direction-findings-ellipse-outline';
 const ESTIMATE = 'gw-direction-findings-estimate';
 const ESTIMATE_HIT = 'gw-direction-findings-estimate-hit';
+const HATCH_GREEN = 'gw-direction-findings-hatch-green';
+const HATCH_RED = 'gw-direction-findings-hatch-red';
 const EMPTY = { type: 'FeatureCollection', features: [] };
+
+// Seamless diagonal strokes on a transparent tile. At pixelRatio 2 the
+// strokes are about 1 CSS pixel wide, spaced about 11 CSS pixels apart.
+function hatchImage(red, green, blue) {
+  const size = 32;
+  const data = new Uint8Array(size * size * 4);
+  for (let y = 0; y < size; y += 1) {
+    for (let x = 0; x < size; x += 1) {
+      const phase = (x + y) % size;
+      const distance = Math.min(phase, size - phase);
+      const coverage = Math.max(0, Math.min(1, 2.2 - distance));
+      const offset = (y * size + x) * 4;
+      data[offset] = red;
+      data[offset + 1] = green;
+      data[offset + 2] = blue;
+      data[offset + 3] = Math.round(190 * coverage);
+    }
+  }
+  return { width: size, height: size, data };
+}
 
 function mapGeoJSON(observations, estimates) {
   const collection = directionFindingsToGeoJSON(observations);
@@ -21,7 +44,10 @@ function mapGeoJSON(observations, estimates) {
     if (ring.length) collection.features.push({
       type: 'Feature',
       geometry: { type: 'Polygon', coordinates: [ring] },
-      properties: { kind: 'ellipse', key: estimate.key, color },
+      properties: {
+        kind: 'ellipse', key: estimate.key, color,
+        pattern: estimate.coherent ? HATCH_GREEN : HATCH_RED,
+      },
     });
     collection.features.push({
       type: 'Feature',
@@ -43,15 +69,26 @@ export function mountDirectionFindingsLayer(map, getObservations, {
   onEstimateClick = null,
 } = {}) {
   const visibility = visible ? 'visible' : 'none';
+  map.addImage(HATCH_GREEN, hatchImage(38, 153, 87), { pixelRatio: 2 });
+  map.addImage(HATCH_RED, hatchImage(255, 91, 87), { pixelRatio: 2 });
   map.addSource(SOURCE, { type: 'geojson', data: EMPTY });
   map.addLayer({
     id: ELLIPSE, type: 'fill', source: SOURCE,
     filter: ['==', ['get', 'kind'], 'ellipse'],
     layout: { visibility },
     paint: {
-      'fill-color': ['get', 'color'],
-      'fill-opacity': 0.13,
-      'fill-outline-color': ['get', 'color'],
+      'fill-pattern': ['get', 'pattern'],
+      'fill-opacity': 0.85,
+    },
+  });
+  map.addLayer({
+    id: ELLIPSE_OUTLINE, type: 'line', source: SOURCE,
+    filter: ['==', ['get', 'kind'], 'ellipse'],
+    layout: { visibility },
+    paint: {
+      'line-color': ['get', 'color'],
+      'line-width': 1.25,
+      'line-opacity': 0.8,
     },
   });
   map.addLayer({
@@ -117,7 +154,7 @@ export function mountDirectionFindingsLayer(map, getObservations, {
       map.getSource(SOURCE)?.setData(mapGeoJSON(observations, lastEstimates));
     },
     setVisible(next) {
-      for (const id of [ELLIPSE, GLOW, LINE, HIT, ESTIMATE, ESTIMATE_HIT]) {
+      for (const id of [ELLIPSE, ELLIPSE_OUTLINE, GLOW, LINE, HIT, ESTIMATE, ESTIMATE_HIT]) {
         if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', next ? 'visible' : 'none');
       }
     },
@@ -129,10 +166,13 @@ export function mountDirectionFindingsLayer(map, getObservations, {
       try { map.off('mouseleave', ESTIMATE_HIT, leave); } catch { /* map removed */ }
       try { map.off('click', ESTIMATE_HIT, clickEstimate); } catch { /* map removed */ }
       if (!map.style) return;
-      for (const id of [ESTIMATE_HIT, ESTIMATE, HIT, LINE, GLOW, ELLIPSE]) {
+      for (const id of [ESTIMATE_HIT, ESTIMATE, HIT, LINE, GLOW, ELLIPSE_OUTLINE, ELLIPSE]) {
         if (map.getLayer(id)) map.removeLayer(id);
       }
       if (map.getSource(SOURCE)) map.removeSource(SOURCE);
+      for (const id of [HATCH_GREEN, HATCH_RED]) {
+        if (map.hasImage(id)) map.removeImage(id);
+      }
     },
   };
 }

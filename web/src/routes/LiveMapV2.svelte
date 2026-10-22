@@ -37,6 +37,7 @@
   import { fixedPointsStore } from '../lib/map/fixed-points-store.svelte.js';
   import FixedPointDialog from '../lib/map/fixed-point-dialog.svelte';
   import { mountDirectionFindingsLayer } from '../lib/map/layers/direction-findings.js';
+  import { mountRulerLayer } from '../lib/map/layers/ruler.js';
   import { directionFindingsStore } from '../lib/map/direction-findings-store.svelte.js';
   import DirectionFindingDialog from '../lib/map/direction-finding-dialog.svelte';
   import StationWindows from '../lib/map/station-windows.svelte';
@@ -65,6 +66,7 @@
   import MapPinPlus from 'lucide-svelte/icons/map-pin-plus';
   import MapPinned from 'lucide-svelte/icons/map-pinned';
   import Copy from 'lucide-svelte/icons/copy';
+  import Ruler from 'lucide-svelte/icons/ruler';
   import PanelLeftClose from 'lucide-svelte/icons/panel-left-close';
   import PanelLeftOpen from 'lucide-svelte/icons/panel-left-open';
 
@@ -125,6 +127,30 @@
   let heatmapTimer = null;
   let fixedPointsLayer = null;
   let directionFindingsLayer = null;
+  let rulerLayer = null;
+  let rulerActive = $state(false);
+  let rulerStarted = $state(false);
+  let rulerMeasurement = $state(null);
+
+  function startRuler() {
+    if (!rulerLayer) return;
+    closePopup();
+    closeCtxMenu();
+    hoverPathLayer?.clear();
+    rulerActive = true;
+    rulerLayer.start();
+  }
+  function clearRuler() {
+    rulerLayer?.clear();
+    rulerActive = false;
+    rulerStarted = false;
+    rulerMeasurement = null;
+  }
+  let rulerDistanceText = $derived(rulerMeasurement
+    ? rulerMeasurement.distanceKm < 1
+      ? `${Math.round(rulerMeasurement.distanceKm * 1000)} m`
+      : `${rulerMeasurement.distanceKm.toFixed(2)} km`
+    : '');
   let rxtLinksLayer = null;
   let rxtLinksTimer = null;
   let rxtLinkStations = $state([]);
@@ -611,6 +637,7 @@
   }
 
   function openStationPopup(map, station) {
+    if (rulerActive) return;
     const pos = station && station.positions && station.positions[0];
     if (!pos) return;
     closePopup();
@@ -674,6 +701,7 @@
   // button — the issue's "delete on click", with a confirm step so a stray
   // tap doesn't silently drop a landmark.
   function openFixedPointPopup(map, point) {
+    if (rulerActive) return;
     closePopup();
     const name = point.name || 'Fixed point';
     const div = document.createElement('div');
@@ -715,6 +743,7 @@
   }
 
   function openDirectionFindingPopup(map, observation, lngLat) {
+    if (rulerActive) return;
     closePopup();
     const div = document.createElement('div');
     div.className = 'gw-df-popup-body';
@@ -767,12 +796,19 @@
   }
 
   function openDirectionFindingEstimatePopup(map, estimate, lngLat) {
+    if (rulerActive) return;
     closePopup();
     const div = document.createElement('div');
     div.className = 'gw-df-popup-body';
     const title = document.createElement('strong');
     title.className = 'gw-df-popup-title';
     title.textContent = estimate.mission || 'Unassigned search';
+    const coords = document.createElement('div');
+    coords.className = 'gw-df-popup-details';
+    coords.textContent = `WGS84: ${estimate.lat.toFixed(6)}, ${estimate.lon.toFixed(6)}`;
+    const locator = document.createElement('div');
+    locator.className = 'gw-df-popup-details';
+    locator.textContent = `Locator: ${toMaidenhead(estimate.lat, estimate.lon, 8)}`;
     const status = document.createElement('div');
     status.className = `gw-df-estimate-status ${estimate.coherent ? 'coherent' : 'warning'}`;
     status.textContent = estimate.coherent ? 'Coherent estimate' : 'Estimate needs review';
@@ -782,7 +818,7 @@
     const ellipse = document.createElement('div');
     ellipse.className = 'gw-df-popup-details';
     ellipse.textContent = `95% uncertainty: ${estimate.majorAxisKm.toFixed(1)} × ${estimate.minorAxisKm.toFixed(1)} km`;
-    div.append(title, status, details, ellipse);
+    div.append(title, coords, locator, status, details, ellipse);
     if (estimate.poorGeometry) {
       const warning = document.createElement('div');
       warning.className = 'gw-df-popup-warning';
@@ -952,6 +988,13 @@
       },
     );
     directionFindingsLayer.refresh();
+    rulerLayer = mountRulerLayer(map, {
+      onMeasure: (measurement, started) => {
+        rulerMeasurement = measurement;
+        rulerStarted = started;
+      },
+      onComplete: () => { rulerActive = false; },
+    });
     directionFindingsStore.load().catch((err) => {
       toasts.error(`Could not load direction findings: ${err.message}`);
     });
@@ -1036,6 +1079,7 @@
     // the given lngLat. Shared by right-click (desktop) and long-press
     // (touch) so both surfaces behave identically once triggered.
     function openCtxMenuAt(vx, vy, lngLat) {
+      if (rulerActive) return;
       ctxMenu = { open: true, x: vx, y: vy, lat: lngLat.lat, lon: lngLat.lng };
       // Suppress hover overlays while the menu is up.
       closePopup();
@@ -1512,6 +1556,11 @@
     myPositionLayer?.destroy();
     fixedPointsLayer?.destroy();
     directionFindingsLayer?.destroy();
+    rulerLayer?.destroy();
+    rulerLayer = null;
+    rulerActive = false;
+    rulerStarted = false;
+    rulerMeasurement = null;
     rxtLinksLayer?.destroy();
     radarLayer = null;
     frontsLayer = null;
@@ -1545,7 +1594,33 @@
   });
 </script>
 
+<svelte:window onkeydown={(event) => {
+  if (event.key === 'Escape' && (rulerActive || rulerMeasurement)) clearRuler();
+}} />
+
 <div class="livemap-shell" bind:this={mapShell}>
+  <div class="map-ruler-control" aria-label="Distance ruler">
+    <div class="map-ruler-buttons">
+      <button type="button" class:active={rulerActive} aria-pressed={rulerActive}
+        onclick={startRuler} title="Measure distance and true bearing between two points">
+        <Ruler size={17} aria-hidden="true" /> Ruler
+      </button>
+      {#if rulerActive || rulerMeasurement}
+        <button type="button" onclick={clearRuler}>Clear</button>
+      {/if}
+    </div>
+    {#if rulerActive}
+      <span class="map-ruler-hint">{rulerStarted ? 'Click the end point' : 'Click the start point'}</span>
+    {/if}
+    {#if rulerMeasurement}
+      <output class="map-ruler-result" aria-live="polite">
+        {rulerDistanceText}
+        {#if rulerMeasurement.bearingDeg !== null}
+          · {rulerMeasurement.bearingDeg.toFixed(1)}° true
+        {/if}
+      </output>
+    {/if}
+  </div>
   <button
     type="button"
     class="map-navigation-toggle"
@@ -1944,6 +2019,42 @@
     inset: 0;
     overflow: hidden;
   }
+  .map-ruler-control {
+    position: absolute;
+    top: 125px;
+    right: 12px;
+    z-index: 60;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-width: min(240px, calc(100% - 24px));
+    padding: 7px;
+    border: 1px solid var(--map-overlay-border);
+    border-radius: 7px;
+    background: var(--map-overlay-bg);
+    color: var(--map-overlay-fg);
+    box-shadow: var(--map-overlay-shadow);
+    font-family: var(--font-mono);
+  }
+  .map-ruler-buttons { display: flex; gap: 6px; }
+  .map-ruler-buttons button {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 8px;
+    border: 1px solid var(--map-overlay-border);
+    border-radius: 4px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .map-ruler-buttons button.active { color: #6eb5ff; border-color: #6eb5ff; }
+  .map-ruler-hint { color: var(--map-overlay-muted); font-size: 11px; }
+  .map-ruler-result { font-size: 12px; }
+  :global(.gw-ruler-active canvas),
+  :global(.gw-ruler-active .maplibregl-marker) { cursor: crosshair !important; }
 
   /* FAB (mobile only). Anchored top-LEFT so it clears MapLibre's
      NavigationControl (compass) at top-right; in a narrow portrait window
