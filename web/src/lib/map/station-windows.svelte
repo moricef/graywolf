@@ -15,6 +15,7 @@
     onfront,
     onmove,
     onlocate,
+    onbearing,
   } = $props();
 
   let layer = $state();
@@ -66,6 +67,12 @@
 
   function handleBodyClick(event, callsign) {
     onfront?.(callsign);
+    const bearing = event.target?.closest?.('.stn-bearing-button');
+    if (bearing) {
+      event.preventDefault();
+      onbearing?.(currentStation(windows.find((card) => card.callsign === callsign)));
+      return;
+    }
     const link = event.target?.closest?.('.path-link');
     if (!link?.dataset.callsign) return;
     event.preventDefault();

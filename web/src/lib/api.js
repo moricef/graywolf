@@ -283,6 +283,13 @@ function getMockData(method, path, body) {
   if (path === '/fixed-points' && method === 'POST') return delay({ id: Math.floor(Math.random() * 1e6) + 1, ...body });
   if (path.match(/^\/fixed-points\/\d+$/) && method === 'DELETE') return delay(null);
 
+  // Manual direction-finding observations
+  if (path === '/direction-findings' && method === 'GET') return delay([]);
+  if (path === '/direction-findings' && method === 'POST') {
+    return delay({ id: Math.floor(Math.random() * 1e6) + 1, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), ...body });
+  }
+  if (path.match(/^\/direction-findings\/\d+$/) && method === 'DELETE') return delay(null);
+
   // GPS
   if (path === '/gps' && method === 'GET') return delay(mockGps);
   if (path === '/gps' && method === 'PUT') return delay(body);

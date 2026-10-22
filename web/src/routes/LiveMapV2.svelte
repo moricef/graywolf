@@ -36,6 +36,9 @@
   import { mountFixedPointsLayer } from '../lib/map/layers/fixed-points.js';
   import { fixedPointsStore } from '../lib/map/fixed-points-store.svelte.js';
   import FixedPointDialog from '../lib/map/fixed-point-dialog.svelte';
+  import { mountDirectionFindingsLayer } from '../lib/map/layers/direction-findings.js';
+  import { directionFindingsStore } from '../lib/map/direction-findings-store.svelte.js';
+  import DirectionFindingDialog from '../lib/map/direction-finding-dialog.svelte';
   import StationWindows from '../lib/map/station-windows.svelte';
   import { renderStationPopupHTML } from '../lib/map/popup.js';
   import {
@@ -121,6 +124,7 @@
   let heatmapLayer = null;
   let heatmapTimer = null;
   let fixedPointsLayer = null;
+  let directionFindingsLayer = null;
   let rxtLinksLayer = null;
   let rxtLinksTimer = null;
   let rxtLinkStations = $state([]);
@@ -445,6 +449,7 @@
   // Add-fixed-point dialog state. Opened from the context menu with the
   // clicked coordinates; onConfirm drops the point into the store.
   let fpDialog = $state({ open: false, lat: 0, lon: 0 });
+  let dfDialog = $state({ open: false, station: null });
 
   // Direct RX predicate: a station qualifies only if it was heard directly on
   // RF (RX, zero digi hops) WITHIN the active time range. The server tracks the
@@ -573,6 +578,19 @@
     closePopup();
   }
 
+  function openDirectionFindingDialog(station) {
+    const pos = station?.positions?.[0];
+    if (!station?.callsign || !pos || !Number.isFinite(pos.lat) || !Number.isFinite(pos.lon)) {
+      toasts.error('This station has no usable position for a bearing.');
+      return;
+    }
+    dfDialog = {
+      open: true,
+      station: { callsign: station.callsign, lat: pos.lat, lon: pos.lon },
+    };
+    closePopup();
+  }
+
   function movePinnedStation(callsign, x, y, viewport) {
     pinnedStationWindows = moveStationWindow(
       pinnedStationWindows,
@@ -629,6 +647,12 @@
         if (pin) {
           ev.preventDefault();
           pinStation(station);
+          return;
+        }
+        const bearing = ev.target && ev.target.closest && ev.target.closest('.stn-bearing-button');
+        if (bearing) {
+          ev.preventDefault();
+          openDirectionFindingDialog(station);
           return;
         }
         const link = ev.target && ev.target.closest && ev.target.closest('.path-link');
@@ -688,6 +712,58 @@
     activePopup.on('close', () => {
       activePopup = null;
     });
+  }
+
+  function openDirectionFindingPopup(map, observation, lngLat) {
+    closePopup();
+    const div = document.createElement('div');
+    div.className = 'gw-df-popup-body';
+    const title = document.createElement('strong');
+    title.className = 'gw-df-popup-title';
+    title.textContent = `${observation.callsign} · ${observation.bearingDeg.toFixed(1)}° true`;
+    const details = document.createElement('div');
+    details.className = 'gw-df-popup-details';
+    const time = new Date(observation.observedAt).toLocaleString();
+    details.textContent = `${observation.frequencyMHz.toFixed(3)} MHz · ±${observation.uncertaintyDeg.toFixed(1)}° · ${time}`;
+    div.append(title, details);
+    if (observation.mission) {
+      const mission = document.createElement('div');
+      mission.className = 'gw-df-popup-note';
+      mission.textContent = observation.mission;
+      div.append(mission);
+    }
+    if (observation.note) {
+      const note = document.createElement('div');
+      note.className = 'gw-df-popup-note';
+      note.textContent = observation.note;
+      div.append(note);
+    }
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'gw-fixed-popup-delete';
+    btn.textContent = 'Delete bearing';
+    btn.addEventListener('click', async () => {
+      try {
+        await directionFindingsStore.remove(observation.id);
+        closePopup();
+        toasts.success(`Removed bearing from ${observation.callsign}`);
+      } catch (err) {
+        toasts.error(`Could not remove bearing: ${err.message}`);
+      }
+    });
+    div.append(btn);
+
+    activePopup = new maplibregl.Popup({
+      offset: 8,
+      maxWidth: '340px',
+      className: 'gw-fixed-popup',
+      closeButton: true,
+      closeOnClick: true,
+    })
+      .setLngLat(lngLat)
+      .setDOMContent(div)
+      .addTo(map);
+    activePopup.on('close', () => { activePopup = null; });
   }
 
   function updateCoordText(lngLat) {
@@ -824,6 +900,18 @@
     fixedPointsStore.load().catch((err) => {
       toasts.error(`Could not load fixed points: ${err.message}`);
     });
+    directionFindingsLayer = mountDirectionFindingsLayer(
+      map,
+      () => directionFindingsStore.observations,
+      {
+        visible: layerToggles.directionFindings,
+        onLineClick: (observation, lngLat) => openDirectionFindingPopup(map, observation, lngLat),
+      },
+    );
+    directionFindingsLayer.refresh();
+    directionFindingsStore.load().catch((err) => {
+      toasts.error(`Could not load direction findings: ${err.message}`);
+    });
     myPositionLayer = mountMyPositionLayer(map, () => dataStore.myPosition, {
       onMarkerEnter: () => {
         if (activePopup) return;
@@ -851,6 +939,7 @@
     windBarbsLayer.setVisible(layerToggles.weather);
     myPositionLayer.setVisible(layerToggles.myPosition);
     fixedPointsLayer.setVisible(layerToggles.fixedPoints);
+    directionFindingsLayer.setVisible(layerToggles.directionFindings);
     rxtLinksLayer.setVisible(layerToggles.rxtLinks);
     rxtLinksLayer.setStationFilter(layerToggles.rxtStation);
     // Fronts layer disabled for now.
@@ -1038,6 +1127,10 @@
     const _points = fixedPointsStore.points;
     fixedPointsLayer?.refresh();
   });
+  $effect(() => {
+    const _observations = directionFindingsStore.observations;
+    directionFindingsLayer?.refresh();
+  });
 
   // Persist the whole toggle set on any change. JSON.stringify reads every
   // property, so Svelte tracks each one as a dependency.
@@ -1133,6 +1226,10 @@
   $effect(() => {
     const v = layerToggles.fixedPoints;
     fixedPointsLayer?.setVisible(v);
+  });
+  $effect(() => {
+    const v = layerToggles.directionFindings;
+    directionFindingsLayer?.setVisible(v);
   });
   // Surface fronts: toggle visibility, and run the slow manifest poll only while
   // the overlay is on (mirrors the radar manifest poll being gated on its
@@ -1371,6 +1468,7 @@
     hoverPathLayer?.destroy();
     myPositionLayer?.destroy();
     fixedPointsLayer?.destroy();
+    directionFindingsLayer?.destroy();
     rxtLinksLayer?.destroy();
     radarLayer = null;
     frontsLayer = null;
@@ -1382,6 +1480,7 @@
     hoverPathLayer = null;
     myPositionLayer = null;
     fixedPointsLayer = null;
+    directionFindingsLayer = null;
     rxtLinksLayer = null;
     mapRef = null;
     // Drop the console debug handle so a context-lost/removed map isn't pinned
@@ -1439,6 +1538,7 @@
     onfront={(callsign) => (pinnedStationWindows = frontStationWindow(pinnedStationWindows, callsign))}
     onmove={movePinnedStation}
     onlocate={locatePinnedStation}
+    onbearing={openDirectionFindingDialog}
   />
 
   {#snippet panelBody()}
@@ -1516,6 +1616,14 @@
             onchange={(e) => (layerToggles.fixedPoints = e.currentTarget.checked)}
           />
           <span>Fixed Points</span>
+        </label>
+        <label class="toggle-row">
+          <input
+            type="checkbox"
+            checked={layerToggles.directionFindings}
+            onchange={(e) => (layerToggles.directionFindings = e.currentTarget.checked)}
+          />
+          <span>Direction Findings</span>
         </label>
         <label class="toggle-row">
           <input
@@ -1744,6 +1852,19 @@
         toasts.success(`Added "${p.name}"`);
       } catch (err) {
         toasts.error(`Could not add point: ${err.message}`);
+      }
+    }}
+  />
+
+  <DirectionFindingDialog
+    bind:open={dfDialog.open}
+    station={dfDialog.station}
+    onConfirm={async (observation) => {
+      try {
+        const created = await directionFindingsStore.add(observation);
+        toasts.success(`Plotted ${created.bearingDeg.toFixed(1)}° from ${created.callsign}`);
+      } catch (err) {
+        toasts.error(`Could not add bearing: ${err.message}`);
       }
     }}
   />
@@ -2397,6 +2518,13 @@
     cursor: pointer;
     white-space: nowrap;
   }
+  :global(button.stn-action) {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    font: inherit;
+    text-align: left;
+  }
   :global(.stn-action .stn-action-icon) {
     flex: 0 0 auto;
     color: var(--map-overlay-muted);
@@ -2412,6 +2540,10 @@
     text-decoration: none;
     outline: none;
   }
+  :global(.gw-df-popup-body) { display: flex; flex-direction: column; gap: 6px; font-family: var(--font-mono); }
+  :global(.gw-df-popup-title) { color: #d4a040; font-size: 13px; }
+  :global(.gw-df-popup-details),
+  :global(.gw-df-popup-note) { color: var(--map-overlay-muted); font-size: 11px; }
   :global(.stn-weather) {
     overflow: hidden;
     border: 1px solid color-mix(in srgb, var(--map-overlay-muted) 35%, transparent);

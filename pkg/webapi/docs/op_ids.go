@@ -453,3 +453,13 @@ const (
 	OpUpdateFixedPoint = "updateFixedPoint"
 	OpDeleteFixedPoint = "deleteFixedPoint"
 )
+
+// Direction-findings resource — /api/direction-findings/* — manual bearings
+// reported by field operators and entered on the live map.
+const (
+	OpListDirectionFindings  = "listDirectionFindings"
+	OpCreateDirectionFinding = "createDirectionFinding"
+	OpGetDirectionFinding    = "getDirectionFinding"
+	OpUpdateDirectionFinding = "updateDirectionFinding"
+	OpDeleteDirectionFinding = "deleteDirectionFinding"
+)

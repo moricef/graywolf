@@ -662,6 +662,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/direction-findings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List manual direction-finding observations */
+        get: operations["listDirectionFindings"];
+        put?: never;
+        /** Create a manual direction-finding observation */
+        post: operations["createDirectionFinding"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/direction-findings/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a manual direction-finding observation */
+        get: operations["getDirectionFinding"];
+        /** Replace a manual direction-finding observation */
+        put: operations["updateDirectionFinding"];
+        post?: never;
+        /** Delete a manual direction-finding observation */
+        delete: operations["deleteDirectionFinding"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/fixed-points": {
         parameters: {
             query?: never;
@@ -2839,6 +2876,31 @@ export interface components {
             priority?: number;
             to_channel?: number;
         };
+        "dto.DirectionFindingRequest": {
+            bearing_deg?: number;
+            callsign?: string;
+            frequency_mhz?: number;
+            latitude?: number;
+            longitude?: number;
+            mission?: string;
+            note?: string;
+            observed_at?: string;
+            uncertainty_deg?: number;
+        };
+        "dto.DirectionFindingResponse": {
+            bearing_deg?: number;
+            callsign?: string;
+            created_at?: string;
+            frequency_mhz?: number;
+            id?: number;
+            latitude?: number;
+            longitude?: number;
+            mission?: string;
+            note?: string;
+            observed_at?: string;
+            uncertainty_deg?: number;
+            updated_at?: string;
+        };
         "dto.DownloadStatus": {
             bytes_downloaded?: number;
             bytes_total?: number;
@@ -4163,6 +4225,12 @@ export interface components {
         "dto.AX25SessionProfile": {
             content: {
                 "application/json": components["schemas"]["dto.AX25SessionProfile"];
+            };
+        };
+        /** @description Direction-finding observation */
+        "dto.DirectionFindingRequest": {
+            content: {
+                "application/json": components["schemas"]["dto.DirectionFindingRequest"];
             };
         };
         /** @description Igate RF filter definition */
@@ -6860,6 +6928,194 @@ export interface operations {
             header?: never;
             path: {
                 /** @description Digipeater rule id */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["webtypes.ErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["webtypes.ErrorResponse"];
+                };
+            };
+        };
+    };
+    listDirectionFindings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["dto.DirectionFindingResponse"][];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["webtypes.ErrorResponse"];
+                };
+            };
+        };
+    };
+    createDirectionFinding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: components["requestBodies"]["dto.DirectionFindingRequest"];
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["dto.DirectionFindingResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["webtypes.ErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["webtypes.ErrorResponse"];
+                };
+            };
+        };
+    };
+    getDirectionFinding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Observation id */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["dto.DirectionFindingResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["webtypes.ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["webtypes.ErrorResponse"];
+                };
+            };
+        };
+    };
+    updateDirectionFinding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Observation id */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: components["requestBodies"]["dto.DirectionFindingRequest"];
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["dto.DirectionFindingResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["webtypes.ErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["webtypes.ErrorResponse"];
+                };
+            };
+        };
+    };
+    deleteDirectionFinding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Observation id */
                 id: number;
             };
             cookie?: never;

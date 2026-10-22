@@ -296,6 +296,7 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	s.registerAudioDevices(mux)
 	s.registerBeacons(mux)
 	s.registerFixedPoints(mux)
+	s.registerDirectionFindings(mux)
 	s.registerPtt(mux)
 	s.registerTxTiming(mux)
 	s.registerKiss(mux)

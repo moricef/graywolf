@@ -1375,6 +1375,54 @@ definitions:
       to_channel:
         type: integer
     type: object
+  dto.DirectionFindingRequest:
+    properties:
+      bearing_deg:
+        type: number
+      callsign:
+        type: string
+      frequency_mhz:
+        type: number
+      latitude:
+        type: number
+      longitude:
+        type: number
+      mission:
+        type: string
+      note:
+        type: string
+      observed_at:
+        type: string
+      uncertainty_deg:
+        type: number
+    type: object
+  dto.DirectionFindingResponse:
+    properties:
+      bearing_deg:
+        type: number
+      callsign:
+        type: string
+      created_at:
+        type: string
+      frequency_mhz:
+        type: number
+      id:
+        type: integer
+      latitude:
+        type: number
+      longitude:
+        type: number
+      mission:
+        type: string
+      note:
+        type: string
+      observed_at:
+        type: string
+      uncertainty_deg:
+        type: number
+      updated_at:
+        type: string
+    type: object
   dto.DownloadStatus:
     properties:
       bytes_downloaded:
@@ -3476,6 +3524,8 @@ tags:
     description: Beacon configuration and send-now.
   - name: fixed-points
     description: Operator-placed map landmarks, shared across devices.
+  - name: direction-findings
+    description: Manual radio bearings reported by field operators and plotted on the live map.
   - name: audio-devices
     description: Audio input/output device binding.
   - name: kiss
@@ -5427,6 +5477,147 @@ paths:
       summary: Update digipeater rule
       tags:
         - digipeater
+  /direction-findings:
+    get:
+      operationId: listDirectionFindings
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/dto.DirectionFindingResponse'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/webtypes.ErrorResponse'
+      security:
+        - CookieAuth: []
+      summary: List manual direction-finding observations
+      tags:
+        - direction-findings
+    post:
+      consumes:
+        - application/json
+      operationId: createDirectionFinding
+      parameters:
+        - description: Direction-finding observation
+          in: body
+          name: body
+          required: true
+          schema:
+            $ref: '#/definitions/dto.DirectionFindingRequest'
+      produces:
+        - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/dto.DirectionFindingResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/webtypes.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/webtypes.ErrorResponse'
+      security:
+        - CookieAuth: []
+      summary: Create a manual direction-finding observation
+      tags:
+        - direction-findings
+  /direction-findings/{id}:
+    delete:
+      operationId: deleteDirectionFinding
+      parameters:
+        - description: Observation id
+          in: path
+          name: id
+          required: true
+          type: integer
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/webtypes.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/webtypes.ErrorResponse'
+      security:
+        - CookieAuth: []
+      summary: Delete a manual direction-finding observation
+      tags:
+        - direction-findings
+    get:
+      operationId: getDirectionFinding
+      parameters:
+        - description: Observation id
+          in: path
+          name: id
+          required: true
+          type: integer
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.DirectionFindingResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/webtypes.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/webtypes.ErrorResponse'
+      security:
+        - CookieAuth: []
+      summary: Get a manual direction-finding observation
+      tags:
+        - direction-findings
+    put:
+      consumes:
+        - application/json
+      operationId: updateDirectionFinding
+      parameters:
+        - description: Observation id
+          in: path
+          name: id
+          required: true
+          type: integer
+        - description: Direction-finding observation
+          in: body
+          name: body
+          required: true
+          schema:
+            $ref: '#/definitions/dto.DirectionFindingRequest'
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.DirectionFindingResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/webtypes.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/webtypes.ErrorResponse'
+      security:
+        - CookieAuth: []
+      summary: Replace a manual direction-finding observation
+      tags:
+        - direction-findings
   /fixed-points:
     get:
       operationId: listFixedPoints

@@ -37,6 +37,7 @@ var tagOrder = []tagEntry{
 	{"channels", "Radio channel configuration."},
 	{"beacons", "Beacon configuration and send-now."},
 	{"fixed-points", "Operator-placed map landmarks, shared across devices."},
+	{"direction-findings", "Manual radio bearings reported by field operators and plotted on the live map."},
 	{"audio-devices", "Audio input/output device binding."},
 	{"kiss", "KISS TCP server interfaces."},
 	{"tx-timing", "Per-channel TX timing parameters."},

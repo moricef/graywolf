@@ -23,6 +23,10 @@
             "description": "Operator-placed map landmarks, shared across devices."
         },
         {
+            "name": "direction-findings",
+            "description": "Manual radio bearings reported by field operators and plotted on the live map."
+        },
+        {
             "name": "audio-devices",
             "description": "Audio input/output device binding."
         },
@@ -3099,6 +3103,229 @@
                     {
                         "type": "integer",
                         "description": "Digipeater rule id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/webtypes.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/webtypes.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/direction-findings": {
+            "get": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "direction-findings"
+                ],
+                "summary": "List manual direction-finding observations",
+                "operationId": "listDirectionFindings",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/dto.DirectionFindingResponse"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/webtypes.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "direction-findings"
+                ],
+                "summary": "Create a manual direction-finding observation",
+                "operationId": "createDirectionFinding",
+                "parameters": [
+                    {
+                        "description": "Direction-finding observation",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.DirectionFindingRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/dto.DirectionFindingResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/webtypes.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/webtypes.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/direction-findings/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "direction-findings"
+                ],
+                "summary": "Get a manual direction-finding observation",
+                "operationId": "getDirectionFinding",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Observation id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.DirectionFindingResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/webtypes.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/webtypes.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "direction-findings"
+                ],
+                "summary": "Replace a manual direction-finding observation",
+                "operationId": "updateDirectionFinding",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Observation id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Direction-finding observation",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.DirectionFindingRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.DirectionFindingResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/webtypes.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/webtypes.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ],
+                "tags": [
+                    "direction-findings"
+                ],
+                "summary": "Delete a manual direction-finding observation",
+                "operationId": "deleteDirectionFinding",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Observation id",
                         "name": "id",
                         "in": "path",
                         "required": true
@@ -10321,6 +10548,79 @@
                 },
                 "to_channel": {
                     "type": "integer"
+                }
+            }
+        },
+        "dto.DirectionFindingRequest": {
+            "type": "object",
+            "properties": {
+                "bearing_deg": {
+                    "type": "number"
+                },
+                "callsign": {
+                    "type": "string"
+                },
+                "frequency_mhz": {
+                    "type": "number"
+                },
+                "latitude": {
+                    "type": "number"
+                },
+                "longitude": {
+                    "type": "number"
+                },
+                "mission": {
+                    "type": "string"
+                },
+                "note": {
+                    "type": "string"
+                },
+                "observed_at": {
+                    "type": "string"
+                },
+                "uncertainty_deg": {
+                    "type": "number"
+                }
+            }
+        },
+        "dto.DirectionFindingResponse": {
+            "type": "object",
+            "properties": {
+                "bearing_deg": {
+                    "type": "number"
+                },
+                "callsign": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "frequency_mhz": {
+                    "type": "number"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "latitude": {
+                    "type": "number"
+                },
+                "longitude": {
+                    "type": "number"
+                },
+                "mission": {
+                    "type": "string"
+                },
+                "note": {
+                    "type": "string"
+                },
+                "observed_at": {
+                    "type": "string"
+                },
+                "uncertainty_deg": {
+                    "type": "number"
+                },
+                "updated_at": {
+                    "type": "string"
                 }
             }
         },

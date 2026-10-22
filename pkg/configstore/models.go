@@ -766,6 +766,25 @@ type FixedPoint struct {
 	UpdatedAt   time.Time `json:"-"`
 }
 
+// DirectionFindingObservation is a manual radio-direction-finding bearing
+// entered by the control operator after receiving a voice report. Latitude
+// and Longitude are a snapshot of the reporting station's position at entry
+// time: later APRS movement must not move an historical bearing.
+type DirectionFindingObservation struct {
+	ID             uint32    `gorm:"primaryKey;autoIncrement" json:"id"`
+	Callsign       string    `gorm:"not null;index" json:"callsign"`
+	Mission        string    `gorm:"not null;default:''" json:"mission"`
+	Latitude       float64   `gorm:"not null" json:"latitude"`
+	Longitude      float64   `gorm:"not null" json:"longitude"`
+	BearingDeg     float64   `gorm:"not null" json:"bearing_deg"`
+	UncertaintyDeg float64   `gorm:"not null;default:10" json:"uncertainty_deg"`
+	FrequencyMHz   float64   `gorm:"not null;default:121.5" json:"frequency_mhz"`
+	ObservedAt     time.Time `gorm:"not null;index" json:"observed_at"`
+	Note           string    `gorm:"not null;default:''" json:"note"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+}
+
 // SmartBeaconConfig is a singleton (id=1) row holding the global
 // SmartBeacon curve parameters applied to every beacon with
 // SmartBeacon=true. Mirrors direwolf's single SMARTBEACON directive:

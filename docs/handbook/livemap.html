@@ -120,6 +120,14 @@
               <td>Your station&rsquo;s position marker, taken from your GPS or your last beacon.</td>
             </tr>
             <tr>
+              <td><strong>Fixed Points</strong></td>
+              <td>Operator-defined landmarks stored by Graywolf and shared with every browser connected to it.</td>
+            </tr>
+            <tr>
+              <td><strong>Direction Findings</strong></td>
+              <td>Manual radio bearings entered from station popups. Orange rays start at the reporting station&rsquo;s recorded position.</td>
+            </tr>
+            <tr>
               <td><strong>Direct RX</strong></td>
               <td>Off by default. When on, the map only shows stations you&rsquo;ve heard directly on RF inside the time range &mdash; digipeated and APRS-IS (iGated) packets are hidden. A station qualifies if at least one of its packets in the window arrived with zero digi hops.</td>
             </tr>
@@ -161,6 +169,7 @@
       <li><strong>Digipeater path</strong> &mdash; the full path the packet traversed</li>
       <li><strong>Comment</strong> &mdash; the station&rsquo;s comment field</li>
       <li><strong>Last heard</strong> &mdash; how recently the station was heard</li>
+      <li><strong>Actions</strong> &mdash; add a direction-finding bearing, send a message, open the APRS logs, or look up the station on QRZ</li>
     </ul>
 
     <p>
@@ -183,6 +192,36 @@
       open. On a phone, pinned windows form a horizontally scrollable row of
       cards along the bottom of the map.
     </p>
+
+    <h2>Manual Direction Findings</h2>
+
+    <p>
+      When a field operator reports a bearing by voice, click that operator&rsquo;s
+      station marker and select <strong>Add bearing</strong>. Enter the true
+      bearing, frequency, observation time, estimated angular uncertainty,
+      and optional mission and note. Bearings are measured clockwise from
+      true north in the direction of the transmitter.
+    </p>
+
+    <p>
+      Graywolf stores the reporting station&rsquo;s coordinates with the
+      observation and draws an orange ray from that position. The ray therefore
+      stays attached to the place where the measurement was made even if the
+      APRS station moves later. Click a ray to review its details or delete an
+      erroneous observation. Use the <strong>Direction Findings</strong> layer
+      switch to hide or show all rays. The observations are stored in the
+      Graywolf database and are shared across connected browsers.
+    </p>
+
+    <div class="callout note">
+      <span class="callout-icon">i</span>
+      <div class="callout-body">
+        <p>
+          This first implementation plots reported bearings; it does not yet
+          calculate a triangulated transmitter position or uncertainty area.
+        </p>
+      </div>
+    </div>
 
     <h2>Status Bar</h2>
 

@@ -82,3 +82,7 @@ test('parseLayerToggles supplies heatmap defaults for old blobs', () => {
   assert.equal(got.directRxHeatmap, false);
   assert.equal(got.directRxHeatmapOpacity, 0.8);
 });
+
+test('parseLayerToggles enables direction findings for old blobs', () => {
+  assert.equal(parseLayerToggles('{"stations":false}').directionFindings, true);
+});

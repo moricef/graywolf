@@ -155,6 +155,7 @@ func (s *Store) Migrate() error {
 		&IGateRfFilter{},
 		&Beacon{},
 		&FixedPoint{},
+		&DirectionFindingObservation{},
 		&PacketFilter{},
 		&GPSConfig{},
 		&SmartBeaconConfig{},
@@ -1389,6 +1390,35 @@ func (s *Store) UpdateFixedPoint(ctx context.Context, fp *FixedPoint) error {
 
 func (s *Store) DeleteFixedPoint(ctx context.Context, id uint32) error {
 	return s.db.WithContext(ctx).Delete(&FixedPoint{}, id).Error
+}
+
+// ---------------------------------------------------------------------------
+// DirectionFindingObservation
+// ---------------------------------------------------------------------------
+
+func (s *Store) ListDirectionFindingObservations(ctx context.Context) ([]DirectionFindingObservation, error) {
+	var out []DirectionFindingObservation
+	return out, s.db.WithContext(ctx).Order("observed_at DESC, id DESC").Find(&out).Error
+}
+
+func (s *Store) GetDirectionFindingObservation(ctx context.Context, id uint32) (*DirectionFindingObservation, error) {
+	var observation DirectionFindingObservation
+	if err := s.db.WithContext(ctx).First(&observation, id).Error; err != nil {
+		return nil, err
+	}
+	return &observation, nil
+}
+
+func (s *Store) CreateDirectionFindingObservation(ctx context.Context, observation *DirectionFindingObservation) error {
+	return s.db.WithContext(ctx).Create(observation).Error
+}
+
+func (s *Store) UpdateDirectionFindingObservation(ctx context.Context, observation *DirectionFindingObservation) error {
+	return s.db.WithContext(ctx).Save(observation).Error
+}
+
+func (s *Store) DeleteDirectionFindingObservation(ctx context.Context, id uint32) error {
+	return s.db.WithContext(ctx).Delete(&DirectionFindingObservation{}, id).Error
 }
 
 // ---------------------------------------------------------------------------

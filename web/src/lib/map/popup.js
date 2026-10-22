@@ -195,6 +195,9 @@ const ICON_QRZ = icon(
   '<path d="M15 3h6v6"/><path d="M10 14 21 3"/>' +
     '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>'
 );
+const ICON_BEARING = icon(
+  '<circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5z"/>'
+);
 const ICON_PIN = icon(
   '<path d="M12 17v5"/><path d="M5 17h14"/>' +
     '<path d="m15 2-1 5 4 4H6l4-4-1-5z"/>',
@@ -223,6 +226,7 @@ export function renderStationActionsHTML(s) {
   const logHref = `#/logs?callsign=${encodeURIComponent(upper)}`;
 
   let html = `<div class="stn-actions" role="menu">`;
+  html += `<button type="button" class="stn-action stn-bearing-button" role="menuitem">${ICON_BEARING}<span class="stn-action-label">Add bearing</span></button>`;
   html += `<a class="stn-action stn-msg-link" role="menuitem" href="${msgHref}">${ICON_MESSAGE}<span class="stn-action-label">Message</span></a>`;
   html += `<a class="stn-action stn-log-link" role="menuitem" href="${logHref}">${ICON_LOGS}<span class="stn-action-label">APRS logs</span></a>`;
   html += `<a class="stn-action stn-qrz-link" role="menuitem" href="${qrzHref}" target="_blank" rel="noopener noreferrer">${ICON_QRZ}<span class="stn-action-label">QRZ</span></a>`;
