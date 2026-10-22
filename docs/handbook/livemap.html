@@ -213,12 +213,17 @@
       Graywolf database and are shared across connected browsers.
     </p>
 
-    <div class="callout note">
-      <span class="callout-icon">i</span>
+    <div class="callout tip">
+      <span class="callout-icon">&#10003;</span>
       <div class="callout-body">
         <p>
-          This first implementation plots reported bearings; it does not yet
-          calculate a triangulated transmitter position or uncertainty area.
+          Give related observations the same mission name. With two or more
+          bearings, Graywolf calculates a weighted probable position and a
+          95% uncertainty area for each mission. A green point indicates a
+          coherent solution. A red point warns that the bearings are nearly
+          parallel, disagree strongly, or point away from the calculated
+          crossing. Click the point for the diagnostics; always treat reflected
+          signals and poor mountain geometry with caution.
         </p>
       </div>
     </div>

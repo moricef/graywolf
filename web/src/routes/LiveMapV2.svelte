@@ -766,6 +766,48 @@
     activePopup.on('close', () => { activePopup = null; });
   }
 
+  function openDirectionFindingEstimatePopup(map, estimate, lngLat) {
+    closePopup();
+    const div = document.createElement('div');
+    div.className = 'gw-df-popup-body';
+    const title = document.createElement('strong');
+    title.className = 'gw-df-popup-title';
+    title.textContent = estimate.mission || 'Unassigned search';
+    const status = document.createElement('div');
+    status.className = `gw-df-estimate-status ${estimate.coherent ? 'coherent' : 'warning'}`;
+    status.textContent = estimate.coherent ? 'Coherent estimate' : 'Estimate needs review';
+    const details = document.createElement('div');
+    details.className = 'gw-df-popup-details';
+    details.textContent = `${estimate.count} bearings · angular RMS ${estimate.rmsAngularErrorDeg.toFixed(1)}°`;
+    const ellipse = document.createElement('div');
+    ellipse.className = 'gw-df-popup-details';
+    ellipse.textContent = `95% uncertainty: ${estimate.majorAxisKm.toFixed(1)} × ${estimate.minorAxisKm.toFixed(1)} km`;
+    div.append(title, status, details, ellipse);
+    if (estimate.poorGeometry) {
+      const warning = document.createElement('div');
+      warning.className = 'gw-df-popup-warning';
+      warning.textContent = 'Poor geometry: the bearings are nearly parallel.';
+      div.append(warning);
+    }
+    if (estimate.forwardFraction < 1) {
+      const warning = document.createElement('div');
+      warning.className = 'gw-df-popup-warning';
+      warning.textContent = 'At least one bearing points away from this solution.';
+      div.append(warning);
+    }
+    activePopup = new maplibregl.Popup({
+      offset: 10,
+      maxWidth: '340px',
+      className: 'gw-fixed-popup',
+      closeButton: true,
+      closeOnClick: true,
+    })
+      .setLngLat(lngLat)
+      .setDOMContent(div)
+      .addTo(map);
+    activePopup.on('close', () => { activePopup = null; });
+  }
+
   function updateCoordText(lngLat) {
     if (!lngLat) {
       coordText = '';
@@ -906,6 +948,7 @@
       {
         visible: layerToggles.directionFindings,
         onLineClick: (observation, lngLat) => openDirectionFindingPopup(map, observation, lngLat),
+        onEstimateClick: (estimate, lngLat) => openDirectionFindingEstimatePopup(map, estimate, lngLat),
       },
     );
     directionFindingsLayer.refresh();
@@ -2544,6 +2587,11 @@
   :global(.gw-df-popup-title) { color: #d4a040; font-size: 13px; }
   :global(.gw-df-popup-details),
   :global(.gw-df-popup-note) { color: var(--map-overlay-muted); font-size: 11px; }
+  :global(.gw-df-estimate-status) { font-size: 12px; font-weight: 700; }
+  :global(.gw-df-estimate-status.coherent) { color: #35c779; }
+  :global(.gw-df-estimate-status.warning),
+  :global(.gw-df-popup-warning) { color: var(--color-warning, #ffad42); }
+  :global(.gw-df-popup-warning) { font-size: 11px; }
   :global(.stn-weather) {
     overflow: hidden;
     border: 1px solid color-mix(in srgb, var(--map-overlay-muted) 35%, transparent);
