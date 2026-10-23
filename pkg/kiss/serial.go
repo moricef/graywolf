@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/chrissnell/graywolf/pkg/internal/backoff"
+	"github.com/chrissnell/graywolf/pkg/tncprofile"
 	"go.bug.st/serial"
 )
 
@@ -37,6 +38,7 @@ type SerialConfig struct {
 	Name                string
 	Device              string
 	BaudRate            uint32
+	InitProfile         string
 	Mode                Mode
 	ChannelMap          map[uint8]uint32
 	ReconnectInitMs     uint32
@@ -234,6 +236,15 @@ func (s *SerialSupervisor) run(parent context.Context) {
 		s.setState(StateConnecting, "", 0)
 
 		port, err := s.open(s.cfg.Device, s.cfg.BaudRate)
+		if err == nil {
+			initialized, initErr := tncprofile.Initialize(ctx, port, s.cfg.InitProfile)
+			if initErr != nil {
+				_ = port.Close()
+				err = initErr
+			} else {
+				port = initialized
+			}
+		}
 		if err != nil {
 			if ctx.Err() != nil {
 				s.setState(StateStopped, "", 0)
@@ -244,7 +255,7 @@ func (s *SerialSupervisor) run(parent context.Context) {
 			s.backoffSeconds = uint32((delay + time.Second - 1) / time.Second)
 			s.mu.Unlock()
 			s.setState(StateBackoff, err.Error(), time.Now().Add(delay).UnixMilli())
-			s.logger.Warn("kiss serial open failed",
+			s.logger.Warn("kiss serial open or initialization failed",
 				"device", s.cfg.Device, "err", err,
 				"retry_in", delay.Round(time.Millisecond))
 			if !s.sleepWithWake(ctx, delay) {

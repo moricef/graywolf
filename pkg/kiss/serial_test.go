@@ -21,6 +21,54 @@ func TestSerialConfig_DefaultOpenFuncIsSet(t *testing.T) {
 	}
 }
 
+func TestSerialSupervisorKenwoodInitializesBeforeConnected(t *testing.T) {
+	port, radio := net.Pipe()
+	defer radio.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	restarted := make(chan struct{})
+	go func() {
+		defer radio.Close()
+		for _, step := range []struct{ request, response string }{
+			{"\x03\xc0\xff\xc0\x03\r", "\rcmd:"},
+			{"KISS ON\r", "\rKISS was OFF\rcmd:"},
+			{"RESTART\r", ""},
+		} {
+			data := make([]byte, len(step.request))
+			if _, err := io.ReadFull(radio, data); err != nil {
+				return
+			}
+			if string(data) != step.request {
+				return
+			}
+			if step.response != "" {
+				if _, err := io.WriteString(radio, step.response); err != nil {
+					return
+				}
+			}
+		}
+		close(restarted)
+		<-ctx.Done()
+	}()
+	sup := NewSerial(SerialConfig{
+		Device: "kenwood-test", BaudRate: 9600, InitProfile: "kenwood",
+		OpenFunc: func(string, uint32) (io.ReadWriteCloser, error) { return port, nil },
+	}, newTestSerialServer(t, &txSinkRecorder{}))
+	go sup.run(ctx)
+	defer sup.close()
+	defer cancel()
+	select {
+	case <-restarted:
+	case <-ctx.Done():
+		t.Fatal("initialization did not complete")
+	}
+	if got := sup.Status().State; got != StateConnecting {
+		t.Fatalf("must stay Connecting during restart settling, got %s", got)
+	}
+	waitState(t, sup, StateConnected)
+	cancel()
+}
+
 func TestSerialConfig_InjectedOpenFuncWins(t *testing.T) {
 	cfg := SerialConfig{
 		Device: "x", BaudRate: 1,

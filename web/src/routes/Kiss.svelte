@@ -31,6 +31,10 @@
   const TNC_INGRESS_RATE_DEFAULT = '50';
   const TNC_INGRESS_BURST_DEFAULT = '100';
   const BAUD_RATE_DEFAULT = '9600';
+  const initProfileOptions = [
+    { value: 'native', label: 'Native KISS (no initialization)' },
+    { value: 'kenwood', label: 'Kenwood TM-D700 / TM-D710' },
+  ];
   // Standard serial line speeds offered in the Baud Rate dropdown. Covers
   // the rates real KISS TNCs use (1200 for classic AFSK packet, 9600 for
   // G3RUH and most USB TNCs, up to 115200 for high-speed links). A free-form
@@ -293,6 +297,7 @@
       reconnect_max_ms: String(RECONNECT_MAX_DEFAULT_MS),
       serial_device: '',
       baud_rate: BAUD_RATE_DEFAULT,
+      init_profile: 'native',
       channel: '1',
       mode: 'modem',
       tnc_ingress_rate_hz: TNC_INGRESS_RATE_DEFAULT,
@@ -391,6 +396,7 @@
       reconnect_init_ms: String(row.reconnect_init_ms || RECONNECT_INIT_DEFAULT_MS),
       reconnect_max_ms: String(row.reconnect_max_ms || RECONNECT_MAX_DEFAULT_MS),
       baud_rate: String(row.baud_rate),
+      init_profile: row.init_profile || 'native',
       channel: String(row.channel || 1),
       mode: row.mode || 'modem',
       tnc_ingress_rate_hz: String(row.tnc_ingress_rate_hz || 50),
@@ -663,6 +669,9 @@
       // silently re-enables a disabled interface (the backend defaults a
       // missing flag to true). Default true for new rows.
       enabled: form.enabled !== false,
+      init_profile: (form.type === 'serial' || form.type === 'usbserial') && form.mode === 'tnc'
+        ? form.init_profile === 'native' ? '' : form.init_profile
+        : '',
     };
     switch (form.type) {
       case 'tcp':
@@ -947,6 +956,9 @@
     {:else}
       <span class="status-static">{@render liveStatus(row)}</span>
     {/if}
+    {#if !expandable && !disabled && row.last_error}
+      <div class="detail-err serial-init-error" role="status">{row.last_error}</div>
+    {/if}
     {#if expandable && expandedId === row.id}
       <div id={`status-detail-${row.id}`} class="status-detail" role="region" aria-label="Status detail">
         <div class="detail-row"><span class="detail-label">Peer:</span> <span>{row.peer_addr || `${row.remote_host}:${row.remote_port}`}</span></div>
@@ -1140,6 +1152,12 @@
         <Select id="kiss-baud" bind:value={form.baud_rate} options={baudRateOptions} />
       </FormField>
     {/if}
+    {#if (form.type === 'serial' || form.type === 'usbserial') && form.mode === 'tnc'}
+      <FormField label="TNC initialization" id="kiss-init-profile"
+        hint="Kenwood: put the radio in PACKET mode first. Graywolf switches its TNC to KISS when opening the port. Radio baud rate and frequency are not changed.">
+        <Select id="kiss-init-profile" bind:value={form.init_profile} options={initProfileOptions} />
+      </FormField>
+    {/if}
     <FormField label="Channel" id="kiss-channel">
       {#if channels.length > 0}
         <ChannelListbox
@@ -1247,6 +1265,7 @@
 />
 
 <style>
+  .serial-init-error { max-width: 360px; margin-top: 5px; font-size: 11px; white-space: normal; }
   .poll-stale-pill {
     display: inline-flex;
     align-items: center;

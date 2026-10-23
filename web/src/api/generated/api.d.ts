@@ -3064,6 +3064,7 @@ export interface components {
              *     there by the server.
              */
             gate_tx_to_is?: boolean;
+            init_profile?: string;
             /**
              * @description LocalOnly, when set on a tcp (server-listen) interface, binds the
              *     KISS listener to loopback (127.0.0.1) instead of all interfaces
@@ -3106,6 +3107,7 @@ export interface components {
             enabled?: boolean;
             gate_tx_to_is?: boolean;
             id?: number;
+            init_profile?: string;
             last_error?: string;
             /**
              * @description LocalOnly mirrors KissRequest.LocalOnly: true when a tcp interface

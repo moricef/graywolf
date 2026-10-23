@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/chrissnell/graywolf/pkg/configstore"
+	"github.com/chrissnell/graywolf/pkg/tncprofile"
 )
 
 // Upper bounds on the TNC ingress rate fields. Values above these are
@@ -40,6 +41,7 @@ type KissRequest struct {
 	LocalOnly        bool   `json:"local_only"`
 	SerialDevice     string `json:"serial_device"`
 	BaudRate         uint32 `json:"baud_rate"`
+	InitProfile      string `json:"init_profile"`
 	Channel          uint32 `json:"channel"`
 	Mode             string `json:"mode"`
 	TncIngressRateHz uint32 `json:"tnc_ingress_rate_hz"`
@@ -97,6 +99,17 @@ const (
 )
 
 func (r KissRequest) Validate() error {
+	if !tncprofile.Valid(r.InitProfile) {
+		return fmt.Errorf("init_profile must be empty (native KISS) or kenwood")
+	}
+	if r.InitProfile != tncprofile.Native {
+		if r.Type != configstore.KissTypeSerial && r.Type != configstore.KissTypeUsbSerial {
+			return fmt.Errorf("init_profile requires serial or usbserial")
+		}
+		if r.Mode != "" && r.Mode != configstore.KissModeTnc {
+			return fmt.Errorf("init_profile requires TNC mode")
+		}
+	}
 	if !configstore.ValidKissInterfaceType(r.Type) {
 		return fmt.Errorf("type must be tcp, tcp-client, serial, bluetooth, or usbserial")
 	}
@@ -214,6 +227,7 @@ func (r KissRequest) ToModel() configstore.KissInterface {
 		InterfaceType:       r.Type,
 		Device:              r.SerialDevice,
 		BaudRate:            r.BaudRate,
+		InitProfile:         r.InitProfile,
 		Channel:             ch,
 		Enabled:             enabled,
 		Broadcast:           true,
@@ -286,6 +300,7 @@ type KissResponse struct {
 	LocalOnly           bool   `json:"local_only"`
 	SerialDevice        string `json:"serial_device"`
 	BaudRate            uint32 `json:"baud_rate"`
+	InitProfile         string `json:"init_profile"`
 	Channel             uint32 `json:"channel"`
 	Mode                string `json:"mode"`
 	TncIngressRateHz    uint32 `json:"tnc_ingress_rate_hz"`
@@ -341,6 +356,7 @@ func KissFromModel(m configstore.KissInterface) KissResponse {
 		Type:                m.InterfaceType,
 		SerialDevice:        m.Device,
 		BaudRate:            m.BaudRate,
+		InitProfile:         m.InitProfile,
 		Channel:             m.Channel,
 		Mode:                m.Mode,
 		TncIngressRateHz:    m.TncIngressRateHz,

@@ -1679,6 +1679,8 @@ definitions:
           already feeds the iGate via the RX fanout) and silently ignored
           there by the server.
         type: boolean
+      init_profile:
+        type: string
       local_only:
         description: |-
           LocalOnly, when set on a tcp (server-listen) interface, binds the
@@ -1739,6 +1741,8 @@ definitions:
         type: boolean
       id:
         type: integer
+      init_profile:
+        type: string
       last_error:
         type: string
       local_only:

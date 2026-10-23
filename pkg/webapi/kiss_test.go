@@ -18,6 +18,38 @@ import (
 	"github.com/chrissnell/graywolf/pkg/webapi/dto"
 )
 
+func TestKissKenwoodProfilePersistence(t *testing.T) {
+	srv, _ := newTestServer(t)
+	mux := http.NewServeMux()
+	srv.RegisterRoutes(mux)
+	body := `{"type":"serial","serial_device":"/dev/kenwood-test","baud_rate":9600,"channel":1,"mode":"tnc","init_profile":"kenwood","enabled":false}`
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/kiss", strings.NewReader(body)))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d: %s", rec.Code, rec.Body.String())
+	}
+	var created dto.KissResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := srv.store.ListKissInterfaces(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || rows[0].InitProfile != "kenwood" || created.InitProfile != "kenwood" {
+		t.Fatalf("initialization profile not persisted: %+v", rows)
+	}
+	// Switching back to native KISS must clear the nonzero field on update.
+	updated := dto.KissRequest{Type: "serial", SerialDevice: "/dev/kenwood-test", BaudRate: 9600, Mode: "tnc"}.ToUpdate(created.ID)
+	if err := srv.store.UpdateKissInterface(context.Background(), &updated); err != nil {
+		t.Fatal(err)
+	}
+	row, err := srv.store.GetKissInterface(context.Background(), created.ID)
+	if err != nil || row.InitProfile != "" {
+		t.Fatalf("native profile did not clear Kenwood setting: %+v, %v", row, err)
+	}
+}
+
 // TestCreateKissInterfaceMode pins the API contract for the new Mode
 // field: the decoder accepts missing/valid values (rounding the empty
 // case back to "modem") and returns 400 for anything else. The test

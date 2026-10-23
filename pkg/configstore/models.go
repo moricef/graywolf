@@ -133,7 +133,8 @@ type KissInterface struct {
 	ListenAddr       string `json:"listen_addr"`                        // host:port for tcp (server-listen)
 	Device           string `json:"serial_device"`                      // /dev/ttyUSB0 or bluetooth mac
 	BaudRate         uint32 `gorm:"default:9600" json:"baud_rate"`
-	Channel          uint32 `gorm:"not null;default:1" json:"channel"` // default radio channel for this interface
+	InitProfile      string `gorm:"not null;default:''" json:"init_profile"` // empty=native KISS; kenwood=TM-D700/TM-D710
+	Channel          uint32 `gorm:"not null;default:1" json:"channel"`       // default radio channel for this interface
 	Broadcast        bool   `gorm:"not null;default:true" json:"broadcast"`
 	Enabled          bool   `gorm:"not null;default:true" json:"enabled"`
 	Mode             string `gorm:"not null;default:'modem'" json:"mode"`           // modem|tnc

@@ -7,6 +7,28 @@ import (
 	"github.com/chrissnell/graywolf/pkg/configstore"
 )
 
+func TestKenwoodInitializationProfile(t *testing.T) {
+	req := KissRequest{Type: "serial", SerialDevice: "/dev/ttyUSB0", BaudRate: 9600, InitProfile: "kenwood"}
+	if err := req.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	model := req.ToModel()
+	if model.InitProfile != "kenwood" || model.Mode != "tnc" || KissFromModel(model).InitProfile != "kenwood" {
+		t.Fatalf("profile not preserved: %+v", model)
+	}
+	for _, change := range []func(*KissRequest){
+		func(r *KissRequest) { r.InitProfile = "unknown" },
+		func(r *KissRequest) { r.Type = "tcp"; r.TcpPort = 8001 },
+		func(r *KissRequest) { r.Mode = "modem" },
+	} {
+		invalid := req
+		change(&invalid)
+		if err := invalid.Validate(); err == nil {
+			t.Fatalf("invalid profile accepted: %+v", invalid)
+		}
+	}
+}
+
 func TestKissRequest_Validate_AllowTxFromGovernor(t *testing.T) {
 	tests := []struct {
 		name    string
