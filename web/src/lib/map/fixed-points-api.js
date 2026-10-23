@@ -24,12 +24,13 @@ export function fixedPointFromApi(p) {
     overlay: p.overlay || '',
     lat: p.latitude,
     lon: p.longitude,
+    operatorStation: p.operator_station === true,
   };
 }
 
 // fixedPointToApi converts a dialog result (client shape) into the POST
 // request body the server expects.
-export function fixedPointToApi({ name, table, symbol, overlay, lat, lon }) {
+export function fixedPointToApi({ name, table, symbol, overlay, lat, lon, operatorStation = false }) {
   return {
     name: (name || '').trim(),
     symbol_table: table || '/',
@@ -37,5 +38,6 @@ export function fixedPointToApi({ name, table, symbol, overlay, lat, lon }) {
     overlay: overlay || '',
     latitude: lat,
     longitude: lon,
+    operator_station: operatorStation,
   };
 }

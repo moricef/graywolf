@@ -81,8 +81,8 @@ export const fixedPointsStore = (() => {
 
     // Create a point on the server, then append the persisted record
     // (with its server-assigned id) to the list. Returns the point.
-    async add({ name, table, symbol, overlay = '', lat, lon }) {
-      const created = await api.post('/fixed-points', fixedPointToApi({ name, table, symbol, overlay, lat, lon }));
+    async add(pointDefinition) {
+      const created = await api.post('/fixed-points', fixedPointToApi(pointDefinition));
       const point = fixedPointFromApi(created);
       if (point) points = [...points, point];
       return point;

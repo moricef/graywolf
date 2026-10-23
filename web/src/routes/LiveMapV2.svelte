@@ -474,7 +474,7 @@
 
   // Add-fixed-point dialog state. Opened from the context menu with the
   // clicked coordinates; onConfirm drops the point into the store.
-  let fpDialog = $state({ open: false, lat: 0, lon: 0 });
+  let fpDialog = $state({ open: false, lat: 0, lon: 0, operatorStation: false });
   let dfDialog = $state({ open: false, station: null });
 
   // Direct RX predicate: a station qualifies only if it was heard directly on
@@ -543,7 +543,7 @@
         label: 'Add fixed point here',
         icon: MapPinned,
         onSelect: () => {
-          fpDialog = { open: true, lat, lon };
+          fpDialog = { open: true, lat, lon, operatorStation: false };
         },
       },
       { divider: true },
@@ -712,10 +712,24 @@
     const coords = document.createElement('div');
     coords.className = 'gw-fixed-popup-coords';
     coords.textContent = `${fmtLat(point.lat)} ${fmtLon(point.lon)}`;
+    div.append(title, coords);
+    if (point.operatorStation) {
+      const manual = document.createElement('div');
+      manual.className = 'gw-fixed-popup-coords';
+      manual.textContent = `Manual station · ${toMaidenhead(point.lat, point.lon, 8)}`;
+      const bearing = document.createElement('button');
+      bearing.type = 'button';
+      bearing.className = 'stn-action stn-bearing-button';
+      bearing.textContent = 'Add bearing';
+      bearing.addEventListener('click', () => openDirectionFindingDialog({
+        callsign: point.name, positions: [{ lat: point.lat, lon: point.lon }],
+      }));
+      div.append(manual, bearing);
+    }
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'gw-fixed-popup-delete';
-    btn.textContent = 'Delete point';
+    btn.textContent = point.operatorStation ? 'Delete station' : 'Delete point';
     btn.addEventListener('click', async () => {
       try {
         await fixedPointsStore.remove(point.id);
@@ -725,7 +739,7 @@
         toasts.error(`Could not remove point: ${err.message}`);
       }
     });
-    div.append(title, coords, btn);
+    div.append(btn);
 
     activePopup = new maplibregl.Popup({
       offset: 18,
@@ -1074,6 +1088,25 @@
     // is fine without an explicit rAF gate.
     map.on('mousemove', (e) => updateCoordText(e.lngLat));
     map.on('mouseout', () => (coordText = ''));
+
+    // Empty-background clicks place a manual operator station. Ignore
+    // existing markers and interactive GL features, which keep their popups.
+    map.on('click', (event) => {
+      if (rulerActive || fpDialog.open || dfDialog.open) return;
+      if (event.originalEvent?.target?.closest?.('.maplibregl-marker, .maplibregl-popup, .maplibregl-control-container')) return;
+      const interactiveLayers = [
+        'gw-direction-findings-hit', 'gw-direction-findings-estimate-hit',
+        'gw-rxt-links-hit', 'gw-trails-dot-hit', 'gw-trails-dot',
+      ].filter((id) => map.getLayer(id));
+      if (interactiveLayers.length && map.queryRenderedFeatures(event.point, { layers: interactiveLayers }).length) return;
+      closePopup();
+      closeCtxMenu();
+      fpDialog = {
+        open: true, lat: event.lngLat.lat,
+        lon: ((event.lngLat.lng + 180) % 360 + 360) % 360 - 180,
+        operatorStation: true,
+      };
+    });
 
     // Open the background context menu at viewport coords vx/vy anchored to
     // the given lngLat. Shared by right-click (desktop) and long-press
@@ -1733,7 +1766,7 @@
             checked={layerToggles.fixedPoints}
             onchange={(e) => (layerToggles.fixedPoints = e.currentTarget.checked)}
           />
-          <span>Fixed Points</span>
+          <span>Fixed Points / Manual Stations</span>
         </label>
         <label class="toggle-row">
           <input
@@ -1957,19 +1990,14 @@
     bind:open={fpDialog.open}
     lat={fpDialog.lat}
     lon={fpDialog.lon}
-    onConfirm={async ({ name, table, symbol, overlay, lat, lon }) => {
+    operatorStation={fpDialog.operatorStation}
+    onConfirm={async (pointDefinition) => {
       try {
-        const p = await fixedPointsStore.add({
-          name,
-          table,
-          symbol,
-          overlay,
-          lat,
-          lon,
-        });
+        const p = await fixedPointsStore.add(pointDefinition);
         toasts.success(`Added "${p.name}"`);
       } catch (err) {
         toasts.error(`Could not add point: ${err.message}`);
+        throw err;
       }
     }}
   />

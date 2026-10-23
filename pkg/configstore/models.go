@@ -753,17 +753,20 @@ type Beacon struct {
 // location with an APRS symbol, stored server-side so it is shared by
 // every browser/device pointed at this server and survives a client
 // browser-data wipe (graywolf#347). Unlike a Beacon it is never
-// transmitted -- it is purely a map annotation.
+// transmitted -- it is purely a map annotation. OperatorStation marks a
+// manually placed operator; Name then holds the reporting callsign, and its
+// popup permits entering bearings received by voice.
 type FixedPoint struct {
-	ID          uint32    `gorm:"primaryKey;autoIncrement" json:"id"`
-	Name        string    `gorm:"not null" json:"name"`
-	SymbolTable string    `gorm:"not null;default:'/'" json:"symbol_table"`
-	Symbol      string    `gorm:"not null;default:'/'" json:"symbol"`
-	Overlay     string    `json:"overlay"`
-	Latitude    float64   `gorm:"not null" json:"latitude"`
-	Longitude   float64   `gorm:"not null" json:"longitude"`
-	CreatedAt   time.Time `json:"-"`
-	UpdatedAt   time.Time `json:"-"`
+	ID              uint32    `gorm:"primaryKey;autoIncrement" json:"id"`
+	Name            string    `gorm:"not null" json:"name"`
+	SymbolTable     string    `gorm:"not null;default:'/'" json:"symbol_table"`
+	Symbol          string    `gorm:"not null;default:'/'" json:"symbol"`
+	Overlay         string    `json:"overlay"`
+	Latitude        float64   `gorm:"not null" json:"latitude"`
+	Longitude       float64   `gorm:"not null" json:"longitude"`
+	OperatorStation bool      `gorm:"not null;default:false" json:"operator_station"`
+	CreatedAt       time.Time `json:"-"`
+	UpdatedAt       time.Time `json:"-"`
 }
 
 // DirectionFindingObservation is a manual radio-direction-finding bearing

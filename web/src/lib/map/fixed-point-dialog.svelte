@@ -16,6 +16,7 @@
     open = $bindable(false),
     lat = 0,
     lon = 0,
+    operatorStation = false,
     onConfirm = undefined,
   } = $props();
 
@@ -27,6 +28,7 @@
   let lonInput = $state('');
   let coordError = $state('');
   let pickerOpen = $state(false);
+  let saving = $state(false);
 
   // Reset the working fields each time the dialog opens so a prior entry
   // doesn't bleed into the next point, and seed the coordinate fields from
@@ -36,7 +38,7 @@
     if (open) {
       name = '';
       table = '/';
-      symbol = '/';
+      symbol = operatorStation ? '-' : '/';
       overlay = '';
       latInput = lat.toFixed(6);
       lonInput = lon.toFixed(6);
@@ -60,10 +62,14 @@
     };
   }
 
-  function confirm() {
+  async function confirm() {
     // Name is required server-side; guard here so Enter / the button can't
     // fire an empty-name request that would only come back as a 400 toast.
-    if (!name.trim()) return;
+    if (!name.trim() || saving) return;
+    if (operatorStation && !/^[A-Z0-9/-]{1,20}$/i.test(name.trim())) {
+      coordError = 'Callsign: use up to 20 letters, digits, hyphens or slashes.';
+      return;
+    }
     const latRes = parseCoordinate(latInput, 'lat');
     const lonRes = parseCoordinate(lonInput, 'lon');
     if (latRes.error || lonRes.error) {
@@ -71,8 +77,18 @@
       return;
     }
     coordError = '';
-    onConfirm?.({ name: name.trim(), table, symbol, overlay, lat: latRes.value, lon: lonRes.value });
-    open = false;
+    saving = true;
+    try {
+      await onConfirm?.({
+        name: operatorStation ? name.trim().toUpperCase() : name.trim(),
+        table, symbol, overlay, lat: latRes.value, lon: lonRes.value, operatorStation,
+      });
+      open = false;
+    } catch (err) {
+      coordError = err.message || 'Could not save the point.';
+    } finally {
+      saving = false;
+    }
   }
 
   function cancel() {
@@ -80,17 +96,17 @@
   }
 </script>
 
-<Modal bind:open title="Add fixed point">
+<Modal bind:open title={operatorStation ? 'Add manual station' : 'Add fixed point'}>
   <div class="fp-form">
     <label class="fp-field">
-      <span class="fp-label">Name</span>
+      <span class="fp-label">{operatorStation ? 'Callsign' : 'Name'}</span>
       <!-- svelte-ignore a11y_autofocus -->
       <input
         class="fp-input"
         type="text"
         bind:value={name}
-        placeholder="e.g. Aid Station 3"
-        maxlength="40"
+        placeholder={operatorStation ? 'e.g. F4MLV-9' : 'e.g. Aid Station 3'}
+        maxlength={operatorStation ? 20 : 40}
         autofocus
         onkeydown={(e) => e.key === 'Enter' && confirm()}
       />
@@ -138,8 +154,10 @@
     {/if}
 
     <div class="fp-actions">
-      <Button onclick={cancel}>Cancel</Button>
-      <Button variant="primary" onclick={confirm} disabled={!name.trim()}>Add point</Button>
+      <Button onclick={cancel} disabled={saving}>Cancel</Button>
+      <Button variant="primary" onclick={confirm} disabled={!name.trim() || saving}>
+        {saving ? 'Saving…' : operatorStation ? 'Add station' : 'Add point'}
+      </Button>
     </div>
   </div>
 </Modal>

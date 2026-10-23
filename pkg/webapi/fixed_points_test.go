@@ -79,3 +79,54 @@ func TestFixedPointDelete(t *testing.T) {
 		t.Fatalf("expected 204, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
+
+func TestManualStationCreateAndReload(t *testing.T) {
+	srv, _ := newTestServer(t)
+	mux := http.NewServeMux()
+	srv.RegisterRoutes(mux)
+	body := `{"name":" f4mlv-16 ","symbol_table":"/","symbol":"-","latitude":43,"longitude":1.3,"operator_station":true}`
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/fixed-points", strings.NewReader(body)))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create station: %d: %s", rec.Code, rec.Body.String())
+	}
+	var station dto.FixedPointResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &station); err != nil {
+		t.Fatal(err)
+	}
+	if station.Name != "F4MLV-16" || !station.OperatorStation {
+		t.Fatalf("station identity lost: %+v", station)
+	}
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/fixed-points/%d", station.ID), nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("reload: %d: %s", rec.Code, rec.Body.String())
+	}
+	var reloaded dto.FixedPointResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &reloaded); err != nil {
+		t.Fatal(err)
+	}
+	if !reloaded.OperatorStation || reloaded.Name != station.Name || reloaded.Latitude != 43 {
+		t.Fatalf("station not persisted: %+v", reloaded)
+	}
+	// The persisted identity can be used as the source of a manual bearing.
+	bearing := fmt.Sprintf(`{"callsign":%q,"latitude":%f,"longitude":%f,"bearing_deg":90,"frequency_mhz":121.5,"uncertainty_deg":10,"observed_at":"2026-10-23T10:00:00Z"}`,
+		reloaded.Name, reloaded.Latitude, reloaded.Longitude)
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/direction-findings", strings.NewReader(bearing)))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("bearing from manual station: %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestManualStationRejectsInvalidIdentity(t *testing.T) {
+	srv, _ := newTestServer(t)
+	mux := http.NewServeMux()
+	srv.RegisterRoutes(mux)
+	body := `{"name":"not a callsign","latitude":43,"longitude":1.3,"operator_station":true}`
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/fixed-points", strings.NewReader(body)))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
+	}
+}

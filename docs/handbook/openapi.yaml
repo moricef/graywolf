@@ -1446,6 +1446,11 @@ definitions:
         type: number
       name:
         type: string
+      operator_station:
+        description: |-
+          OperatorStation identifies a manual operator rather than a landmark;
+          Name holds its callsign. Neither kind is transmitted.
+        type: boolean
       overlay:
         type: string
       symbol:
@@ -1463,6 +1468,11 @@ definitions:
         type: number
       name:
         type: string
+      operator_station:
+        description: |-
+          OperatorStation identifies a manual operator rather than a landmark;
+          Name holds its callsign. Neither kind is transmitted.
+        type: boolean
       overlay:
         type: string
       symbol:

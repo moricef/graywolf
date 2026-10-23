@@ -10659,6 +10659,10 @@
                 "name": {
                     "type": "string"
                 },
+                "operator_station": {
+                    "description": "OperatorStation identifies a manual operator rather than a landmark;\nName holds its callsign. Neither kind is transmitted.",
+                    "type": "boolean"
+                },
                 "overlay": {
                     "type": "string"
                 },
@@ -10684,6 +10688,10 @@
                 },
                 "name": {
                     "type": "string"
+                },
+                "operator_station": {
+                    "description": "OperatorStation identifies a manual operator rather than a landmark;\nName holds its callsign. Neither kind is transmitted.",
+                    "type": "boolean"
                 },
                 "overlay": {
                     "type": "string"

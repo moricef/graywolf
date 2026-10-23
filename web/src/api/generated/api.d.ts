@@ -2913,6 +2913,11 @@ export interface components {
             latitude?: number;
             longitude?: number;
             name?: string;
+            /**
+             * @description OperatorStation identifies a manual operator rather than a landmark;
+             *     Name holds its callsign. Neither kind is transmitted.
+             */
+            operator_station?: boolean;
             overlay?: string;
             symbol?: string;
             symbol_table?: string;
@@ -2922,6 +2927,11 @@ export interface components {
             latitude?: number;
             longitude?: number;
             name?: string;
+            /**
+             * @description OperatorStation identifies a manual operator rather than a landmark;
+             *     Name holds its callsign. Neither kind is transmitted.
+             */
+            operator_station?: boolean;
             overlay?: string;
             symbol?: string;
             symbol_table?: string;

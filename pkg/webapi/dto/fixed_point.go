@@ -17,6 +17,9 @@ type FixedPointRequest struct {
 	Overlay     string  `json:"overlay"`
 	Latitude    float64 `json:"latitude"`
 	Longitude   float64 `json:"longitude"`
+	// OperatorStation identifies a manual operator rather than a landmark;
+	// Name holds its callsign. Neither kind is transmitted.
+	OperatorStation bool `json:"operator_station"`
 }
 
 // Validate enforces a non-empty name and on-globe coordinates. Symbol
@@ -25,6 +28,17 @@ type FixedPointRequest struct {
 func (r FixedPointRequest) Validate() error {
 	if strings.TrimSpace(r.Name) == "" {
 		return fmt.Errorf("name is required")
+	}
+	if r.OperatorStation {
+		name := strings.ToUpper(strings.TrimSpace(r.Name))
+		if len(name) > 20 {
+			return fmt.Errorf("callsign must be at most 20 characters")
+		}
+		for _, character := range name {
+			if (character < 'A' || character > 'Z') && (character < '0' || character > '9') && character != '-' && character != '/' {
+				return fmt.Errorf("callsign may contain letters, digits, hyphens and slashes only")
+			}
+		}
 	}
 	if r.Latitude < -90 || r.Latitude > 90 {
 		return fmt.Errorf("latitude out of range")
@@ -47,13 +61,18 @@ func (r FixedPointRequest) ToModel() configstore.FixedPoint {
 	if symbol == "" {
 		symbol = "/"
 	}
+	name := strings.TrimSpace(r.Name)
+	if r.OperatorStation {
+		name = strings.ToUpper(name)
+	}
 	return configstore.FixedPoint{
-		Name:        strings.TrimSpace(r.Name),
-		SymbolTable: table,
-		Symbol:      symbol,
-		Overlay:     r.Overlay,
-		Latitude:    r.Latitude,
-		Longitude:   r.Longitude,
+		Name:            name,
+		SymbolTable:     table,
+		Symbol:          symbol,
+		Overlay:         r.Overlay,
+		Latitude:        r.Latitude,
+		Longitude:       r.Longitude,
+		OperatorStation: r.OperatorStation,
 	}
 }
 
@@ -76,12 +95,13 @@ func FixedPointFromModel(m configstore.FixedPoint) FixedPointResponse {
 	return FixedPointResponse{
 		ID: m.ID,
 		FixedPointRequest: FixedPointRequest{
-			Name:        m.Name,
-			SymbolTable: m.SymbolTable,
-			Symbol:      m.Symbol,
-			Overlay:     m.Overlay,
-			Latitude:    m.Latitude,
-			Longitude:   m.Longitude,
+			Name:            m.Name,
+			SymbolTable:     m.SymbolTable,
+			Symbol:          m.Symbol,
+			Overlay:         m.Overlay,
+			Latitude:        m.Latitude,
+			Longitude:       m.Longitude,
+			OperatorStation: m.OperatorStation,
 		},
 	}
 }
