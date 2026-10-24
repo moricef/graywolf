@@ -36,6 +36,7 @@ type RemoteCommandCredential struct {
 	ID              uint   `gorm:"primaryKey"`
 	Name            string `gorm:"size:64;not null"`
 	TargetCall      string `gorm:"size:9;not null;uniqueIndex"`
+	SignedTarget    string `gorm:"size:9;not null"`
 	SecretBase64URL string `gorm:"column:secret_b64url;size:43;not null"`
 	KeyID           string `gorm:"size:1;not null;default:'A'"`
 	LastCounter     uint64 `gorm:"not null;default:0"`
@@ -189,11 +190,16 @@ func (s *CommandCredentialStore) Create(ctx context.Context, row *RemoteCommandC
 	if err != nil {
 		return err
 	}
+	signedTarget, err := normalizeSignedTarget(row.SignedTarget, target)
+	if err != nil {
+		return err
+	}
 	secret, err := NormalizeRemoteCommandSecret(row.SecretBase64URL)
 	if err != nil {
 		return err
 	}
 	row.TargetCall = target
+	row.SignedTarget = signedTarget
 	row.SecretBase64URL = secret
 	row.KeyID = RemoteCommandKeyID
 	row.LastCounter = 0
@@ -208,7 +214,11 @@ func (s *CommandCredentialStore) Update(ctx context.Context, row *RemoteCommandC
 	if err != nil {
 		return err
 	}
-	values := map[string]any{"name": row.Name, "target_call": target, "updated_at": time.Now().UTC()}
+	signedTarget, err := normalizeSignedTarget(row.SignedTarget, target)
+	if err != nil {
+		return err
+	}
+	values := map[string]any{"name": row.Name, "target_call": target, "signed_target": signedTarget, "updated_at": time.Now().UTC()}
 	if replaceSecret {
 		secret, err := NormalizeRemoteCommandSecret(row.SecretBase64URL)
 		if err != nil {
@@ -226,6 +236,17 @@ func (s *CommandCredentialStore) Update(ctx context.Context, row *RemoteCommandC
 		return gorm.ErrRecordNotFound
 	}
 	return nil
+}
+
+func normalizeSignedTarget(value, target string) (string, error) {
+	if strings.TrimSpace(value) == "" {
+		value = target
+	}
+	normalized, err := NormalizeTargetCall(value)
+	if err != nil {
+		return "", fmt.Errorf("signed identity: %w", err)
+	}
+	return normalized, nil
 }
 
 func (s *CommandCredentialStore) Delete(ctx context.Context, id uint) error {
@@ -272,7 +293,7 @@ func (s *CommandCredentialStore) ReserveEnvelope(ctx context.Context, target, co
 		return "", 0, err
 	}
 	envelope, err := BuildRemoteCommandEnvelope(
-		reserved.SecretBase64URL, controller, target, reserved.LastCounter, command,
+		reserved.SecretBase64URL, controller, reserved.SignedTarget, reserved.LastCounter, command,
 	)
 	if err != nil {
 		return "", reserved.LastCounter, err

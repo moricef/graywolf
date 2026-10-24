@@ -45,6 +45,7 @@
       <h3>CA2RXU authenticated control</h3>
       {#if credential}
         <p>{credential.name} . counter {credential.last_counter}</p>
+        <p>Signed identity: {credential.signed_target || target}</p>
       {:else}
         <p>No key installed for {target}</p>
       {/if}

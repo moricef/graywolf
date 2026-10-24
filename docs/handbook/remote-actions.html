@@ -306,6 +306,14 @@
     <h2 id="ca2rxu-control">Send an authenticated iGate command</h2>
 
     <p>
+      Illustrated walkthrough:
+      <a href="authenticated-control-en.html">English</a>
+      (<a href="Graywolf_authenticated_control_en.pdf">PDF</a>) or
+      <a href="authenticated-control-fr.html">français</a>
+      (<a href="Graywolf_commandes_authentifiees_fr.pdf">PDF</a>).
+    </p>
+
+    <p>
       Use this procedure with the RXT iGate firmware&rsquo;s
       <strong>Remote Command Authentication</strong> feature.
       In Graywolf, open <strong>Messages</strong>, select a direct conversation
@@ -328,7 +336,8 @@
       <tbody>
         <tr><td>Graywolf: Station Callsign</td><td>Your controller callsign, including SSID, for example <code>N7UV-13</code>.</td></tr>
         <tr><td>iGate: Remote Management</td><td><strong>Authorized Graywolf controller (Callsign-SSID)</strong> must contain that exact controller callsign.</td></tr>
-        <tr><td>Graywolf: Messages recipient</td><td>The iGate&rsquo;s own Callsign-SSID, for example <code>W9EN-44</code>.</td></tr>
+        <tr><td>Graywolf: Messages recipient</td><td>The identity the device answers to on RF: its tactical callsign when configured, otherwise its Callsign-SSID, for example <code>W9EN-44</code>.</td></tr>
+        <tr><td>Graywolf: iGate Callsign-SSID (signed identity)</td><td>The iGate's Station Callsign-SSID, even when its on-air name is tactical. For example, address <code>BURNTX</code> but sign with <code>N7UV</code>.</td></tr>
         <tr><td>Both devices</td><td>The same 43-character Base64URL remote command secret, installed and saved on the iGate and stored for that target in Graywolf.</td></tr>
       </tbody>
     </table>
@@ -345,12 +354,16 @@
 
     <ol>
       <li>Open <strong>Messages</strong> and create or select a direct
-        conversation addressed to the iGate&rsquo;s Callsign-SSID.</li>
+        conversation addressed to the device&rsquo;s RF identity.</li>
       <li>Click the <strong>lightning bolt (&#9889;)</strong> in the conversation
         header. It is available in direct conversations, not tactical group
         conversations.</li>
       <li>Find <strong>CA2RXU authenticated control</strong> and click
         <strong>Install key</strong>.</li>
+      <li>Set <strong>iGate Callsign-SSID (signed identity)</strong> to the
+        <strong>Callsign - SSID</strong> field in the iGate's Station tab.
+        Its beacon comment may end with <code>de &lt;Callsign&gt;</code>.
+        Keep the conversation addressed to the name displayed on air.</li>
       <li>Enter a descriptive <strong>Name</strong>, paste the secret installed
         on that iGate into <strong>43-character Base64URL key</strong>, then
         click <strong>Install</strong>. This is not the APRS-IS passcode or
@@ -424,7 +437,10 @@
         of the normal composer.</li>
       <li><strong>AUTH FAILED:</strong> check the matching secrets and exact
         controller and target Callsign-SSIDs. It can also indicate an invalid
-        command envelope; it does not identify one specific cause.</li>
+        command envelope or an iGate storage error. The firmware console logs
+        <code>Remote command authentication rejected: ...</code> with the
+        precise reason. With the current RXT firmware, an already-consumed
+        counter is ignored separately and does not produce this reply.</li>
       <li><strong>No reply:</strong> check the selected route, channel and
         iGate transport restrictions. A source that is not the authorized
         controller can be ignored without an authentication-error reply.</li>
@@ -434,14 +450,29 @@
 
     <p>
       Changing an iGate&rsquo;s Station fields does not change its Remote
-      Management settings or its secret. Changing only its tactical callsign
-      does not change the signed-command identity. If its Callsign-SSID
-      changes, both the message recipient and Graywolf&rsquo;s saved credential
-      target must match the new callsign. The current <strong>Key settings</strong>
-      dialog does not rename targets. Do not delete and reinstall the same key
-      to work around this: the new sender counter would restart while the iGate
-      still remembers the old counter. To provision the new target through the
-      UI, install a fresh matching key on both devices. If only Graywolf&rsquo;s
+      Management settings or its secret. The published firmware verifies the
+      signed target using its Station <strong>Callsign - SSID</strong>, even
+      when the RF recipient is its <strong>Tactical Callsign</strong>.
+      Address the conversation to the name displayed on air and enter the
+      iGate's Callsign-SSID as its signed identity: for example, address
+      <code>BURNTX</code> while signing for <code>N7UV</code>.
+      Open <strong>Key settings</strong>, enter <code>N7UV</code> in
+      <strong>iGate Callsign-SSID (signed identity)</strong>, leave the secret
+      blank and save. Changing this identity preserves the key and counter.
+      No firmware update is required.
+    </p>
+
+    <p>
+      Without a tactical callsign, the recipient and signed target both use
+      the Station Callsign-SSID. If that value changes, Graywolf&rsquo;s saved
+      credential target must match the new callsign. The current <strong>Key settings</strong>
+      dialog can change the <strong>RF recipient / Destinataire RF</strong>
+      without replacing the key or resetting the counter. Set the recipient
+      to the on-air name and the signed identity to the Station Callsign-SSID,
+      leave the secret blank, then save. Graywolf opens the destination
+      conversation; check its routing policy and transmit channel before sending.
+      Do not delete and reinstall the same key: this would reset the sender
+      counter while the iGate still remembers it. If only Graywolf&rsquo;s
       Station Callsign changes, update the authorized controller on the iGate;
       the shared secret and existing target credential can remain the same.
     </p>

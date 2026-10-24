@@ -86,23 +86,28 @@ type RemoteOTPCode struct {
 // credential. The HMAC secret is deliberately absent and can never be read
 // back through the API.
 type RemoteCommandCredential struct {
-	ID          uint    `json:"id"`
-	Name        string  `json:"name"`
-	TargetCall  string  `json:"target_call"`
-	KeyID       string  `json:"key_id"`
-	LastCounter string  `json:"last_counter"`
-	CreatedAt   string  `json:"created_at"`
-	UpdatedAt   string  `json:"updated_at"`
-	LastUsedAt  *string `json:"last_used_at,omitempty"`
+	ID           uint    `json:"id"`
+	Name         string  `json:"name"`
+	TargetCall   string  `json:"target_call"`
+	SignedTarget string  `json:"signed_target"`
+	KeyID        string  `json:"key_id"`
+	LastCounter  string  `json:"last_counter"`
+	CreatedAt    string  `json:"created_at"`
+	UpdatedAt    string  `json:"updated_at"`
+	LastUsedAt   *string `json:"last_used_at,omitempty"`
 }
 
 // RemoteCommandCredentialRequest creates or updates a target credential. An
 // empty secret on update preserves the installed key; replacing it resets the
 // sender counter because the receiver must be provisioned with the same new
 // key at the same time.
+// SignedTarget is the iGate's Station Callsign-SSID, independent of the RF
+// TargetCall. Empty or omitted defaults to TargetCall on create and update.
+// Changing it preserves the sender counter.
 type RemoteCommandCredentialRequest struct {
 	Name            string `json:"name"`
 	TargetCall      string `json:"target_call"`
+	SignedTarget    string `json:"signed_target"`
 	SecretBase64URL string `json:"secret_b64url"`
 }
 

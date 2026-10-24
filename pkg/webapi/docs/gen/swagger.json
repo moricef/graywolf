@@ -11659,6 +11659,9 @@
                 "name": {
                     "type": "string"
                 },
+                "signed_target": {
+                    "type": "string"
+                },
                 "target_call": {
                     "type": "string"
                 },
@@ -11674,6 +11677,9 @@
                     "type": "string"
                 },
                 "secret_b64url": {
+                    "type": "string"
+                },
+                "signed_target": {
                     "type": "string"
                 },
                 "target_call": {

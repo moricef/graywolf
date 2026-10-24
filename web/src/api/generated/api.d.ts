@@ -3406,12 +3406,14 @@ export interface components {
             last_counter?: string;
             last_used_at?: string;
             name?: string;
+            signed_target?: string;
             target_call?: string;
             updated_at?: string;
         };
         "dto.RemoteCommandCredentialRequest": {
             name?: string;
             secret_b64url?: string;
+            signed_target?: string;
             target_call?: string;
         };
         "dto.RemoteCommandSendRequest": {

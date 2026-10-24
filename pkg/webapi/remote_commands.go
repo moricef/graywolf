@@ -26,13 +26,14 @@ func (s *Server) registerRemoteCommands(mux *http.ServeMux) {
 
 func commandCredentialDTO(row remoteactions.RemoteCommandCredential) dto.RemoteCommandCredential {
 	out := dto.RemoteCommandCredential{
-		ID:          row.ID,
-		Name:        row.Name,
-		TargetCall:  row.TargetCall,
-		KeyID:       row.KeyID,
-		LastCounter: strconv.FormatUint(row.LastCounter, 10),
-		CreatedAt:   row.CreatedAt.UTC().Format(time.RFC3339),
-		UpdatedAt:   row.UpdatedAt.UTC().Format(time.RFC3339),
+		ID:           row.ID,
+		Name:         row.Name,
+		TargetCall:   row.TargetCall,
+		SignedTarget: row.SignedTarget,
+		KeyID:        row.KeyID,
+		LastCounter:  strconv.FormatUint(row.LastCounter, 10),
+		CreatedAt:    row.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:    row.UpdatedAt.UTC().Format(time.RFC3339),
 	}
 	if row.LastUsedAt != nil {
 		value := row.LastUsedAt.UTC().Format(time.RFC3339)
@@ -93,6 +94,7 @@ func (s *Server) createRemoteCommandCredential(w http.ResponseWriter, r *http.Re
 	}
 	row := &remoteactions.RemoteCommandCredential{
 		Name: strings.TrimSpace(in.Name), TargetCall: in.TargetCall, SecretBase64URL: in.SecretBase64URL,
+		SignedTarget: in.SignedTarget,
 	}
 	if err := s.remoteActions.Commands().Create(r.Context(), row); err != nil {
 		if isUniqueConstraintErr(err) {
@@ -147,6 +149,7 @@ func (s *Server) updateRemoteCommandCredential(w http.ResponseWriter, r *http.Re
 		row.TargetCall = in.TargetCall
 	}
 	replaceSecret := strings.TrimSpace(in.SecretBase64URL) != ""
+	row.SignedTarget = in.SignedTarget
 	if replaceSecret {
 		row.SecretBase64URL = in.SecretBase64URL
 	}

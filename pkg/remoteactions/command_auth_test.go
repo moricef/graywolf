@@ -23,6 +23,7 @@ func newCommandCredentialStore(t *testing.T) *CommandCredentialStore {
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		name TEXT NOT NULL,
 		target_call TEXT NOT NULL UNIQUE,
+		signed_target TEXT NOT NULL,
 		secret_b64url TEXT NOT NULL,
 		key_id TEXT NOT NULL DEFAULT 'A',
 		last_counter INTEGER NOT NULL DEFAULT 0,
@@ -162,5 +163,67 @@ func TestReserveEnvelopeConcurrentCountersAreUnique(t *testing.T) {
 	}
 	if len(seen) != count {
 		t.Fatalf("got %d counters, want %d", len(seen), count)
+	}
+}
+
+func TestSignedIdentityDefaultsAndUpdatesPreserveCounter(t *testing.T) {
+	ctx := context.Background()
+	store := newCommandCredentialStore(t)
+	row := &RemoteCommandCredential{Name: "tactical", TargetCall: "burntx", SecretBase64URL: publishedRemoteCommandSecret}
+	if err := store.Create(ctx, row); err != nil {
+		t.Fatal(err)
+	}
+	if row.TargetCall != "BURNTX" || row.SignedTarget != "BURNTX" {
+		t.Fatalf("default identity: %+v", row)
+	}
+	got, _, err := store.ReserveEnvelope(ctx, "BURNTX", "F4MLV-2", "TX=OFF")
+	want, _ := BuildRemoteCommandEnvelope(publishedRemoteCommandSecret, "F4MLV-2", "BURNTX", 1, "TX=OFF")
+	if err != nil || got != want {
+		t.Fatalf("default signature: %q, %v", got, err)
+	}
+	if err := store.db.Model(row).Update("last_counter", 70).Error; err != nil {
+		t.Fatal(err)
+	}
+	row.SignedTarget = " f4mlv-10 "
+	if err := store.Update(ctx, row, false); err != nil {
+		t.Fatal(err)
+	}
+	got, counter, err := store.ReserveEnvelope(ctx, "BURNTX", "F4MLV-2", "TX=OFF")
+	if err != nil || counter != 71 || got != "!RC1:A:1Z:TX=OFF:OLkaJxyKIXBM9SrF" {
+		t.Fatalf("signed identity update: envelope=%q counter=%d err=%v", got, counter, err)
+	}
+	persisted, err := store.GetByTarget(ctx, "BURNTX")
+	if err != nil || persisted.SignedTarget != "F4MLV-10" || persisted.LastUsedAt == nil {
+		t.Fatalf("stored identity: %+v, %v", persisted, err)
+	}
+	row.SignedTarget = " "
+	if err := store.Update(ctx, row, false); err != nil {
+		t.Fatal(err)
+	}
+	persisted, err = store.Get(ctx, row.ID)
+	if err != nil || persisted.SignedTarget != "BURNTX" || persisted.LastCounter != 71 || persisted.LastUsedAt == nil {
+		t.Fatalf("empty identity reset counter: %+v, %v", persisted, err)
+	}
+	row.SecretBase64URL = strings.Repeat("A", 43)
+	if err := store.Update(ctx, row, true); err != nil {
+		t.Fatal(err)
+	}
+	persisted, err = store.Get(ctx, row.ID)
+	if err != nil || persisted.LastCounter != 0 || persisted.LastUsedAt != nil {
+		t.Fatalf("replacement did not reset counter: %+v, %v", persisted, err)
+	}
+}
+
+func TestSignedIdentityValidation(t *testing.T) {
+	store := newCommandCredentialStore(t)
+	for _, value := range []string{"F4MLV-100", "F4MLV/10", "TOOLONG-12"} {
+		row := &RemoteCommandCredential{Name: "invalid", TargetCall: "BURNTX", SignedTarget: value, SecretBase64URL: publishedRemoteCommandSecret}
+		if err := store.Create(context.Background(), row); err == nil {
+			t.Fatalf("accepted signed identity %q on create", value)
+		}
+		row.ID = 1
+		if err := store.Update(context.Background(), row, false); err == nil {
+			t.Fatalf("accepted signed identity %q on update", value)
+		}
 	}
 }

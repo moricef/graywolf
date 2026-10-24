@@ -1,5 +1,6 @@
 <script>
   import { Button, Icon, Input, Modal, toast } from '@chrissnell/chonky-ui';
+  import { push } from 'svelte-spa-router';
   import { remoteCommandCredsApi } from '../../../lib/remote_actions/api.js';
   import { remoteActionsStore } from '../../../lib/remote_actions/store.svelte.js';
 
@@ -7,6 +8,8 @@
 
   let name = $state('');
   let secret = $state('');
+  let signedTarget = $state('');
+  let rfTarget = $state('');
   let saving = $state(false);
   let err = $state('');
   let prevOpen = false;
@@ -15,6 +18,8 @@
     if (open && !prevOpen) {
       name = credential?.name ?? `${target} control`;
       secret = '';
+      signedTarget = credential?.signed_target || target;
+      rfTarget = credential?.target_call || target;
       err = '';
     }
     prevOpen = open;
@@ -28,13 +33,18 @@
       err = 'Name required';
       return;
     }
+    if (!rfTarget.trim()) {
+      err = 'RF recipient required';
+      return;
+    }
     if (!isEdit && !secret.trim()) {
       err = 'Secret key required';
       return;
     }
     saving = true;
     try {
-      const body = { name: name.trim(), target_call: target };
+      const destination = rfTarget.trim().toUpperCase();
+      const body = { name: name.trim(), target_call: destination, signed_target: signedTarget.trim() };
       if (secret.trim()) body.secret_b64url = secret.trim();
       const result = isEdit
         ? await remoteCommandCredsApi.update(credential.id, body)
@@ -44,8 +54,11 @@
         return;
       }
       await remoteActionsStore.loadCommandCreds();
-      toast(isEdit ? 'Control credential updated' : 'Control credential installed', 'success');
+      toast(isEdit ? `Control credential updated for ${destination}` : `Control credential installed for ${destination}`, 'success');
       open = false;
+      if (destination !== target) {
+        push(`/messages?thread=${encodeURIComponent(`dm:${destination}`)}`);
+      }
     } finally {
       saving = false;
     }
@@ -74,6 +87,16 @@
       <div class="field">
         <label for="rc-name">Name</label>
         <Input id="rc-name" bind:value={name} />
+      </div>
+      <div class="field">
+        <label for="rc-target">RF recipient / Destinataire RF</label>
+        <Input id="rc-target" bind:value={rfTarget} maxlength={9} aria-describedby="rc-target-help" />
+        <p id="rc-target-help" class="help">Name the iGate uses on air: its Tactical Callsign when configured. Changing this address keeps the key and counter and opens that conversation. Check its route and transmit channel before sending.</p>
+      </div>
+      <div class="field">
+        <label for="rc-signed-target">iGate Callsign-SSID (signed identity)</label>
+        <Input id="rc-signed-target" bind:value={signedTarget} maxlength={9} aria-describedby="rc-signed-target-help" />
+        <p id="rc-signed-target-help" class="help">Callsign-SSID field of the iGate's Station tab. Differs from this conversation only when the iGate uses a Tactical Callsign; its beacon comment then ends with "de &lt;Callsign&gt;".</p>
       </div>
       <div class="field">
         <label for="rc-secret">43-character Base64URL key</label>
@@ -107,6 +130,7 @@
   .field label { font-size: 11px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--color-text-dim); }
   .secret { font-family: var(--font-mono); font-size: 13px; padding: 6px 8px; border: 1px solid var(--color-border); border-radius: var(--radius); background: var(--color-surface); color: var(--color-text); resize: vertical; }
   .warning { margin: 0; color: var(--color-warning, #d89b2b); font-size: 12px; }
+  .help { margin: 0; color: var(--color-text-muted); font-size: 12px; }
   .err { margin: 0; color: var(--color-danger); font-size: 0.875rem; }
   .spacer { flex: 1; }
 </style>

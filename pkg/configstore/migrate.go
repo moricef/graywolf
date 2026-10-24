@@ -220,6 +220,9 @@ type migration struct {
 //	    guard). See graywolf#517.
 //	30 — remote_command_auth: store one CA2RXU HMAC key and persistent
 //	     sender counter per controlled station.
+//	31 — rxt_schema30_convergence: reconcile upstream and fork schema 30.
+//	32 — remote_command_signed_target: separate the iGate signed identity
+//	     from the RF recipient, preserving stored keys and counters.
 var schemaMigrations = []migration{
 	{version: 1, name: "beacon_compress_default", phase: postAutoMigrate, run: migrateBeaconCompressDefault},
 	{version: 2, name: "channel_device_fields", phase: preAutoMigrate, run: migrateChannelDeviceFields},
@@ -252,6 +255,7 @@ var schemaMigrations = []migration{
 	{version: 29, name: "channels_enabled", phase: postAutoMigrate, run: migrateChannelsEnabled},
 	{version: 30, name: "kiss_serial_tnc_default", phase: postAutoMigrate, run: migrateKissSerialTncDefault},
 	{version: 31, name: "rxt_schema30_convergence", phase: postAutoMigrate, run: migrateRXTSchema30Convergence},
+	{version: 32, name: "remote_command_signed_target", phase: postAutoMigrate, run: migrateRemoteCommandSignedTarget},
 }
 
 // runMigrations applies every pending migration in the given phase,

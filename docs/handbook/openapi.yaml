@@ -2215,6 +2215,8 @@ definitions:
         type: string
       name:
         type: string
+      signed_target:
+        type: string
       target_call:
         type: string
       updated_at:
@@ -2225,6 +2227,8 @@ definitions:
       name:
         type: string
       secret_b64url:
+        type: string
+      signed_target:
         type: string
       target_call:
         type: string

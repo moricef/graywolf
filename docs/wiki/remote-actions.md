@@ -55,10 +55,21 @@ auditor sees one outbound message of kind `text`.
 
 Operator setup and the distinction between ordinary queries and signed setting
 changes are documented in [Send an authenticated iGate command](../handbook/remote-actions.html#ca2rxu-control).
+For first-time setup, the illustrated walkthrough ([English](../handbook/authenticated-control-en.html),
+[French](../handbook/authenticated-control-fr.html)) provides screenshots and a
+printable PDF using one controller/target example.
 The sender resolves its controller identity from Graywolf's Station Callsign
 (`pkg/webapi/messages.go::resolveOurCall`); the iGate checks that exact source
-against `remoteManagement.authController` and signs/verifies its target using
-`Config.callsign`, not its tactical name. The legacy managers list still gates
+against `remoteManagement.authController`. The published iGate firmware verifies
+the signed target using `Config.callsign` (Station's Callsign-SSID), even when
+the RF message is addressed to its tactical callsign. Graywolf keeps `TargetCall`
+as the conversation/RF recipient and credential lookup key, while `SignedTarget`
+(`signed_target` in REST/SQLite) is the iGate Station Callsign-SSID used in the
+HMAC. Address the conversation to the name displayed on air and enter the
+iGate Callsign-SSID as the signed identity in Install key or Key settings.
+For example, address `BURNTX` while signing with `N7UV`. No firmware update is
+needed: deployed firmware retains verification against `Config.callsign`.
+The legacy managers list still gates
 `?TX=?` and `?EM=?` queries, independently of the signed-command controller.
 
 The same drawer also contains a separate controller for CA2RXU iGates using
@@ -72,8 +83,19 @@ and one monotonically increasing counter are stored per target in
 `remote_command_credentials` (fork migration 30, consolidated by migration 31).
 Upstream independently used version 30 for the serial KISS default repair.
 Migration 31 runs both idempotent steps so databases from either history
-converge without replacing stored keys or counters. The REST read shape
-never contains the secret. `ReserveEnvelope` advances the counter transactionally
+converge without replacing stored keys or counters. Migration 32 adds
+`signed_target` and backfills existing rows from `target_call`, preserving keys,
+counters and timestamps. Create/update normalize the signed identity with
+`NormalizeTargetCall` (maximum 9 characters); an empty or omitted identity
+defaults to the RF target. Changing the identity does not reset the counter;
+only secret replacement does.
+
+The credential dialog exposes both the RF recipient and signed identity.
+Changing the RF recipient updates the existing credential by ID, retains its
+counter and key, and navigates to the destination DM. Conversation routing
+preferences are not moved; operators must verify the destination's route and
+channel before sending. A duplicate recipient is rejected without merging keys.
+The REST read shape never contains the secret. `ReserveEnvelope` advances the counter transactionally
 before returning the signed body; an ambiguous send failure consumes the
 counter instead of risking reuse. The server then submits the body through
 `messages.Service.SendMessage`, so the selected native TNC2, KISS or APRS-IS
@@ -88,6 +110,13 @@ DM and passes its selected channel to `POST
 Graywolf accepted the APRS message; an ordinary APRS ACK is not treated as an
 authenticated application result.
 
+For receiver diagnostics, the RXT firmware's `src/query_utils.cpp` logs
+`Remote command authentication rejected: <reason>` using
+`REMOTE_AUTH::statusText`. The APRS `AUTH FAILED` reply does not distinguish
+bad tags, malformed envelopes, disabled authentication or storage failures.
+Replay counters are handled separately and silently ignored in the current
+firmware; they must not be diagnosed from `AUTH FAILED` alone.
+
 ## Schema (migration 16)
 
 `pkg/configstore/migrate_remote_actions.go`. Two tables, raw SQL so
@@ -97,7 +126,7 @@ the FK and the index can be expressed precisely:
 |---|---|---|
 | `remote_otp_credentials` | `id`, `name` (UNIQUE), `secret_b32`, `algorithm`, `digits`, `period`, `created_at`, `last_used_at` | TOTP secret stored plaintext per the single-user-station design. `secret_b32` is never echoed back after Create. |
 | `remote_action_macros` | `id`, `target_call`, `label`, `action_name`, `args_string`, `remote_otp_credential_id` (nullable FK), `position`, `created_at`, `updated_at` | `target_call` indexed for per-thread lookup. FK has `ON DELETE SET NULL` — deleting a credential demotes its macros to "manual OTP" instead of orphaning them. |
-| `remote_command_credentials` | `id`, `name`, `target_call` (UNIQUE), `secret_b64url`, `key_id`, `last_counter`, timestamps | CA2RXU HMAC key and sender anti-replay state. Secret is write-only through REST. |
+| `remote_command_credentials` | `id`, `name`, `target_call` (UNIQUE), `signed_target`, `secret_b64url`, `key_id`, `last_counter`, timestamps | CA2RXU HMAC key and sender anti-replay state. RF recipient and signed identity are distinct; secret is write-only through REST. |
 
 The two matching Go models in
 [`../../pkg/remoteactions/models.go`](../../pkg/remoteactions/models.go)

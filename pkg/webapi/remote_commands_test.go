@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -71,7 +72,7 @@ func TestRemoteCommandCredentialNeverReturnsSecret(t *testing.T) {
 		return nil, errors.New("unused")
 	})
 	created := createTestCommandCredential(t, mux)
-	if created.TargetCall != "F4MLV-15" || created.LastCounter != "0" || created.KeyID != "A" {
+	if created.TargetCall != "F4MLV-15" || created.SignedTarget != "F4MLV-15" || created.LastCounter != "0" || created.KeyID != "A" {
 		t.Fatalf("unexpected credential: %+v", created)
 	}
 	rec := requestJSON(t, mux, http.MethodGet, "/api/remote-actions/command-credentials", nil)
@@ -80,6 +81,67 @@ func TestRemoteCommandCredentialNeverReturnsSecret(t *testing.T) {
 	}
 	if strings.Contains(rec.Body.String(), testRemoteCommandSecret) || strings.Contains(rec.Body.String(), "secret_b64url") {
 		t.Fatal("list response exposed secret material")
+	}
+}
+
+func TestTacticalRemoteCommandSignsIGateIdentityAndAddressesRFName(t *testing.T) {
+	var captured messages.SendMessageRequest
+	srv, mux := newRemoteCommandTestServer(t, func(_ context.Context, req messages.SendMessageRequest) (*configstore.Message, error) {
+		captured = req
+		return &configstore.Message{ID: 44, Direction: "out", OurCall: req.OurCall, ToCall: req.To, ThreadKind: messages.ThreadKindDM, Text: req.Text}, nil
+	})
+	rec := requestJSON(t, mux, http.MethodPost, "/api/remote-actions/command-credentials", map[string]any{
+		"name": "tactical", "target_call": "burntx", "signed_target": " f4mlv-10 ", "secret_b64url": testRemoteCommandSecret,
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d %s", rec.Code, rec.Body.String())
+	}
+	var created dto.RemoteCommandCredential
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	if created.TargetCall != "BURNTX" || created.SignedTarget != "F4MLV-10" {
+		t.Fatalf("credential: %+v", created)
+	}
+	if err := srv.store.DB().Exec("UPDATE remote_command_credentials SET last_counter=70 WHERE id=?", created.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	rec = requestJSON(t, mux, http.MethodPost, "/api/remote-actions/commands/BURNTX", map[string]any{"command": "TX=OFF"})
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("send: %d %s", rec.Code, rec.Body.String())
+	}
+	if captured.To != "BURNTX" || captured.OurCall != "F4MLV-2" || captured.Text != "!RC1:A:1Z:TX=OFF:OLkaJxyKIXBM9SrF" {
+		t.Fatalf("incorrect RF address or HMAC: %+v", captured)
+	}
+	path := "/api/remote-actions/command-credentials/" + strconv.Itoa(int(created.ID))
+	for _, identity := range []string{"n7uv", ""} {
+		rec = requestJSON(t, mux, http.MethodPut, path, map[string]any{"signed_target": identity})
+		if rec.Code != http.StatusOK {
+			t.Fatalf("update: %d %s", rec.Code, rec.Body.String())
+		}
+		var updated dto.RemoteCommandCredential
+		if err := json.Unmarshal(rec.Body.Bytes(), &updated); err != nil {
+			t.Fatal(err)
+		}
+		want := strings.ToUpper(identity)
+		if want == "" {
+			want = "BURNTX"
+		}
+		if updated.SignedTarget != want || updated.LastCounter != "71" || updated.LastUsedAt == nil {
+			t.Fatalf("identity update changed counter: %+v", updated)
+		}
+	}
+	rec = requestJSON(t, mux, http.MethodPut, path, map[string]any{"signed_target": "F4MLV-100"})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("invalid identity accepted: %d", rec.Code)
+	}
+	rec = requestJSON(t, mux, http.MethodGet, "/api/remote-actions/command-credentials", nil)
+	var listed []dto.RemoteCommandCredential
+	if err := json.Unmarshal(rec.Body.Bytes(), &listed); err != nil {
+		t.Fatal(err)
+	}
+	if rec.Code != http.StatusOK || len(listed) != 1 || listed[0].SignedTarget != "BURNTX" || strings.Contains(rec.Body.String(), "secret_b64url") {
+		t.Fatalf("list: %d %s", rec.Code, rec.Body.String())
 	}
 }
 
@@ -140,5 +202,38 @@ func TestSendFailureStillConsumesCounter(t *testing.T) {
 	}
 	if out.Counter != "2" {
 		t.Fatalf("counter reused after failed send: %s", out.Counter)
+	}
+}
+
+func TestMoveRemoteCommandCredentialPreservesKeyAndCounter(t *testing.T) {
+	srv, mux := newRemoteCommandTestServer(t, func(context.Context, messages.SendMessageRequest) (*configstore.Message, error) {
+		return nil, errors.New("no transmission expected")
+	})
+	created := createTestCommandCredential(t, mux)
+	if err := srv.store.DB().Exec("UPDATE remote_command_credentials SET last_counter=71 WHERE id=?", created.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	path := "/api/remote-actions/command-credentials/" + strconv.Itoa(int(created.ID))
+	rec := requestJSON(t, mux, http.MethodPut, path, map[string]any{
+		"target_call": "genatx", "signed_target": "F4MLV-15",
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("move: %d %s", rec.Code, rec.Body.String())
+	}
+	row, err := srv.remoteActions.Commands().Get(context.Background(), created.ID)
+	if err != nil || row.TargetCall != "GENATX" || row.SignedTarget != "F4MLV-15" || row.LastCounter != 71 || row.SecretBase64URL != testRemoteCommandSecret {
+		t.Fatalf("move changed key/counter: %+v, %v", row, err)
+	}
+	if _, err := srv.remoteActions.Commands().GetByTarget(context.Background(), "F4MLV-15"); err == nil {
+		t.Fatal("old lookup still resolves moved credential")
+	}
+	createTestCommandCredential(t, mux) // Another key now occupies the original recipient.
+	rec = requestJSON(t, mux, http.MethodPut, path, map[string]any{"target_call": "F4MLV-15", "signed_target": "F4MLV-15"})
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("duplicate recipient: %d %s", rec.Code, rec.Body.String())
+	}
+	row, err = srv.remoteActions.Commands().Get(context.Background(), created.ID)
+	if err != nil || row.TargetCall != "GENATX" || row.LastCounter != 71 || row.SecretBase64URL != testRemoteCommandSecret {
+		t.Fatalf("collision modified key: %+v, %v", row, err)
 	}
 }
