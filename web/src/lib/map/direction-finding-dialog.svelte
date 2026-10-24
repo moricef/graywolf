@@ -10,7 +10,7 @@
   } = $props();
 
   let mission = $state('');
-  let bearingDeg = $state(0);
+  let bearingDeg = $state(undefined);
   let uncertaintyDeg = $state(10);
   let frequencyMHz = $state(121.5);
   let observedAtLocal = $state('');
@@ -26,7 +26,7 @@
   $effect(() => {
     if (open) {
       mission = '';
-      bearingDeg = 0;
+      bearingDeg = undefined;
       uncertaintyDeg = 10;
       frequencyMHz = 121.5;
       observedAtLocal = nowForLocalInput();
@@ -44,7 +44,7 @@
       error = 'The reporting station has no usable position.';
       return;
     }
-    if (!Number.isFinite(bearing) || bearing < 0 || bearing >= 360) {
+    if (bearingDeg == null || bearingDeg === '' || !Number.isFinite(bearing) || bearing < 0 || bearing >= 360) {
       error = 'Bearing must be between 0 and less than 360 degrees.';
       return;
     }
