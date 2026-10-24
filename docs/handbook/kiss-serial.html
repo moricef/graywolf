@@ -250,7 +250,8 @@ SUBSYSTEM=="tty", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6015", ATTRS{seria
         client. This also reveals the transmit opt-in checkbox.</li>
       <li>In <strong>TNC initialization</strong>, leave <strong>Native KISS</strong>
         selected for a device already speaking KISS, or choose
-        <strong>Kenwood TM-D700 / TM-D710</strong> to switch that radio&rsquo;s
+        <strong>Kenwood TM-D700</strong> or <strong>Kenwood TM-D710 / TM-D710G</strong>
+        for the corresponding radio to switch its
         TNC into KISS automatically.</li>
       <li>Check the box labeled <strong>Allow digipeater/beacon/iGate
         to transmit on this interface</strong> to allow graywolf's
@@ -267,8 +268,9 @@ SUBSYSTEM=="tty", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6015", ATTRS{seria
       <span class="callout-icon">!</span>
       <div class="callout-body">
         <p>
-          Use the Kenwood profile only with the appropriate radio in
-          <strong>PACKET</strong> mode. The serial baud rate must match its
+          Select the profile matching your radio model. Only the legacy
+          profile requires <strong>PACKET</strong> mode in advance.
+          The serial baud rate must match its
           computer port. Close any other terminal application before enabling
           the interface in Graywolf.
         </p>
@@ -278,32 +280,67 @@ SUBSYSTEM=="tty", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6015", ATTRS{seria
     <h2>Kenwood TM-D700 / TM-D710 Initialization</h2>
 
     <p>
-      Put the radio in PACKET mode, select the appropriate data band and radio
-      speed on the radio, and connect its TNC computer port. Then select
-      <strong>Kenwood TM-D700 / TM-D710</strong> under
+      Select the appropriate data band, frequency and radio packet speed on
+      the radio, and connect its TNC computer port. On a TM-D710/G, this is the
+      COM port behind the operation panel, not the PC port on the radio body.
+      Select <strong>Kenwood TM-D700</strong> or
+      <strong>Kenwood TM-D710 / TM-D710G</strong> under
       <strong>TNC initialization</strong> on a Serial or USB Serial interface
-      in TNC mode. The profile does not change the radio frequency, callsign,
-      radio packet speed, or Graywolf&rsquo;s transmit opt-in setting.
+      in TNC mode. Model profiles select PACKET mode then KISS, taking over
+      from the radio's internal APRS application. They do not configure the
+      radio frequency, callsign, serial speed, HBAUD packet speed, or
+      Graywolf's transmit opt-in setting. Confirm the packet speed on the radio
+      after changing modes, since the radio may restore its own saved settings.
     </p>
 
+    <table>
+      <thead><tr><th>Profile</th><th>Radio-control sequence</th></tr></thead>
+      <tbody>
+        <tr><td>TM-D700</td><td>Synchronize, require <code>TS 1</code> after <code>TC 1</code>, verify <code>ID TM-D700</code>, then <code>AI 1</code>, <code>TNC 2</code>, <code>TC 0</code> and wait for <code>cmd:</code>. AI enables radio-control reporting.</td></tr>
+        <tr><td>TM-D710 / G</td><td>Synchronize, require <code>TS 1</code> after <code>TC 1</code>, verify <code>ID TM-D710</code> (including regional/G variants), query <code>TN</code>, then send <code>TN 2,&lt;band&gt;</code> preserving the reported band selection (A, B or split TX/RX). Wait for <code>cmd:</code>.</td></tr>
+      </tbody>
+    </table>
+
     <p>
-      Whenever Graywolf opens or reopens the port, it sends the binary KISS
-      return sequence <code>C0 FF C0</code> with command-mode synchronization,
-      waits for <code>cmd:</code>, sends <code>KISS ON</code>, then
-      <code>RESTART</code>. A short settling delay follows the restart.
-      The interface stays <strong>Connecting</strong> until the sequence
-      finishes. An absent prompt, write failure or ten-second timeout produces
-      a visible error and the normal reconnect backoff. Startup bytes already
-      received are preserved for the KISS decoder.
+      On every open or reconnect, synchronization uses three Ctrl-C characters,
+      the binary KISS return sequence <code>C0 FF C0</code>, a short pause,
+      then three Ctrl-C characters and CR. The model-specific sequence above
+      follows. Graywolf checks replies and refuses an unexpected model or a
+      rejected command. Finally it sends <code>KISS ON</code>, checks the
+      response and prompt, sends <code>RESTART</code> and waits five seconds.
+      The interface stays <strong>Connecting</strong> until this finishes;
+      initialization has a 30-second deadline and failures use normal reconnect
+      backoff. Startup bytes are preserved for the KISS decoder.
     </p>
 
     <p>
       Stopping the interface closes the serial port and leaves the radio in
-      KISS mode; the profile will synchronize it again when reopened. To use
+      KISS mode; the profile will synchronize it again when reopened. A failed
+      initialization may leave the radio in command/control mode; check the
+      displayed error and restore the desired mode manually when necessary. To use
       a command terminal manually, disable the Graywolf interface first and
-      send the binary return sequence from the terminal. This profile has
-      automated protocol tests; validation on a physical TM-D700/TM-D710 is
-      still required, particularly with older firmware and serial cables.
+      send the binary return sequence from the terminal. KISS provides no
+      mandatory startup acknowledgement: Connected means the serial session
+      is ready, not that a radio exchange succeeded. Protocol simulations
+      cover different startup states, command rejection, model mismatch and
+      band preservation; physical TM-D700/TM-D710 validation is still required.
+    </p>
+
+    <p>
+      Existing <code>kenwood</code> configurations retain the previous sequence
+      under <strong>Kenwood legacy (select your model)</strong>. They still
+      require PACKET mode in advance and use the previous ten-second deadline
+      and 1.5-second restart delay. No model is inferred automatically. Edit
+      the interface and explicitly select the correct model to use the new
+      sequence. Native KISS remains unchanged.
+    </p>
+
+    <p>
+      Protocol references:
+      <a href="https://www.kenwood.com/i/products/info/amateur/pdf/TM-D710AE_IDM_R1.pdf">Kenwood TM-D710 in-depth manual, section 5.1.3</a>,
+      <a href="https://www.kenwood.com/usa/Support/pdf/TM-D710G_English.pdf">TM-D710G instruction manual, PACKET</a>,
+      <a href="https://www.on7lds.net/auto/tmd700a.htm">N0RMO's TM-D700 mode-control experiments</a>, and
+      <a href="https://github.com/LA3QMA/TM-V71_TM-D710-Kenwood/blob/master/commands/TN.md">LA3QMA's TN command reference</a>.
     </p>
 
     <h2>Reconnect Behavior</h2>

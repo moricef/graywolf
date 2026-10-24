@@ -14,14 +14,21 @@ import (
 const (
 	Native  = ""
 	Kenwood = "kenwood"
+	TMD700  = "kenwood-tm-d700"
+	TMD710  = "kenwood-tm-d710"
 )
 
-func Valid(profile string) bool { return profile == Native || profile == Kenwood }
+func Valid(profile string) bool {
+	return profile == Native || profile == Kenwood || profile == TMD700 || profile == TMD710
+}
 
 // Initialize owns the stream until initialization completes. A context
 // timeout closes the port to interrupt blocking reads/writes. The returned
 // wrapper preserves bytes already buffered after the command prompt.
 func Initialize(ctx context.Context, port io.ReadWriteCloser, profile string) (io.ReadWriteCloser, error) {
+	if profile == TMD700 || profile == TMD710 {
+		return initialize(ctx, port, profile, 5*time.Second)
+	}
 	return initialize(ctx, port, profile, 1500*time.Millisecond)
 }
 
@@ -31,6 +38,9 @@ func initialize(parent context.Context, port io.ReadWriteCloser, profile string,
 	}
 	if !Valid(profile) {
 		return nil, fmt.Errorf("unknown TNC initialization profile %q", profile)
+	}
+	if profile == TMD700 || profile == TMD710 {
+		return initializeModel(parent, port, profile, settle)
 	}
 	ctx, cancel := context.WithTimeout(parent, 10*time.Second)
 	defer cancel()

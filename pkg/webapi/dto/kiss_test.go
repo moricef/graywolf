@@ -8,6 +8,20 @@ import (
 )
 
 func TestKenwoodInitializationProfile(t *testing.T) {
+	for _, profile := range []string{"kenwood", "kenwood-tm-d700", "kenwood-tm-d710"} {
+		t.Run(profile, func(t *testing.T) {
+			for _, transport := range []string{"serial", "usbserial"} {
+				req := KissRequest{Type: transport, SerialDevice: "/dev/ttyUSB0", BaudRate: 9600, InitProfile: profile}
+				if err := req.Validate(); err != nil {
+					t.Fatal(err)
+				}
+				model := req.ToModel()
+				if model.InitProfile != profile || KissFromModel(model).InitProfile != profile {
+					t.Fatalf("lost model profile: %+v", model)
+				}
+			}
+		})
+	}
 	req := KissRequest{Type: "serial", SerialDevice: "/dev/ttyUSB0", BaudRate: 9600, InitProfile: "kenwood"}
 	if err := req.Validate(); err != nil {
 		t.Fatal(err)

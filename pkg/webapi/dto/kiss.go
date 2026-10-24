@@ -38,9 +38,11 @@ type KissRequest struct {
 	// app on the same phone/host) dialing in over loopback without
 	// exposing the port to the LAN. Ignored for non-tcp types. Stored
 	// in the existing ListenAddr host -- no schema change.
-	LocalOnly        bool   `json:"local_only"`
-	SerialDevice     string `json:"serial_device"`
-	BaudRate         uint32 `json:"baud_rate"`
+	LocalOnly    bool   `json:"local_only"`
+	SerialDevice string `json:"serial_device"`
+	BaudRate     uint32 `json:"baud_rate"`
+	// InitProfile is empty for native KISS; model profiles are kenwood-tm-d700
+	// and kenwood-tm-d710. The old kenwood value retains legacy behavior.
 	InitProfile      string `json:"init_profile"`
 	Channel          uint32 `json:"channel"`
 	Mode             string `json:"mode"`
@@ -100,7 +102,7 @@ const (
 
 func (r KissRequest) Validate() error {
 	if !tncprofile.Valid(r.InitProfile) {
-		return fmt.Errorf("init_profile must be empty (native KISS) or kenwood")
+		return fmt.Errorf("init_profile must be empty (native KISS), kenwood-tm-d700, kenwood-tm-d710, or kenwood (legacy)")
 	}
 	if r.InitProfile != tncprofile.Native {
 		if r.Type != configstore.KissTypeSerial && r.Type != configstore.KissTypeUsbSerial {
@@ -297,9 +299,11 @@ type KissResponse struct {
 	TcpPort int    `json:"tcp_port"`
 	// LocalOnly mirrors KissRequest.LocalOnly: true when a tcp interface
 	// listens on loopback only. Derived from the ListenAddr host.
-	LocalOnly           bool   `json:"local_only"`
-	SerialDevice        string `json:"serial_device"`
-	BaudRate            uint32 `json:"baud_rate"`
+	LocalOnly    bool   `json:"local_only"`
+	SerialDevice string `json:"serial_device"`
+	BaudRate     uint32 `json:"baud_rate"`
+	// InitProfile identifies native KISS (empty), kenwood-tm-d700,
+	// kenwood-tm-d710, or the unchanged legacy kenwood profile.
 	InitProfile         string `json:"init_profile"`
 	Channel             uint32 `json:"channel"`
 	Mode                string `json:"mode"`

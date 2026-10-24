@@ -33,7 +33,9 @@
   const BAUD_RATE_DEFAULT = '9600';
   const initProfileOptions = [
     { value: 'native', label: 'Native KISS (no initialization)' },
-    { value: 'kenwood', label: 'Kenwood TM-D700 / TM-D710' },
+    { value: 'kenwood-tm-d700', label: 'Kenwood TM-D700' },
+    { value: 'kenwood-tm-d710', label: 'Kenwood TM-D710 / TM-D710G' },
+    { value: 'kenwood', label: 'Kenwood legacy (select your model)' },
   ];
   // Standard serial line speeds offered in the Baud Rate dropdown. Covers
   // the rates real KISS TNCs use (1200 for classic AFSK packet, 9600 for
@@ -1154,7 +1156,7 @@
     {/if}
     {#if (form.type === 'serial' || form.type === 'usbserial') && form.mode === 'tnc'}
       <FormField label="TNC initialization" id="kiss-init-profile"
-        hint="Kenwood: put the radio in PACKET mode first. Graywolf switches its TNC to KISS when opening the port. Radio baud rate and frequency are not changed.">
+        hint="Select your exact Kenwood model. Model profiles select PACKET then KISS; the D710 keeps its configured data band. Use the TNC computer port and matching serial speed. Frequency and radio packet speed are not configured. Legacy requires PACKET mode first.">
         <Select id="kiss-init-profile" bind:value={form.init_profile} options={initProfileOptions} />
       </FormField>
     {/if}

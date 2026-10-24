@@ -3064,6 +3064,10 @@ export interface components {
              *     there by the server.
              */
             gate_tx_to_is?: boolean;
+            /**
+             * @description InitProfile is empty for native KISS; model profiles are kenwood-tm-d700
+             *     and kenwood-tm-d710. The old kenwood value retains legacy behavior.
+             */
             init_profile?: string;
             /**
              * @description LocalOnly, when set on a tcp (server-listen) interface, binds the
@@ -3107,6 +3111,10 @@ export interface components {
             enabled?: boolean;
             gate_tx_to_is?: boolean;
             id?: number;
+            /**
+             * @description InitProfile identifies native KISS (empty), kenwood-tm-d700,
+             *     kenwood-tm-d710, or the unchanged legacy kenwood profile.
+             */
             init_profile?: string;
             last_error?: string;
             /**

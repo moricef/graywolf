@@ -1680,6 +1680,9 @@ definitions:
           there by the server.
         type: boolean
       init_profile:
+        description: |-
+          InitProfile is empty for native KISS; model profiles are kenwood-tm-d700
+          and kenwood-tm-d710. The old kenwood value retains legacy behavior.
         type: string
       local_only:
         description: |-
@@ -1742,6 +1745,9 @@ definitions:
       id:
         type: integer
       init_profile:
+        description: |-
+          InitProfile identifies native KISS (empty), kenwood-tm-d700,
+          kenwood-tm-d710, or the unchanged legacy kenwood profile.
         type: string
       last_error:
         type: string
