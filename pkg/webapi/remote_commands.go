@@ -94,7 +94,9 @@ func (s *Server) createRemoteCommandCredential(w http.ResponseWriter, r *http.Re
 	}
 	row := &remoteactions.RemoteCommandCredential{
 		Name: strings.TrimSpace(in.Name), TargetCall: in.TargetCall, SecretBase64URL: in.SecretBase64URL,
-		SignedTarget: in.SignedTarget,
+	}
+	if in.SignedTarget != nil {
+		row.SignedTarget = *in.SignedTarget
 	}
 	if err := s.remoteActions.Commands().Create(r.Context(), row); err != nil {
 		if isUniqueConstraintErr(err) {
@@ -149,7 +151,9 @@ func (s *Server) updateRemoteCommandCredential(w http.ResponseWriter, r *http.Re
 		row.TargetCall = in.TargetCall
 	}
 	replaceSecret := strings.TrimSpace(in.SecretBase64URL) != ""
-	row.SignedTarget = in.SignedTarget
+	if in.SignedTarget != nil {
+		row.SignedTarget = *in.SignedTarget
+	}
 	if replaceSecret {
 		row.SecretBase64URL = in.SecretBase64URL
 	}

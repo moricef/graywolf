@@ -237,3 +237,42 @@ func TestMoveRemoteCommandCredentialPreservesKeyAndCounter(t *testing.T) {
 		t.Fatalf("collision modified key: %+v, %v", row, err)
 	}
 }
+
+func TestRemoteCommandUpdateOmittedIdentityPreservesSignature(t *testing.T) {
+	var captured messages.SendMessageRequest
+	srv, mux := newRemoteCommandTestServer(t, func(_ context.Context, req messages.SendMessageRequest) (*configstore.Message, error) {
+		captured = req
+		return &configstore.Message{ID: 45, Direction: "out", OurCall: req.OurCall, ToCall: req.To, ThreadKind: messages.ThreadKindDM, Text: req.Text}, nil
+	})
+	rec := requestJSON(t, mux, http.MethodPost, "/api/remote-actions/command-credentials", map[string]any{
+		"name": "tactical", "target_call": "BURNTX", "signed_target": "F4MLV-10", "secret_b64url": testRemoteCommandSecret,
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d %s", rec.Code, rec.Body.String())
+	}
+	var created dto.RemoteCommandCredential
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	if err := srv.store.DB().Exec("UPDATE remote_command_credentials SET last_counter=70 WHERE id=?", created.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	path := "/api/remote-actions/command-credentials/" + strconv.Itoa(int(created.ID))
+	for _, body := range []map[string]any{
+		{"name": "renamed"},
+		{"name": "renamed again", "signed_target": nil},
+	} {
+		rec = requestJSON(t, mux, http.MethodPut, path, body)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("update: %d %s", rec.Code, rec.Body.String())
+		}
+		row, err := srv.remoteActions.Commands().Get(context.Background(), created.ID)
+		if err != nil || row.SignedTarget != "F4MLV-10" || row.LastCounter != 70 || row.SecretBase64URL != testRemoteCommandSecret {
+			t.Fatalf("partial update changed identity/key/counter: %+v, %v", row, err)
+		}
+	}
+	rec = requestJSON(t, mux, http.MethodPost, "/api/remote-actions/commands/BURNTX", map[string]any{"command": "TX=OFF"})
+	if rec.Code != http.StatusAccepted || captured.To != "BURNTX" || captured.Text != "!RC1:A:1Z:TX=OFF:OLkaJxyKIXBM9SrF" {
+		t.Fatalf("signature changed after rename: %d %+v", rec.Code, captured)
+	}
+}

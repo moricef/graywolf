@@ -86,8 +86,10 @@ Migration 31 runs both idempotent steps so databases from either history
 converge without replacing stored keys or counters. Migration 32 adds
 `signed_target` and backfills existing rows from `target_call`, preserving keys,
 counters and timestamps. Create/update normalize the signed identity with
-`NormalizeTargetCall` (maximum 9 characters); an empty or omitted identity
-defaults to the RF target. Changing the identity does not reset the counter;
+`NormalizeTargetCall` (maximum 9 characters). On create, empty or omitted
+defaults to the RF target. On API update, omitted or null preserves the stored
+signed identity; an explicit empty string defaults to the RF target.
+Changing the identity does not reset the counter;
 only secret replacement does.
 
 The credential dialog exposes both the RF recipient and signed identity.

@@ -102,13 +102,15 @@ type RemoteCommandCredential struct {
 // sender counter because the receiver must be provisioned with the same new
 // key at the same time.
 // SignedTarget is the iGate's Station Callsign-SSID, independent of the RF
-// TargetCall. Empty or omitted defaults to TargetCall on create and update.
+// TargetCall. On create, empty or omitted defaults to TargetCall. On update,
+// omitted or null preserves the stored identity; an explicit empty string
+// defaults to TargetCall.
 // Changing it preserves the sender counter.
 type RemoteCommandCredentialRequest struct {
-	Name            string `json:"name"`
-	TargetCall      string `json:"target_call"`
-	SignedTarget    string `json:"signed_target"`
-	SecretBase64URL string `json:"secret_b64url"`
+	Name            string  `json:"name"`
+	TargetCall      string  `json:"target_call"`
+	SignedTarget    *string `json:"signed_target,omitempty"`
+	SecretBase64URL string  `json:"secret_b64url"`
 }
 
 type RemoteCommandSendRequest struct {
