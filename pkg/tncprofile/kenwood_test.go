@@ -146,14 +146,16 @@ func TestModelProfileRejectsCommandErrorAndWrongModel(t *testing.T) {
 		{TMD700, "TNC 2", "ID TM-D700"},
 		{TMD710, "TN 2,1", "ID TM-D710"},
 		{TMD710, "KISS ON", "ID TM-D710"},
+		{TMD710, "RESTART", "ID TM-D710"},
 		{TMD700, "never", "ID TM-D710"},
 		{TMD710, "never", "ID TM-D700"},
 	} {
 		t.Run(tc.profile+tc.reject+tc.id, func(t *testing.T) {
 			port, _ := modelRadio(t, tc.profile, "kiss", "1", tc.reject, tc.id)
+			defer port.Close()
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
-			if _, err := initialize(ctx, port, tc.profile, 0); err == nil || strings.Contains(err.Error(), "deadline") {
+			if _, err := initialize(ctx, port, tc.profile, 50*time.Millisecond); err == nil || strings.Contains(err.Error(), "deadline") {
 				t.Fatalf("expected explicit rejection, got %v", err)
 			}
 		})

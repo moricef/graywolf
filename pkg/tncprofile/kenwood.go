@@ -125,15 +125,14 @@ func initializeModel(parent context.Context, port io.ReadWriteCloser, profile st
 	if err = write("RESTART\r"); err != nil {
 		return nil, err
 	}
-	if err = pause(settle); err != nil {
-		return nil, err
-	}
-	if err = ctx.Err(); err != nil {
-		return nil, err
+	stream := newRestartPort(port, r)
+	if err = stream.waitRestart(ctx, settle); err != nil {
+		_ = stream.Close()
+		return nil, fmt.Errorf("%s RESTART: %w", profile, err)
 	}
 	// KISS has no mandatory startup acknowledgement. This means the serial
 	// session is ready, not that an RF exchange has been validated.
-	return &bufferedPort{ReadWriteCloser: port, reader: r}, nil
+	return stream, nil
 }
 
 func kenwoodRejected(line string) bool {
@@ -161,6 +160,10 @@ func readKenwoodResponse(r *bufio.Reader, reject bool, match func(string) bool) 
 			line += string(b)
 		}
 		if strings.HasSuffix(strings.ToLower(line), "cmd:") {
+			before := strings.TrimSpace(line[:len(line)-4])
+			if reject && kenwoodRejected(before) {
+				return "", fmt.Errorf("radio rejected command: %s", before)
+			}
 			line = ""
 		}
 	}
@@ -179,8 +182,7 @@ func readKenwoodPrompt(r *bufio.Reader, requireKISS bool) (string, error) {
 			if kenwoodRejected(line) {
 				return "", fmt.Errorf("radio rejected command: %s", strings.TrimSpace(line))
 			}
-			upper := strings.ToUpper(strings.TrimSpace(line))
-			if upper == "KISS ON" || strings.HasPrefix(upper, "KISS WAS ") {
+			if kenwoodKISSAcknowledgement(line) {
 				acknowledged = true
 			}
 			line = ""
@@ -192,6 +194,9 @@ func readKenwoodPrompt(r *bufio.Reader, requireKISS bool) (string, error) {
 			if kenwoodRejected(before) {
 				return "", fmt.Errorf("radio rejected command: %s", before)
 			}
+			if kenwoodKISSAcknowledgement(before) {
+				acknowledged = true
+			}
 			if acknowledged {
 				return line, nil
 			}
@@ -199,4 +204,13 @@ func readKenwoodPrompt(r *bufio.Reader, requireKISS bool) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("command prompt not found within 8192 bytes")
+}
+
+func kenwoodKISSAcknowledgement(line string) bool {
+	switch strings.ToUpper(strings.TrimSpace(line)) {
+	case "KISS ON", "KISS WAS OFF", "KISS WAS ON":
+		return true
+	default:
+		return false
+	}
 }

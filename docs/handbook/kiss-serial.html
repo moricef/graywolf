@@ -308,6 +308,11 @@ SUBSYSTEM=="tty", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6015", ATTRS{seria
       follows. Graywolf checks replies and refuses an unexpected model or a
       rejected command. Finally it sends <code>KISS ON</code>, checks the
       response and prompt, sends <code>RESTART</code> and waits five seconds.
+      During this wait, it continues reading: an explicit rejection or a
+      serial disconnection fails initialization instead of showing Connected.
+      Startup traffic is buffered (up to 256 KiB) and delivered unchanged to
+      the KISS decoder; error-looking text inside KISS frames is treated as
+      payload, not as a command rejection.
       The interface stays <strong>Connecting</strong> until this finishes;
       initialization has a 30-second deadline and failures use normal reconnect
       backoff. Startup bytes are preserved for the KISS decoder.
@@ -322,8 +327,12 @@ SUBSYSTEM=="tty", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6015", ATTRS{seria
       send the binary return sequence from the terminal. KISS provides no
       mandatory startup acknowledgement: Connected means the serial session
       is ready, not that a radio exchange succeeded. Protocol simulations
-      cover different startup states, command rejection, model mismatch and
-      band preservation; physical TM-D700/TM-D710 validation is still required.
+      cover different startup states, fragmented responses, command rejection,
+      model mismatch, band preservation, retry and cable-drop reconnection.
+      Linux virtual-serial-port (PTY) checks also exercise Graywolf's real
+      serial driver, restart rejection/retry and closing a blocked reader.
+      A successful simulation does not validate the commands against a real
+      firmware; physical TM-D700/TM-D710 validation is still required.
     </p>
 
     <p>
