@@ -1090,6 +1090,9 @@ func normalizeKissInterface(k *KissInterface) error {
 	if !tncprofile.Valid(k.InitProfile) {
 		return fmt.Errorf("kiss interface: invalid initialization profile %q", k.InitProfile)
 	}
+	if err := tncprofile.ValidateRadioBaud(k.InitProfile, k.RadioBaudRate); err != nil {
+		return err
+	}
 	if k.InitProfile != tncprofile.Native &&
 		((k.InterfaceType != KissTypeSerial && k.InterfaceType != KissTypeUsbSerial) || k.Mode != KissModeTnc) {
 		return fmt.Errorf("kiss interface: initialization profile requires a serial TNC interface")

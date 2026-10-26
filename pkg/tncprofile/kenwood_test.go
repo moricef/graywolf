@@ -8,17 +8,30 @@ import (
 	"io"
 	"net"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
 
 // Model the distinct radio-control/TNC command sets, including the initial
 // KISS/converse escape states and rejection of the other model's commands.
-func modelRadio(t *testing.T, profile, initial, band, rejectAt, id string) (io.ReadWriteCloser, <-chan error) {
+type modelRadioSpeed struct {
+	rate          uint32
+	state         *atomic.Uint32
+	restoreAfter  time.Duration
+	restored      chan struct{}
+	wrongReadback bool
+}
+
+func modelRadio(t *testing.T, profile, initial, band, rejectAt, id string, speed ...modelRadioSpeed) (io.ReadWriteCloser, <-chan error) {
 	t.Helper()
 	port, radio := net.Pipe()
 	done := make(chan error, 1)
 	responses := make(chan string, 32)
+	var radioSpeed modelRadioSpeed
+	if len(speed) > 0 {
+		radioSpeed = speed[0]
+	}
 	go func() {
 		for response := range responses {
 			if _, err := io.WriteString(radio, response); err != nil {
@@ -75,6 +88,9 @@ func modelRadio(t *testing.T, profile, initial, band, rejectAt, id string) (io.R
 		} else {
 			expected = append(expected, struct{ request, response string }{"TN", "\rTN " + mode + "," + band + "\r"}, struct{ request, response string }{"TN 2," + band, "\rTN 2," + band + "\rcmd:"}, struct{ request, response string }{"", "\rcmd:"})
 		}
+		if radioSpeed.rate != 0 {
+			expected = append(expected, struct{ request, response string }{fmt.Sprintf("HBAUD %d", radioSpeed.rate), fmt.Sprintf("HBAUD %d\rHBAUD      was 1200\rcmd:", radioSpeed.rate)}, struct{ request, response string }{"HBAUD", ""})
+		}
 		expected = append(expected, struct{ request, response string }{"KISS ON", "\rKISS was OFF\rcmd:"}, struct{ request, response string }{"RESTART", ""})
 		for _, step := range expected {
 			request, err := r.ReadString('\r')
@@ -91,6 +107,28 @@ func modelRadio(t *testing.T, profile, initial, band, rejectAt, id string) (io.R
 				_, _ = io.Copy(io.Discard, r) // initialization must close on rejection
 				finish(nil)
 				return
+			}
+			if radioSpeed.state != nil {
+				if step.request == "TNC 2" || strings.HasPrefix(step.request, "TN 2,") {
+					go func() {
+						time.Sleep(radioSpeed.restoreAfter)
+						radioSpeed.state.Store(1200)
+						close(radioSpeed.restored)
+					}()
+				}
+				if strings.HasPrefix(step.request, "HBAUD ") {
+					radioSpeed.state.Store(radioSpeed.rate)
+				}
+			}
+			if step.request == "HBAUD" {
+				actual := radioSpeed.rate
+				if radioSpeed.state != nil {
+					actual = radioSpeed.state.Load()
+				}
+				if radioSpeed.wrongReadback {
+					actual = 1200
+				}
+				responses <- fmt.Sprintf("HBAUD %d\rcmd:", actual)
 			}
 			if step.response != "" {
 				responses <- step.response

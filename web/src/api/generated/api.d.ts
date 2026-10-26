@@ -3079,6 +3079,11 @@ export interface components {
              */
             local_only?: boolean;
             mode?: string;
+            /**
+             * @description RadioBaudRate is the RF packet speed: 0 preserves the radio setting;
+             *     1200 or 9600 requires an explicit Kenwood model profile. Not serial baud.
+             */
+            radio_baud_rate?: number;
             reconnect_init_ms?: number;
             reconnect_max_ms?: number;
             /**
@@ -3125,6 +3130,8 @@ export interface components {
             mode?: string;
             needs_reconfig?: boolean;
             peer_addr?: string;
+            /** @description RadioBaudRate is 0 (preserve), 1200 or 9600 RF packet baud, not serial baud. */
+            radio_baud_rate?: number;
             reconnect_count?: number;
             reconnect_init_ms?: number;
             reconnect_max_ms?: number;

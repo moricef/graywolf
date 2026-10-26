@@ -37,6 +37,11 @@
     { value: 'kenwood-tm-d710', label: 'Kenwood TM-D710 / TM-D710G' },
     { value: 'kenwood', label: 'Kenwood legacy (select your model)' },
   ];
+  const radioBaudOptions = [
+    { value: '0', label: 'Preserve radio setting / Conserver' },
+    { value: '1200', label: '1200 baud' },
+    { value: '9600', label: '9600 baud' },
+  ];
   // Standard serial line speeds offered in the Baud Rate dropdown. Covers
   // the rates real KISS TNCs use (1200 for classic AFSK packet, 9600 for
   // G3RUH and most USB TNCs, up to 115200 for high-speed links). A free-form
@@ -300,6 +305,7 @@
       serial_device: '',
       baud_rate: BAUD_RATE_DEFAULT,
       init_profile: 'native',
+      radio_baud_rate: '0',
       channel: '1',
       mode: 'modem',
       tnc_ingress_rate_hz: TNC_INGRESS_RATE_DEFAULT,
@@ -399,6 +405,7 @@
       reconnect_max_ms: String(row.reconnect_max_ms || RECONNECT_MAX_DEFAULT_MS),
       baud_rate: String(row.baud_rate),
       init_profile: row.init_profile || 'native',
+      radio_baud_rate: String(row.radio_baud_rate || 0),
       channel: String(row.channel || 1),
       mode: row.mode || 'modem',
       tnc_ingress_rate_hz: String(row.tnc_ingress_rate_hz || 50),
@@ -674,6 +681,9 @@
       init_profile: (form.type === 'serial' || form.type === 'usbserial') && form.mode === 'tnc'
         ? form.init_profile === 'native' ? '' : form.init_profile
         : '',
+      radio_baud_rate: (form.type === 'serial' || form.type === 'usbserial') && form.mode === 'tnc'
+        && ['kenwood-tm-d700', 'kenwood-tm-d710'].includes(form.init_profile)
+        ? Number(form.radio_baud_rate) : 0,
     };
     switch (form.type) {
       case 'tcp':
@@ -1156,9 +1166,15 @@
     {/if}
     {#if (form.type === 'serial' || form.type === 'usbserial') && form.mode === 'tnc'}
       <FormField label="TNC initialization" id="kiss-init-profile"
-        hint="Select your exact Kenwood model. Model profiles select PACKET then KISS; the D710 keeps its configured data band. Use the TNC computer port and matching serial speed. Frequency and radio packet speed are not configured. Legacy requires PACKET mode first.">
+        hint="Select your exact Kenwood model. Model profiles select PACKET then KISS; the D710 keeps its configured data band. Use the TNC computer port and matching serial speed. Frequency is not configured. Legacy requires PACKET mode first.">
         <Select id="kiss-init-profile" bind:value={form.init_profile} options={initProfileOptions} />
       </FormField>
+      {#if ['kenwood-tm-d700', 'kenwood-tm-d710'].includes(form.init_profile)}
+        <FormField label="Radio packet speed" id="kiss-radio-baud"
+          hint="RF speed (HBAUD), separate from the PC serial Baud Rate above. Applied and checked after mode stabilization, before KISS. Preserve sends no HBAUD command and leaves the firmware's restored setting in place.">
+          <Select id="kiss-radio-baud" bind:value={form.radio_baud_rate} options={radioBaudOptions} />
+        </FormField>
+      {/if}
     {/if}
     <FormField label="Channel" id="kiss-channel">
       {#if channels.length > 0}

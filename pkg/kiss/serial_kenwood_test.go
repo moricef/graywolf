@@ -19,7 +19,7 @@ func TestModelSupervisorRejectRetryAndReconnect(t *testing.T) {
 	for _, model := range []string{"kenwood-tm-d700", "kenwood-tm-d710"} {
 		t.Run(model, func(t *testing.T) {
 			t.Parallel()
-			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 35*time.Second)
 			defer cancel()
 			var opens atomic.Int32
 			var radios sync.WaitGroup

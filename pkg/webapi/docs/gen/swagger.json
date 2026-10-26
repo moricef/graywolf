@@ -10969,6 +10969,10 @@
                 "mode": {
                     "type": "string"
                 },
+                "radio_baud_rate": {
+                    "description": "RadioBaudRate is the RF packet speed: 0 preserves the radio setting;\n1200 or 9600 requires an explicit Kenwood model profile. Not serial baud.",
+                    "type": "integer"
+                },
                 "reconnect_init_ms": {
                     "type": "integer"
                 },
@@ -11049,6 +11053,10 @@
                 },
                 "peer_addr": {
                     "type": "string"
+                },
+                "radio_baud_rate": {
+                    "description": "RadioBaudRate is 0 (preserve), 1200 or 9600 RF packet baud, not serial baud.",
+                    "type": "integer"
                 },
                 "reconnect_count": {
                     "type": "integer"

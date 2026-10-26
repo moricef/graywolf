@@ -13,7 +13,7 @@ import (
 // D700: https://www.on7lds.net/auto/tmd700a.htm (N0RMO's mode experiments).
 // D710: Kenwood TM-D710AE_IDM_R1.pdf, section 5.1.3; TN mode/band query
 // documented by LA3QMA/TM-V71_TM-D710-Kenwood, commands/TN.md.
-func initializeModel(parent context.Context, port io.ReadWriteCloser, profile string, settle time.Duration) (result io.ReadWriteCloser, err error) {
+func initializeModel(parent context.Context, port io.ReadWriteCloser, profile string, radioBaud uint32, modeSettle, settle time.Duration) (result io.ReadWriteCloser, err error) {
 	ctx, cancel := context.WithTimeout(parent, 30*time.Second)
 	defer cancel()
 	stopClose := context.AfterFunc(ctx, func() { _ = port.Close() })
@@ -96,6 +96,9 @@ func initializeModel(parent context.Context, port io.ReadWriteCloser, profile st
 				return nil, fmt.Errorf("TM-D700 %s: %w", request, err)
 			}
 		}
+		if err = pause(modeSettle); err != nil {
+			return nil, err
+		}
 		if err = command("TC 0", true, nil); err != nil {
 			return nil, fmt.Errorf("TM-D700 TC 0: %w", err)
 		}
@@ -115,8 +118,42 @@ func initializeModel(parent context.Context, port io.ReadWriteCloser, profile st
 		if err = command(request, false, func(s string) bool { return s == request }); err != nil {
 			return nil, fmt.Errorf("TM-D710 %s: %w", request, err)
 		}
+		// Some firmware restores its old TNC speed/state for 3-4 seconds
+		// after TN, even if a command prompt has already appeared.
+		if err = pause(modeSettle); err != nil {
+			return nil, err
+		}
 		if err = command("", true, nil); err != nil {
 			return nil, fmt.Errorf("TM-D710 PACKET prompt: %w", err)
+		}
+	}
+	if radioBaud != 0 {
+		if err = write(fmt.Sprintf("HBAUD %d\r", radioBaud)); err != nil {
+			return nil, err
+		}
+		_, err = readKenwoodPromptMatching(r, func(line string) bool {
+			fields := strings.Fields(strings.ToUpper(line))
+			return len(fields) == 3 && fields[0] == "HBAUD" && fields[1] == "WAS" && (fields[2] == "1200" || fields[2] == "9600")
+		})
+		if err != nil {
+			return nil, fmt.Errorf("%s HBAUD setting: %w", profile, err)
+		}
+		// A setting reply reports the previous value. Query the current value
+		// separately; a stale cmd: cannot count as successful verification.
+		if err = write("HBAUD\r"); err != nil {
+			return nil, err
+		}
+		value, readErr := readKenwoodResponse(r, true, func(s string) bool {
+			return strings.HasPrefix(s, "HBAUD ") && !strings.Contains(strings.ToUpper(s), "WAS")
+		})
+		if readErr != nil {
+			return nil, fmt.Errorf("%s HBAUD verification: %w", profile, readErr)
+		}
+		if strings.Join(strings.Fields(value), " ") != fmt.Sprintf("HBAUD %d", radioBaud) {
+			return nil, fmt.Errorf("%s HBAUD verification: requested %d, got %q", profile, radioBaud, value)
+		}
+		if _, err = readKenwoodPrompt(r, false); err != nil {
+			return nil, fmt.Errorf("%s HBAUD prompt: %w", profile, err)
 		}
 	}
 	if err = command("KISS ON", true, nil); err != nil {
@@ -171,8 +208,16 @@ func readKenwoodResponse(r *bufio.Reader, reject bool, match func(string) bool) 
 }
 
 func readKenwoodPrompt(r *bufio.Reader, requireKISS bool) (string, error) {
+	var match func(string) bool
+	if requireKISS {
+		match = kenwoodKISSAcknowledgement
+	}
+	return readKenwoodPromptMatching(r, match)
+}
+
+func readKenwoodPromptMatching(r *bufio.Reader, match func(string) bool) (string, error) {
 	line := ""
-	acknowledged := !requireKISS
+	acknowledged := match == nil
 	for i := 0; i < 8192; i++ {
 		b, err := r.ReadByte()
 		if err != nil {
@@ -182,7 +227,7 @@ func readKenwoodPrompt(r *bufio.Reader, requireKISS bool) (string, error) {
 			if kenwoodRejected(line) {
 				return "", fmt.Errorf("radio rejected command: %s", strings.TrimSpace(line))
 			}
-			if kenwoodKISSAcknowledgement(line) {
+			if match != nil && match(line) {
 				acknowledged = true
 			}
 			line = ""
@@ -194,7 +239,7 @@ func readKenwoodPrompt(r *bufio.Reader, requireKISS bool) (string, error) {
 			if kenwoodRejected(before) {
 				return "", fmt.Errorf("radio rejected command: %s", before)
 			}
-			if kenwoodKISSAcknowledgement(before) {
+			if match != nil && match(before) {
 				acknowledged = true
 			}
 			if acknowledged {

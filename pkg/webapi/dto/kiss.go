@@ -43,7 +43,10 @@ type KissRequest struct {
 	BaudRate     uint32 `json:"baud_rate"`
 	// InitProfile is empty for native KISS; model profiles are kenwood-tm-d700
 	// and kenwood-tm-d710. The old kenwood value retains legacy behavior.
-	InitProfile      string `json:"init_profile"`
+	InitProfile string `json:"init_profile"`
+	// RadioBaudRate is the RF packet speed: 0 preserves the radio setting;
+	// 1200 or 9600 requires an explicit Kenwood model profile. Not serial baud.
+	RadioBaudRate    uint32 `json:"radio_baud_rate"`
 	Channel          uint32 `json:"channel"`
 	Mode             string `json:"mode"`
 	TncIngressRateHz uint32 `json:"tnc_ingress_rate_hz"`
@@ -101,6 +104,9 @@ const (
 )
 
 func (r KissRequest) Validate() error {
+	if err := tncprofile.ValidateRadioBaud(r.InitProfile, r.RadioBaudRate); err != nil {
+		return err
+	}
 	if !tncprofile.Valid(r.InitProfile) {
 		return fmt.Errorf("init_profile must be empty (native KISS), kenwood-tm-d700, kenwood-tm-d710, or kenwood (legacy)")
 	}
@@ -230,6 +236,7 @@ func (r KissRequest) ToModel() configstore.KissInterface {
 		Device:              r.SerialDevice,
 		BaudRate:            r.BaudRate,
 		InitProfile:         r.InitProfile,
+		RadioBaudRate:       r.RadioBaudRate,
 		Channel:             ch,
 		Enabled:             enabled,
 		Broadcast:           true,
@@ -304,7 +311,9 @@ type KissResponse struct {
 	BaudRate     uint32 `json:"baud_rate"`
 	// InitProfile identifies native KISS (empty), kenwood-tm-d700,
 	// kenwood-tm-d710, or the unchanged legacy kenwood profile.
-	InitProfile         string `json:"init_profile"`
+	InitProfile string `json:"init_profile"`
+	// RadioBaudRate is 0 (preserve), 1200 or 9600 RF packet baud, not serial baud.
+	RadioBaudRate       uint32 `json:"radio_baud_rate"`
 	Channel             uint32 `json:"channel"`
 	Mode                string `json:"mode"`
 	TncIngressRateHz    uint32 `json:"tnc_ingress_rate_hz"`
@@ -361,6 +370,7 @@ func KissFromModel(m configstore.KissInterface) KissResponse {
 		SerialDevice:        m.Device,
 		BaudRate:            m.BaudRate,
 		InitProfile:         m.InitProfile,
+		RadioBaudRate:       m.RadioBaudRate,
 		Channel:             m.Channel,
 		Mode:                m.Mode,
 		TncIngressRateHz:    m.TncIngressRateHz,

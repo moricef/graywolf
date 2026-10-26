@@ -253,6 +253,10 @@ SUBSYSTEM=="tty", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6015", ATTRS{seria
         <strong>Kenwood TM-D700</strong> or <strong>Kenwood TM-D710 / TM-D710G</strong>
         for the corresponding radio to switch its
         TNC into KISS automatically.</li>
+      <li>For an explicit Kenwood model profile, choose <strong>Radio packet
+        speed</strong>: preserve the firmware setting (default), 1200, or 9600.
+        This RF speed is independent of the serial <strong>Baud Rate</strong>
+        used by the computer.</li>
       <li>Check the box labeled <strong>Allow digipeater/beacon/iGate
         to transmit on this interface</strong> to allow graywolf's
         TX pipeline to send frames to the device. Without this
@@ -288,9 +292,11 @@ SUBSYSTEM=="tty", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6015", ATTRS{seria
       <strong>TNC initialization</strong> on a Serial or USB Serial interface
       in TNC mode. Model profiles select PACKET mode then KISS, taking over
       from the radio's internal APRS application. They do not configure the
-      radio frequency, callsign, serial speed, HBAUD packet speed, or
-      Graywolf's transmit opt-in setting. Confirm the packet speed on the radio
-      after changing modes, since the radio may restore its own saved settings.
+      radio frequency, callsign, serial speed, or Graywolf's transmit opt-in
+      setting. The separate <strong>Radio packet speed</strong> setting defaults
+      to <strong>Preserve radio setting / Conserver</strong>: no HBAUD command
+      is sent, so the firmware's restored packet-speed setting remains in use.
+      Select 1200 or 9600 to explicitly set and verify HBAUD after stabilization.
     </p>
 
     <table>
@@ -305,8 +311,14 @@ SUBSYSTEM=="tty", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6015", ATTRS{seria
       On every open or reconnect, synchronization uses three Ctrl-C characters,
       the binary KISS return sequence <code>C0 FF C0</code>, a short pause,
       then three Ctrl-C characters and CR. The model-specific sequence above
-      follows. Graywolf checks replies and refuses an unexpected model or a
-      rejected command. Finally it sends <code>KISS ON</code>, checks the
+      follows. After the mode-selection acknowledgement (<code>TNC 2</code> or
+      <code>TN 2,&lt;band&gt;</code>), Graywolf waits four seconds before continuing,
+      even if an early <code>cmd:</code> is already present. Some firmware
+      restores saved state and speed during this interval. When an RF speed is
+      selected, Graywolf sets <code>HBAUD 1200</code> or <code>HBAUD 9600</code>,
+      waits for its setting response, queries <code>HBAUD</code> and verifies the
+      current value. A mismatch or rejected command fails initialization.
+      Finally it sends <code>KISS ON</code>, checks the
       response and prompt, sends <code>RESTART</code> and waits five seconds.
       During this wait, it continues reading: an explicit rejection or a
       serial disconnection fails initialization instead of showing Connected.
@@ -350,6 +362,8 @@ SUBSYSTEM=="tty", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6015", ATTRS{seria
       <a href="https://www.kenwood.com/usa/Support/pdf/TM-D710G_English.pdf">TM-D710G instruction manual, PACKET</a>,
       <a href="https://www.on7lds.net/auto/tmd700a.htm">N0RMO's TM-D700 mode-control experiments</a>, and
       <a href="https://github.com/LA3QMA/TM-V71_TM-D710-Kenwood/blob/master/commands/TN.md">LA3QMA's TN command reference</a>.
+      The mode-stabilization delay also follows the firmware behavior recorded
+      in <a href="https://github.com/fmarier/tmd710_tncsetup/blob/1d0014b27fde81196621e2222bddd7e7ea6dce89/tmd710_tncsetup.c">tmd710_tncsetup</a>.
     </p>
 
     <h2>Reconnect Behavior</h2>

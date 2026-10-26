@@ -26,13 +26,39 @@ func Valid(profile string) bool {
 // timeout closes the port to interrupt blocking reads/writes. The returned
 // wrapper preserves bytes already buffered after the command prompt.
 func Initialize(ctx context.Context, port io.ReadWriteCloser, profile string) (io.ReadWriteCloser, error) {
+	return InitializeWithRadioBaud(ctx, port, profile, 0)
+}
+
+// InitializeWithRadioBaud optionally sets the RF packet speed, independently
+// from the computer's serial baud rate. Zero leaves the radio's speed alone.
+func InitializeWithRadioBaud(ctx context.Context, port io.ReadWriteCloser, profile string, radioBaud uint32) (io.ReadWriteCloser, error) {
 	if profile == TMD700 || profile == TMD710 {
-		return initialize(ctx, port, profile, 5*time.Second)
+		return initializeConfigured(ctx, port, profile, radioBaud, 4*time.Second, 5*time.Second)
 	}
-	return initialize(ctx, port, profile, 1500*time.Millisecond)
+	return initializeConfigured(ctx, port, profile, radioBaud, 0, 1500*time.Millisecond)
 }
 
 func initialize(parent context.Context, port io.ReadWriteCloser, profile string, settle time.Duration) (io.ReadWriteCloser, error) {
+	return initializeConfigured(parent, port, profile, 0, 0, settle)
+}
+
+func ValidateRadioBaud(profile string, rate uint32) error {
+	if rate == 0 {
+		return nil
+	}
+	if rate != 1200 && rate != 9600 {
+		return fmt.Errorf("radio_baud_rate must be 0 (preserve), 1200 or 9600")
+	}
+	if profile != TMD700 && profile != TMD710 {
+		return fmt.Errorf("radio_baud_rate requires a TM-D700 or TM-D710 model profile")
+	}
+	return nil
+}
+
+func initializeConfigured(parent context.Context, port io.ReadWriteCloser, profile string, radioBaud uint32, modeSettle, settle time.Duration) (io.ReadWriteCloser, error) {
+	if err := ValidateRadioBaud(profile, radioBaud); err != nil {
+		return nil, err
+	}
 	if profile == Native {
 		return port, nil
 	}
@@ -40,7 +66,7 @@ func initialize(parent context.Context, port io.ReadWriteCloser, profile string,
 		return nil, fmt.Errorf("unknown TNC initialization profile %q", profile)
 	}
 	if profile == TMD700 || profile == TMD710 {
-		return initializeModel(parent, port, profile, settle)
+		return initializeModel(parent, port, profile, radioBaud, modeSettle, settle)
 	}
 	ctx, cancel := context.WithTimeout(parent, 10*time.Second)
 	defer cancel()

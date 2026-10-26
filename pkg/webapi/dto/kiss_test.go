@@ -43,6 +43,25 @@ func TestKenwoodInitializationProfile(t *testing.T) {
 	}
 }
 
+func TestRadioPacketBaudValidation(t *testing.T) {
+	for _, profile := range []string{"", "kenwood", "kenwood-tm-d700", "kenwood-tm-d710"} {
+		for _, rate := range []uint32{0, 1200, 9600, 4800} {
+			req := KissRequest{Type: "serial", SerialDevice: "/dev/test", BaudRate: 19200, InitProfile: profile, RadioBaudRate: rate, Mode: "tnc"}
+			want := rate == 0 || ((profile == "kenwood-tm-d700" || profile == "kenwood-tm-d710") && (rate == 1200 || rate == 9600))
+			if valid := req.Validate() == nil; valid != want {
+				t.Errorf("profile %s rate %d valid=%v", profile, rate, valid)
+			}
+			if want {
+				model := req.ToModel()
+				out := KissFromModel(model)
+				if model.RadioBaudRate != rate || out.RadioBaudRate != rate || out.BaudRate != 19200 {
+					t.Fatalf("radio/serial rates confused: %+v", out)
+				}
+			}
+		}
+	}
+}
+
 func TestKissRequest_Validate_AllowTxFromGovernor(t *testing.T) {
 	tests := []struct {
 		name    string

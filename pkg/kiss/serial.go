@@ -39,6 +39,7 @@ type SerialConfig struct {
 	Device              string
 	BaudRate            uint32
 	InitProfile         string
+	RadioBaudRate       uint32
 	Mode                Mode
 	ChannelMap          map[uint8]uint32
 	ReconnectInitMs     uint32
@@ -237,7 +238,7 @@ func (s *SerialSupervisor) run(parent context.Context) {
 
 		port, err := s.open(s.cfg.Device, s.cfg.BaudRate)
 		if err == nil {
-			initialized, initErr := tncprofile.Initialize(ctx, port, s.cfg.InitProfile)
+			initialized, initErr := tncprofile.InitializeWithRadioBaud(ctx, port, s.cfg.InitProfile, s.cfg.RadioBaudRate)
 			if initErr != nil {
 				_ = port.Close()
 				err = initErr
