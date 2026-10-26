@@ -63,6 +63,21 @@ tag. Full operational rules and the required user approval checkpoint are in
 
 ## Rust modem uses the pure-Rust HID backend (no system libhidapi/libudev)
 
+### Linux amd64 runtime baseline
+
+The native Rust Linux amd64 job is pinned to `ubuntu-22.04`, whose glibc
+baseline is 2.35. Do not use `ubuntu-latest` for this native link step:
+the October 2026 Ubuntu 26.04 runner produced `log10f`/`atan2f` references to
+`GLIBC_2.43`, preventing the resulting modem from starting on Debian 13
+(glibc 2.41). The unpublished `3b302bfe` snapshot exposed this during local
+artifact verification. Cross-compiled ARM jobs retain their container sysroots.
+
+Rust cache keys include the selected runner label to avoid reusing native
+objects across runner baselines. Before uploading the Linux amd64 modem,
+`release.yml` checks all required GLIBC versions are at most 2.35 and runs
+`--version`, requiring the expected version and commit. Changing this baseline
+requires reviewing supported Linux distributions and validating real artifacts.
+
 The CM108 HID PTT path depends on `hidapi`, but
 [`../../graywolf-modem/Cargo.toml`](../../graywolf-modem/Cargo.toml) pins it
 with `default-features = false, features = ["linux-native-basic-udev"]` on

@@ -23,7 +23,9 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: ubuntu-latest
+          # Native linking sets the minimum glibc version of shipped binaries.
+          # Keep Ubuntu 22.04's glibc 2.35 rather than following ubuntu-latest.
+          - os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
             arch: amd64
             platform: linux
@@ -70,7 +72,7 @@ jobs:
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
         with:
-          key: ${{ matrix.target }}
+          key: ${{ matrix.target }}-${{ matrix.os }}
 
       - name: Install protoc
         uses: arduino/setup-protoc@v3
@@ -155,6 +157,24 @@ jobs:
           GRAYWOLF_VERSION: ${{ steps.ver.outputs.version }}
           GRAYWOLF_GIT_COMMIT: ${{ steps.ver.outputs.commit }}
         run: cargo build --release --target ${{ matrix.target }} --bin graywolf-modem
+
+      - name: Verify Linux amd64 runtime baseline
+        if: matrix.platform == 'linux' && matrix.arch == 'amd64'
+        env:
+          EXPECTED_MODEM_VERSION: v${{ steps.ver.outputs.version }}-${{ steps.ver.outputs.commit }}
+        run: |
+          python3 - <<'PY'
+          import os, re, subprocess
+          binary = 'target/x86_64-unknown-linux-gnu/release/graywolf-modem'
+          symbols = subprocess.check_output(['readelf', '--version-info', binary], text=True)
+          versions = {tuple(map(int, v.split('.'))) for v in re.findall(r'GLIBC_([0-9.]+)', symbols)}
+          if not versions or max(versions) > (2, 35):
+              raise SystemExit(f'Unexpected glibc requirement: {sorted(versions)}; maximum supported is 2.35')
+          actual = subprocess.check_output([binary, '--version'], text=True).strip()
+          if actual != os.environ['EXPECTED_MODEM_VERSION']:
+              raise SystemExit(f'Modem version mismatch: {actual}')
+          print(f'{actual}: maximum required glibc {max(versions)}')
+          PY
 
       - name: Upload Rust binary (Unix)
         if: matrix.platform != 'windows'
