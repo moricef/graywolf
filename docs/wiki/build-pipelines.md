@@ -78,6 +78,13 @@ objects across runner baselines. Before uploading the Linux amd64 modem,
 `--version`, requiring the expected version and commit. Changing this baseline
 requires reviewing supported Linux distributions and validating real artifacts.
 
+### Native macOS runner architecture
+
+The native macOS amd64 job uses `macos-15-intel`, not `macos-15`: GitHub's
+current `macos-15` label selects ARM64. A pre-build `uname -m` check verifies
+the runner architecture matches the native target for both macOS jobs. The
+ARM64 job continues using `macos-latest`. Cache keys include the runner label.
+
 The CM108 HID PTT path depends on `hidapi`, but
 [`../../graywolf-modem/Cargo.toml`](../../graywolf-modem/Cargo.toml) pins it
 with `default-features = false, features = ["linux-native-basic-udev"]` on

@@ -45,7 +45,8 @@ jobs:
             arch: armv7
             platform: linux
             use_cross: true
-          - os: macos-15
+          # macos-15 is ARM64 now; request Intel explicitly for native amd64.
+          - os: macos-15-intel
             target: x86_64-apple-darwin
             arch: amd64
             platform: darwin
@@ -150,6 +151,10 @@ jobs:
           CFLAGS_arm_unknown_linux_gnueabihf: '-idirafter /usr/include'
           CFLAGS_armv7_unknown_linux_gnueabihf: '-idirafter /usr/include'
         run: cross build --release --target ${{ matrix.target }} --bin graywolf-modem
+
+      - name: Verify native macOS runner architecture
+        if: matrix.platform == 'darwin'
+        run: test "$(uname -m)" = "${{ matrix.arch == 'amd64' && 'x86_64' || 'arm64' }}"
 
       - name: Build with cargo
         if: matrix.use_cross == false
