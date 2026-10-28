@@ -116,6 +116,7 @@ type App struct {
 	satelliteCache gps.SatelliteCache
 	stationPos     *gps.StationPos
 	rfDX           *rfdx.Tracker
+	receiverDX     *stationcache.ReceiverTracker
 	dxMu           sync.RWMutex
 	dxConfig       rfdx.Config
 	dxWake         chan struct{}

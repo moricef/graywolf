@@ -607,6 +607,7 @@ func (a *App) wireServicesInner(ctx context.Context) error {
 	a.satelliteCache = a.gpsCache
 	a.stationPos = gps.NewStationPos(a.gpsCache)
 	a.rfDX = rfdx.New(a.stationPos)
+	a.receiverDX = stationcache.NewReceiverTracker(a.stationCache)
 	a.dxWake = make(chan struct{}, 1)
 	a.dxReplies = make(chan dxReply, 32)
 	dxCfg, err := a.store.GetDXSettings(ctx)
@@ -1626,7 +1627,7 @@ func (a *App) wireHTTP(ctx context.Context) error {
 	// Canonical shape for every out-of-band RegisterXxx helper is
 	// (srv, mux, deps...). Keep this block consistent.
 	webapi.RegisterPackets(apiSrv, apiMux, a.plog, a.stationPos)
-	webapi.RegisterStations(apiSrv, apiMux, a.stationCache)
+	webapi.RegisterStations(apiSrv, apiMux, a.stationCache, a.receiverDX)
 	webapi.RegisterHeatmap(apiSrv, apiMux, a.stationCache)
 	webapi.RegisterRFDX(apiSrv, apiMux, a.rfDX)
 	webapi.RegisterDX(apiSrv, apiMux, a.configureDX, a.sendDXReport, a.clearDXRecords)

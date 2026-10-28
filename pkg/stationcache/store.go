@@ -39,6 +39,13 @@ type HistoryStore interface {
 // One entry per composite key. Position history is kept for moving
 // stations only — static stations that beacon the same coordinates
 // repeatedly don't accumulate trail points.
+// IGateReport is the last capability bulletin advertised by this station.
+// It is independent of locally measured DX and reception counters.
+type IGateReport struct {
+	Entries    map[string]string `json:"entries"`
+	ReceivedAt time.Time         `json:"received_at"`
+}
+
 type Station struct {
 	Key       string     // "stn:W1ABC-9" or "obj:SHELTER1"
 	Callsign  string     // display name (callsign or object/item name)
@@ -53,7 +60,8 @@ type Station struct {
 	Gated     bool       // Internet-to-RF gated (inner of a third-party packet)
 	Channel   uint32
 	Comment   string
-	Weather   *Weather // nil if not a weather station
+	Weather   *Weather     // nil if not a weather station
+	IGate     *IGateReport // last received <IGATE,... bulletin
 	LastHeard time.Time
 	// LastDirectHeard is the timestamp of the most recent reception heard
 	// directly on RF (RX, zero digi hops). Set only by direct receptions and

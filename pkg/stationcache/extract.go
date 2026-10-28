@@ -32,6 +32,7 @@ type CacheEntry struct {
 	Channel   uint32
 	Comment   string
 	Weather   *Weather
+	IGate     *IGateReport
 	Timestamp time.Time
 }
 
@@ -96,6 +97,16 @@ func ExtractEntry(decoded *aprs.DecodedAPRSPacket, source, dir string, ch uint32
 		}
 		entries = append(entries, e)
 		return entries
+	}
+
+	// Capability bulletins are positionless. Keep them under the source's
+	// station key so they survive later position packets (or precede the first).
+	if pkt.Caps != nil {
+		if _, ok := pkt.Caps.Entries["IGATE"]; ok && pkt.Source != "" {
+			e := buildStationEntry(pkt.Source, nil, "", via, path, hops, dir, gated, ch, ts, nil)
+			e.IGate = &IGateReport{Entries: cloneEntries(pkt.Caps.Entries), ReceivedAt: ts}
+			return []CacheEntry{e}
+		}
 	}
 
 	// Normal station packet — position may come from Position field
@@ -216,4 +227,19 @@ func convertWeather(wx *aprs.Weather) *Weather {
 		HasLuminosity: wx.HasLuminosity,
 	}
 	return w
+}
+
+func cloneEntries(entries map[string]string) map[string]string {
+	out := make(map[string]string, len(entries))
+	for key, value := range entries {
+		out[key] = value
+	}
+	return out
+}
+
+func cloneIGate(r *IGateReport) *IGateReport {
+	if r == nil {
+		return nil
+	}
+	return &IGateReport{Entries: cloneEntries(r.Entries), ReceivedAt: r.ReceivedAt}
 }

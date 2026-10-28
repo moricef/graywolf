@@ -600,3 +600,50 @@ func TestStationToDTO_LastDirectHeard(t *testing.T) {
 		t.Fatalf("LastDirectHeard not mapped: got %v want %v", dto.LastDirectHeard, direct)
 	}
 }
+
+func TestStationsIGateReportFullAndDelta(t *testing.T) {
+	now := time.Now().UTC()
+	s := testStation("F4GCF-14", 35, -95, now)
+	s.IGate = &stationcache.IGateReport{ReceivedAt: now.Add(-time.Hour), Entries: map[string]string{"IGATE": "", "MSG_CNT": "0", "DX": "1*F5ZQB-10(139km@136°)"}}
+	h := stationsHandler(&mockStationCache{stations: []stationcache.Station{s}})
+	for _, suffix := range []string{"", "&since=" + url.QueryEscape(now.Add(-time.Minute).Format(time.RFC3339Nano))} {
+		got := decodeStations(t, getStations(t, h, "bbox="+defaultBBox+suffix, nil))
+		if len(got) != 1 || got[0].IGate == nil || got[0].IGate.Entries["MSG_CNT"] != "0" || !got[0].IGate.ReceivedAt.Equal(s.IGate.ReceivedAt) {
+			t.Fatalf("missing report: %+v", got)
+		}
+	}
+}
+
+type receiverDXFixture struct {
+	reports map[string]stationcache.ReceiverDX
+}
+
+func (f *receiverDXFixture) ReceiverSnapshot(time.Time) map[string]stationcache.ReceiverDX {
+	return f.reports
+}
+func TestStationsReceiverDXRefreshesIdleReceiverAndClearsExpired(t *testing.T) {
+	now := time.Now().UTC()
+	receiver := testStation("F4MLV-10", 35, -95, now.Add(-10*time.Minute))
+	cache := &mockStationCache{stations: []stationcache.Station{receiver}}
+	source := &receiverDXFixture{reports: map[string]stationcache.ReceiverDX{"F4MLV-10": {WindowMinutes: 60, DirectStations: 2, UpdatedAt: now, DX: &stationcache.ReceiverDXResult{Callsign: "F1ZDB-13", DistanceKM: 117}}}}
+	mux := http.NewServeMux()
+	RegisterStations(nil, mux, cache, source)
+	query := "bbox=" + defaultBBox + "&since=" + url.QueryEscape(now.Add(-time.Minute).Format(time.RFC3339Nano))
+	got := decodeStations(t, getStations(t, mux, query, nil))
+	if len(got) != 1 || got[0].ReceiverDX == nil || got[0].ReceiverDX.DX.Callsign != "F1ZDB-13" {
+		t.Fatalf("idle receiver not refreshed: %+v", got)
+	}
+	source.reports = nil
+	rec := getStations(t, mux, query, nil)
+	got = decodeStations(t, rec)
+	if len(got) != 1 || got[0].ReceiverDX != nil {
+		t.Fatalf("expired data not removed: %+v", got)
+	}
+	var raw []map[string]json.RawMessage
+	if err := json.Unmarshal(getStations(t, mux, query, nil).Body.Bytes(), &raw); err != nil {
+		t.Fatal(err)
+	}
+	if string(raw[0]["receiver_dx"]) != "null" {
+		t.Fatal("delta must explicitly clear expired receiver data")
+	}
+}

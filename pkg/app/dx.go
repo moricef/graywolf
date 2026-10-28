@@ -22,6 +22,9 @@ func (a *App) configureDX(c rfdx.Config) {
 	a.dxMu.Lock()
 	a.dxConfig = c
 	a.rfDX.Configure(c)
+	if a.receiverDX != nil {
+		a.receiverDX.Configure(c)
+	}
 	a.dxMu.Unlock()
 	select {
 	case a.dxWake <- struct{}{}:

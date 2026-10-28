@@ -19,7 +19,15 @@ type StationCache interface {
 }
 
 // StationDTO is one station's wire format for the map.
+type ReceiverDXSource interface {
+	ReceiverSnapshot(time.Time) map[string]stationcache.ReceiverDX
+}
+
 type StationDTO struct {
+	// ReceiverDX is computed from measured RXT radio links ending at this station.
+	ReceiverDX *stationcache.ReceiverDX `json:"receiver_dx"`
+	// IGate is the station's last received capability bulletin, not local measurements.
+	IGate *stationcache.IGateReport `json:"igate,omitempty"`
 	// Callsign is the station or object name (APRS callsign-SSID for stations, object/item name otherwise).
 	Callsign string `json:"callsign"`
 	// IsObject is true for APRS objects and items; false for regular stations.
@@ -131,9 +139,9 @@ type WeatherDTO struct {
 // Operation IDs in the swag annotation blocks below are frozen against
 // constants in pkg/webapi/docs/op_ids.go; `make docs-lint` enforces the
 // correspondence.
-func RegisterStations(srv *Server, mux *http.ServeMux, cache StationCache) {
+func RegisterStations(srv *Server, mux *http.ServeMux, cache StationCache, receiverDX ...ReceiverDXSource) {
 	_ = srv // kept in signature for consistency with other RegisterXxx
-	mux.HandleFunc("GET /api/stations", listStations(cache))
+	mux.HandleFunc("GET /api/stations", listStations(cache, receiverDX...))
 }
 
 // listStations returns APRS stations whose most-recent fix falls inside
@@ -157,7 +165,7 @@ func RegisterStations(srv *Server, mux *http.ServeMux, cache StationCache) {
 // @Failure  400 {object} webtypes.ErrorResponse
 // @Security CookieAuth
 // @Router   /stations [get]
-func listStations(cache StationCache) http.HandlerFunc {
+func listStations(cache StationCache, receiverDX ...ReceiverDXSource) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 
@@ -202,9 +210,19 @@ func listStations(cache StationCache) http.HandlerFunc {
 			}
 		}
 
+		var remote map[string]stationcache.ReceiverDX
+		hasReceivers := len(receiverDX) > 0 && receiverDX[0] != nil
+		if hasReceivers {
+			remote = receiverDX[0].ReceiverSnapshot(time.Now().UTC())
+		}
+
 		// ETag short-circuit
 		gen := cache.Gen()
 		etag := fmt.Sprintf(`"g%d"`, gen)
+		// Receiver-link activity and expiry are independent of position updates.
+		if hasReceivers {
+			etag = fmt.Sprintf(`"g%d-rxt%d"`, gen, time.Now().Unix()/5)
+		}
 		if r.Header.Get("If-None-Match") == etag {
 			w.Header().Set("ETag", etag)
 			w.WriteHeader(http.StatusNotModified)
@@ -215,7 +233,7 @@ func listStations(cache StationCache) http.HandlerFunc {
 		stations := cache.QueryBBox(bbox, timerange)
 
 		// Filter by since (>= semantics)
-		if isDelta {
+		if isDelta && !hasReceivers {
 			n := 0
 			for _, s := range stations {
 				if !s.LastHeard.Before(since) {
@@ -242,6 +260,9 @@ func listStations(cache StationCache) http.HandlerFunc {
 		out := make([]StationDTO, len(stations))
 		for i, s := range stations {
 			out[i] = stationToDTO(s, isDelta, includeWeather, digiPositions, trailCutoff)
+			if report, ok := remote[s.Callsign]; ok && !s.IsObject {
+				out[i].ReceiverDX = &report
+			}
 		}
 
 		// Sort newest-first
@@ -323,6 +344,7 @@ func stationToDTO(s stationcache.Station, isDelta, includeWeather bool, digiPos 
 		Gated:           s.Gated,
 		Channel:         s.Channel,
 		Comment:         s.Comment,
+		IGate:           s.IGate,
 	}
 
 	// Positions — delta mode returns only positions[0]

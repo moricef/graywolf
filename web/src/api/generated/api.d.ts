@@ -4005,6 +4005,27 @@ export interface components {
             uptime_ms?: number;
             warnings?: string[];
         };
+        "stationcache.IGateReport": {
+            entries?: {
+                [key: string]: string;
+            };
+            received_at?: string;
+        };
+        "stationcache.ReceiverDX": {
+            direct_stations?: number;
+            dx?: components["schemas"]["stationcache.ReceiverDXResult"];
+            updated_at?: string;
+            window_minutes?: number;
+        };
+        "stationcache.ReceiverDXResult": {
+            bearing_deg?: number;
+            callsign?: string;
+            distance_km?: number;
+            frequency_error_hz?: number;
+            received_at?: string;
+            rssi_dbm?: number;
+            snr_db?: number;
+        };
         "tnc2.PacketAddress": {
             call?: string;
             repeated?: boolean;
@@ -4099,6 +4120,8 @@ export interface components {
             gated?: boolean;
             /** @description Hops is the APRS digipeater hop count (number of H-bit entries in Path). */
             hops?: number;
+            /** @description IGate is the station's last received capability bulletin, not local measurements. */
+            igate?: components["schemas"]["stationcache.IGateReport"];
             /** @description IsObject is true for APRS objects and items; false for regular stations. */
             is_object?: boolean;
             /**
@@ -4116,6 +4139,8 @@ export interface components {
             path_positions?: number[][];
             /** @description Positions is the station's position history, newest first; static stations have exactly one entry. */
             positions?: components["schemas"]["webapi.StationPosDTO"][];
+            /** @description ReceiverDX is computed from measured RXT radio links ending at this station. */
+            receiver_dx?: components["schemas"]["stationcache.ReceiverDX"];
             /** @description Source is the originating station's callsign for an object/item — the station that created and transmitted it, which may differ from the digipeater that relayed it. Empty for regular stations, where Callsign already is the source. */
             source?: string;
             /** @description SymbolCode is the APRS symbol code character within the selected table. */

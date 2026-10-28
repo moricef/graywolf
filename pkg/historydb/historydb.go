@@ -125,13 +125,23 @@ func (d *DB) WriteEntries(entries []stationcache.CacheEntry) error {
 				INSERT INTO stations (key, callsign, is_object, source, symbol, via, path, hops, direction, channel, comment, last_heard)
 				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 				ON CONFLICT(key) DO UPDATE SET
-					callsign=excluded.callsign, source=excluded.source, symbol=excluded.symbol, via=excluded.via,
+					callsign=excluded.callsign, source=excluded.source, symbol=CASE WHEN excluded.symbol = x'0000' THEN stations.symbol ELSE excluded.symbol END, via=excluded.via,
 					path=excluded.path, hops=excluded.hops, direction=excluded.direction,
-					channel=excluded.channel, comment=excluded.comment, last_heard=excluded.last_heard`,
+					channel=excluded.channel, comment=CASE WHEN ? THEN stations.comment ELSE excluded.comment END, last_heard=excluded.last_heard`,
 				e.Key, e.Callsign, e.IsObject, e.Source, e.Symbol[:], e.Via, string(pathJSON),
-				e.Hops, e.Direction, e.Channel, e.Comment, time.Now(),
+				e.Hops, e.Direction, e.Channel, e.Comment, time.Now(), e.IGate != nil,
 			).Error; err != nil {
 				return fmt.Errorf("upsert station %s: %w", e.Key, err)
+			}
+
+			if e.IGate != nil {
+				encoded, err := json.Marshal(e.IGate)
+				if err != nil {
+					return err
+				}
+				if err := tx.Exec(`UPDATE stations SET igate_report = ? WHERE key = ? AND (igate_report = '' OR julianday(json_extract(igate_report, '$.received_at')) <= julianday(?))`, string(encoded), e.Key, e.IGate.ReceivedAt.UTC().Format(time.RFC3339Nano)).Error; err != nil {
+					return err
+				}
 			}
 
 			if e.HasPos {
@@ -266,22 +276,23 @@ func (d *DB) LoadRecent(maxAge time.Duration, trailLimit int) (map[string]*stati
 	cutoff := time.Now().Add(-maxAge)
 
 	type stationRow struct {
-		Key       string
-		Callsign  string
-		IsObject  bool
-		Source    string
-		Symbol    []byte
-		Via       string
-		Path      string
-		Hops      int
-		Direction string
-		Channel   uint32
-		Comment   string
-		LastHeard time.Time
+		Key         string
+		Callsign    string
+		IsObject    bool
+		Source      string
+		Symbol      []byte
+		Via         string
+		Path        string
+		Hops        int
+		Direction   string
+		Channel     uint32
+		Comment     string
+		LastHeard   time.Time
+		IGateReport string `gorm:"column:igate_report"`
 	}
 	var rows []stationRow
 	if err := d.db.Raw(
-		"SELECT key, callsign, is_object, source, symbol, via, path, hops, direction, channel, comment, last_heard FROM stations WHERE last_heard >= ?",
+		"SELECT key, callsign, is_object, source, symbol, via, path, hops, direction, channel, comment, last_heard, igate_report FROM stations WHERE last_heard >= ?",
 		cutoff,
 	).Scan(&rows).Error; err != nil {
 		return nil, fmt.Errorf("load stations: %w", err)
@@ -305,6 +316,9 @@ func (d *DB) LoadRecent(maxAge time.Duration, trailLimit int) (map[string]*stati
 			s.Symbol = [2]byte{r.Symbol[0], r.Symbol[1]}
 		}
 		_ = json.Unmarshal([]byte(r.Path), &s.Path)
+		if r.IGateReport != "" {
+			_ = json.Unmarshal([]byte(r.IGateReport), &s.IGate)
+		}
 
 		// Load positions
 		type posRow struct {
@@ -566,6 +580,7 @@ func bootstrap(db *gorm.DB) error {
 	// Errors are ignored (column already exists).
 	for _, m := range []string{
 		`ALTER TABLE stations ADD COLUMN source TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE stations ADD COLUMN igate_report TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE positions ADD COLUMN via TEXT NOT NULL DEFAULT 'rf'`,
 		`ALTER TABLE positions ADD COLUMN path TEXT NOT NULL DEFAULT '[]'`,
 		`ALTER TABLE positions ADD COLUMN hops INTEGER NOT NULL DEFAULT 0`,

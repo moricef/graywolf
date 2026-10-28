@@ -19,7 +19,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/chrissnell/graywolf/pkg/aprs"
 	"github.com/chrissnell/graywolf/pkg/tnc2"
 )
 
@@ -721,41 +720,10 @@ func (s *Service) processStreamRecord(ctx context.Context, event streamRecord) e
 	s.lastError = ""
 	s.recordsReceived++
 	packetText := string(event.Packet.RawTNC2)
-	if event.Reception.RXT != nil {
-		for _, hop := range event.Reception.RXT.Hops {
-			var rssi, snr float64
-			var fo, tth int
-			if hop.RSSI != nil {
-				rssi = *hop.RSSI
-			}
-			if hop.SNR != nil {
-				snr = *hop.SNR
-			}
-			if hop.FO != nil {
-				fo = *hop.FO
-			}
-			if hop.TTH != nil {
-				tth = *hop.TTH
-			}
-			s.storeLinkLocked(Hop{
-				From: hop.TX, To: hop.RX, HasData: hop.HasData,
-				RSSI: rssi, SNR: snr, FO: fo, TTH: tth,
-			}, now, packetText)
-		}
+	for _, link := range ReceptionLinks(reception, now) {
+		s.storeLinkLocked(link.Hop, link.ObservedAt, packetText)
 	}
-	if event.Reception.Local != nil && reception.Packet != nil {
-		from := reception.Packet.Source.Text
-		for _, address := range reception.Packet.Path {
-			if address.Repeated && !aprs.IsGenericPathAlias(address.Text) {
-				from = strings.TrimSuffix(address.Text, "*")
-			}
-		}
-		s.storeLinkLocked(Hop{
-			From: from, To: event.Receiver.Station, HasData: true,
-			RSSI: event.Reception.Local.RSSI, SNR: event.Reception.Local.SNR,
-			FO: int(event.Reception.Local.FO),
-		}, now, packetText)
-	}
+
 	s.lastEventID = event.EventID
 	resumeHandler := s.resumeHandler
 	state := s.resumeStateLocked()

@@ -67,7 +67,7 @@ func (c *MemCache) Update(entries []CacheEntry) {
 
 		s, exists := c.stations[e.Key]
 
-		if !e.HasPos && !exists {
+		if !e.HasPos && !exists && e.IGate == nil {
 			// Weather-only packet for unknown station — skip.
 			continue
 		}
@@ -88,6 +88,10 @@ func (c *MemCache) Update(entries []CacheEntry) {
 		}
 
 		updateMetadata(s, e, now)
+
+		if !e.HasPos {
+			continue
+		}
 
 		newPos := Position{
 			Lat:       e.Lat,
@@ -297,7 +301,12 @@ func updateMetadata(s *Station, e *CacheEntry, now time.Time) {
 	s.Direction = e.Direction
 	s.Gated = e.Gated
 	s.Channel = e.Channel
-	s.Comment = e.Comment
+	if e.IGate == nil {
+		s.Comment = e.Comment
+	}
+	if e.IGate != nil && (s.IGate == nil || !e.IGate.ReceivedAt.Before(s.IGate.ReceivedAt)) {
+		s.IGate = cloneIGate(e.IGate)
+	}
 	s.LastHeard = now
 	if isDirectRF(e.Direction, e.Hops) {
 		s.LastDirectHeard = e.Timestamp
@@ -409,6 +418,7 @@ func insertPositionByTime(positions *[]Position, p Position) {
 // and each Position) are duplicated.
 func snapshotStation(s *Station) Station {
 	cp := *s
+	cp.IGate = cloneIGate(s.IGate)
 	cp.Positions = make([]Position, len(s.Positions))
 	copy(cp.Positions, s.Positions)
 	for i := range cp.Positions {

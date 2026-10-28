@@ -2738,6 +2738,23 @@
     background: color-mix(in srgb, var(--map-overlay-bg) 88%, var(--color-accent) 12%);
     font-size: 12px;
   }
+  :global(.stn-igate) {
+    border: 1px solid color-mix(in srgb, var(--map-overlay-muted) 25%, transparent);
+    border-radius: 7px;
+    overflow: hidden;
+  }
+  :global(.stn-igate-grid) {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 5px;
+    padding: 8px;
+  }
+  :global(.stn-igate-dx) { grid-column: 1 / -1; }
+  :global(.stn-igate-time) {
+    padding: 0 8px 7px;
+    color: var(--map-overlay-muted);
+    font-size: 10px;
+  }
   :global(.stn-weather-head) {
     display: flex;
     justify-content: space-between;

@@ -69,6 +69,25 @@ overlap, the popup lists each directed link separately. **Station Labels**
 controls callsign labels independently of station symbols; clicking overlapping
 station symbols spreads them apart for selection.
 
+## Per-receiver DX on the map
+
+`rxttelemetry.ReceptionLinks` is the shared attribution helper used by the
+link overlay and passive per-receiver DX. `aprsJSONProduce` feeds measured
+pairs to `stationcache.ReceiverTracker` after updating packet positions.
+The tracker resolves both endpoint positions from the station cache, freezes
+resolved distance/bearing per observation, preserves earlier farther samples
+until expiry and applies DX / Status distance/window/ignore filters. Pending
+positions resolve on later snapshots. Direct peer counts cover 30 minutes and
+are observed counts, not inferred firmware-wide capabilities.
+
+`StationDTO.receiver_dx` adds the receiver's DX, metrics, independent timestamp
+and direct-peer count. The stations API includes receiver updates even when a
+receiver has not sent another position beacon; five-second ETags also expire
+window data, and explicit JSON null clears the client card. The popup renderer
+shares the card with pinned windows. All computation remains passive, with
+no remote APRS transmission or attribution to the Graywolf host's position.
+Receiver windows are in memory; legacy `/rxt.json` polling is overlay-only.
+
 ## Versioned NDJSON stream
 
 The endpoint emits one JSON object per line. Graywolf accepts `hello` control

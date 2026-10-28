@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"time"
 
 	"github.com/chrissnell/graywolf/pkg/app/ingress"
 	"github.com/chrissnell/graywolf/pkg/aprs"
@@ -25,6 +26,12 @@ func (a *App) aprsJSONProduce(ctx context.Context, reception rxttelemetry.RawRec
 	}
 	if a.plog == nil {
 		return fmt.Errorf("APRS JSON packet log is unavailable")
+	}
+
+	// Record measured receiver links even if APRS semantics are unavailable.
+	// Resolution is deferred if one endpoint's position is not known yet.
+	if a.receiverDX != nil {
+		defer func() { now := time.Now().UTC(); a.receiverDX.Record(rxttelemetry.ReceptionLinks(reception, now), now) }()
 	}
 
 	entry := packetlog.Entry{

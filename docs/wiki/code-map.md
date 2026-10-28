@@ -472,3 +472,25 @@ transmitted data stays unacknowledged, or buffered data cannot be sent
 because the peer advertises a zero window, allowing the existing client
 supervisor to reconnect. This is not an idle receive timeout; a silent
 receive-only link remains open. Other platforms retain the existing behavior.
+
+### Remote iGate bulletins in map popups
+
+`stationcache.ExtractEntry` retains source-keyed `<IGATE,...` packets as an
+`IGateReport` (entries plus independent reception timestamp), including when a
+position has not arrived yet. `MemCache` keeps the latest report across later
+position updates and clones its map on write/read. `historydb` migrates the
+`stations.igate_report` JSON column and restores it when history persistence
+is enabled. `StationDTO.igate` carries the report through full and delta map
+responses. `map/igate-presentation.js` formats advertised counters/DX;
+`popup.js` renders the shared card for map popups and pinned station windows.
+These are remote advertised values, never the local `rfdx` measurements.
+No raw-history backfill is performed; reception of a new capability bulletin
+populates the card. A known station position is still required for a marker.
+
+Per-receiver DX from versioned JSON/RXT is tracked independently in
+`stationcache/receiver_dx.go` and fed by `app.aprsJSONProduce` using
+`rxttelemetry.ReceptionLinks` (shared with the overlay). The read-only
+`StationDTO.receiver_dx` card reports the farthest measured TX->RX link,
+its RSSI/SNR/FO and observed direct peers. The stations API refreshes receiver
+cards independently of receiver position-beacon times; explicit null clears
+expired values. See `rxt-telemetry.md` for attribution and limits.

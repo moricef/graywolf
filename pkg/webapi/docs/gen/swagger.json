@@ -12940,6 +12940,63 @@
                 }
             }
         },
+        "stationcache.IGateReport": {
+            "type": "object",
+            "properties": {
+                "entries": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "received_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "stationcache.ReceiverDX": {
+            "type": "object",
+            "properties": {
+                "direct_stations": {
+                    "type": "integer"
+                },
+                "dx": {
+                    "$ref": "#/definitions/stationcache.ReceiverDXResult"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "window_minutes": {
+                    "type": "integer"
+                }
+            }
+        },
+        "stationcache.ReceiverDXResult": {
+            "type": "object",
+            "properties": {
+                "bearing_deg": {
+                    "type": "number"
+                },
+                "callsign": {
+                    "type": "string"
+                },
+                "distance_km": {
+                    "type": "number"
+                },
+                "frequency_error_hz": {
+                    "type": "integer"
+                },
+                "received_at": {
+                    "type": "string"
+                },
+                "rssi_dbm": {
+                    "type": "number"
+                },
+                "snr_db": {
+                    "type": "number"
+                }
+            }
+        },
         "tnc2.PacketAddress": {
             "type": "object",
             "properties": {
@@ -13215,6 +13272,14 @@
                     "description": "Hops is the APRS digipeater hop count (number of H-bit entries in Path).",
                     "type": "integer"
                 },
+                "igate": {
+                    "description": "IGate is the station's last received capability bulletin, not local measurements.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/stationcache.IGateReport"
+                        }
+                    ]
+                },
                 "is_object": {
                     "description": "IsObject is true for APRS objects and items; false for regular stations.",
                     "type": "boolean"
@@ -13250,6 +13315,14 @@
                     "items": {
                         "$ref": "#/definitions/webapi.StationPosDTO"
                     }
+                },
+                "receiver_dx": {
+                    "description": "ReceiverDX is computed from measured RXT radio links ending at this station.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/stationcache.ReceiverDX"
+                        }
+                    ]
                 },
                 "source": {
                     "description": "Source is the originating station's callsign for an object/item — the station that created and transmitted it, which may differ from the digipeater that relayed it. Empty for regular stations, where Callsign already is the source.",

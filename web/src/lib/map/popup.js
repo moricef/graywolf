@@ -14,6 +14,7 @@ import {
   formatWeatherRows,
   formatWindDirection,
 } from './popup-helpers.js';
+import { igateRows, receiverDXRows } from './igate-presentation.js';
 import { rfReachableDespiteNonRfLatest } from './rf-only-core.js';
 import { unitsState } from '../settings/units-store.svelte.js';
 import { formatSpeed, formatAltitude } from '../settings/units.js';
@@ -113,6 +114,33 @@ export function renderStationPopupHTML(
       html += `<div class="stn-weather-metric"><span class="stn-weather-label">${esc(label)}</span><span class="stn-weather-val">${esc(val)}</span></div>`;
     }
     html += `</div></div></section>`;
+  }
+
+  const receiverRows = s.is_object ? [] : receiverDXRows(s.receiver_dx);
+  if (receiverRows.length) {
+    const report = s.receiver_dx;
+    const stamp = report.dx?.received_at || report.updated_at;
+    const received = new Date(stamp).toLocaleString();
+    html += `<div class="stn-sep"></div><section class="stn-igate" aria-label="DX calculated from this receiver's RXT measurements">`;
+    html += `<div class="stn-weather-head"><span>Receiver DX · RXT</span><span>${esc(timeAgo(stamp))}</span></div><div class="stn-igate-grid">`;
+    for (const [label, value] of receiverRows) {
+      html += `<div class="stn-weather-metric${label === 'DX' ? ' stn-igate-dx' : ''}"><span class="stn-weather-label">${esc(label)}</span><span class="stn-weather-val">${esc(value)}</span></div>`;
+    }
+    html += `</div><div class="stn-igate-time">${esc(String(report.window_minutes))} min window · ${esc(received)}</div></section>`;
+  }
+
+  const reportRows = s.is_object ? [] : igateRows(s.igate);
+  if (reportRows.length) {
+    const stamp = s.igate.received_at;
+    const date = new Date(stamp);
+    const received = Number.isNaN(date.getTime()) ? '' : date.toLocaleString();
+    html += `<div class="stn-sep"></div><section class="stn-igate" aria-label="Reported iGate statistics">`;
+    html += `<div class="stn-weather-head"><span>iGate report</span><span title="${esc(received)}">${esc(timeAgo(stamp))}</span></div>`;
+    html += `<div class="stn-igate-grid">`;
+    for (const [label, value, token] of reportRows) {
+      html += `<div class="stn-weather-metric${token === 'DX' ? ' stn-igate-dx' : ''}" title="${esc(token)}: value reported by this station"><span class="stn-weather-label">${esc(label)}</span><span class="stn-weather-val">${esc(value)}</span></div>`;
+    }
+    html += `</div><div class="stn-igate-time">Received ${esc(received)}</div></section>`;
   }
 
   if (s.comment) {
