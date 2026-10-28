@@ -112,6 +112,8 @@ func (a *App) tnc2Produce(source string, packet *tnc2.TNC2Packet) {
 		decoded.Channel = int(cfg.TXChannel)
 	}
 	entry.Type = string(decoded.Type)
+	a.rfDX.Record(decoded)
+	a.handleDXQuery(decoded)
 	entry.Decoded = decoded
 	if a.stationCache != nil {
 		if entries := stationcache.ExtractEntry(decoded, source, "RX", 0); len(entries) > 0 {

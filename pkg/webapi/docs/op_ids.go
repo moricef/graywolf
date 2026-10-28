@@ -23,6 +23,15 @@
 // idiomatic in every target language. Group constants by resource.
 package docs
 
+const OpGetRFDX = "getRFDX"
+
+const (
+	OpGetDXConfig    = "getDXConfig"
+	OpUpdateDXConfig = "updateDXConfig"
+	OpSendDXReport   = "sendDXReport"
+	OpResetDXRecord  = "resetDXRecord"
+)
+
 // Channels resource — /api/channels (Phase 1 reference migration).
 const (
 	OpListChannels        = "listChannels"

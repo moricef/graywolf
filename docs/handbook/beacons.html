@@ -119,12 +119,21 @@
             </tr>
             <tr>
               <td><code>igate</code></td>
-              <td>iGate status beacon. Automatically includes iGate statistics in the comment.</td>
+              <td>Legacy position beacon type, encoded like a position report. It does not add runtime statistics automatically.</td>
             </tr>
           </tbody>
         </table>
       </div>
     </div>
+
+    <h2 id="direct-rf-dx">DX and station reports</h2>
+    <p>
+      DX detection and periodic station reports are configured in
+      <strong>DX / Status</strong>, independently of position beacons.
+      See <a href="dx-status.html">DX / Status</a> for the current DX,
+      all-time record, filters, status reports and iGate capability reports.
+      A report is not a beacon entry and does not transmit a station position.
+    </p>
 
     <h2>Weather sources</h2>
 

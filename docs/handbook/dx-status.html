@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>DX / Status — Graywolf Handbook</title><link rel="stylesheet" href="handbook.css" /></head>
+<body><header class="site-header"><div class="site-header-inner"><a class="site-logo" href="index.html">graywolf <span class="handbook-label">handbook</span></a></div></header>
+<div class="layout"><aside class="sidebar"><nav><a href="index.html">Introduction</a><a href="beacons.html">Position beacons</a><a href="igate.html">iGate</a><a href="dx-status.html">DX / Status</a><a href="gps.html">Station position</a></nav></aside>
+<main class="content">
+  <h1>DX / Status</h1>
+  <p class="subtitle">Direct RF DX detection, all-time records and independent station reports</p>
+  <p>Open <strong>DX / Status</strong> in the sidebar. DX detection does not require APRS-IS, and reports do not require a beacon entry. Existing position beacons keep their own schedule.</p>
+  <h2>DX detection</h2>
+  <p>A qualifying packet must contain the source station's position, be received via RF, have no used relay hop, and not be an Internet or third-party packet, object, item, or 0,0 position. Distance and initial true bearing are measured from the configured station position at reception. Configure GPS, a fixed GPS source or an enabled fixed-position beacon first. Positions are never borrowed from APRS-IS.</p>
+  <ul>
+    <li><strong>Minimum distance:</strong> ignore DX receptions at or below this distance, in kilometres.</li>
+    <li><strong>Window:</strong> retain qualifying receptions for this many minutes (default 60). A mobile moving closer does not erase an earlier farther reception before its window expires. Equal distances select the newest reception.</li>
+    <li><strong>Ignore stations:</strong> exact callsign-SSID values separated by spaces or commas. Ignoring a station for DX does not remove it from RF counters.</li>
+    <li><strong>Max ever:</strong> the largest distance recorded per channel, saved across restarts. Clear max ever starts a new record history; it does not clear current window receptions.</li>
+  </ul>
+  <p>Modem, KISS TNC and channel-bound Native TNC2 receptions qualify. Unassigned TNC2 and RXT telemetry streams are excluded. Remote receivers must represent the configured station location for distances to be meaningful.</p>
+  <h2>Station reports</h2>
+  <p>There are two independent opt-in reports, both with a default interval of <strong>60 minutes</strong>. Select their receive channel, destination (RF, APRS-IS or both), RF path and whether to include DX, then save. Neither report transmits a position.</p>
+  <table><thead><tr><th>Report</th><th>Example information field</th></tr></thead><tbody>
+    <tr><td>Status</td><td><code>&gt;Graywolf DX=F5ZQB-10(139km@136deg)</code></td></tr>
+    <tr><td>iGate capabilities</td><td><code>&lt;IGATE,MSG_CNT=26,LOC_CNT=5,DIR_CNT=5,RF_CNT=29,DX=F5ZQB-10(139km@136deg)</code></td></tr>
+  </tbody></table>
+  <p>When no DX qualifies, capability reports still carry counters, and status reports carry their configured text. An empty status with no DX is skipped. “Send status now” and “Send capabilities now” use the saved settings and normal TX authorization/dedup rules. APRS-IS output requires the iGate to be connected; saving these settings does not enable it automatically.</p>
+  <h2>Immediate notifications</h2>
+  <p>Optional immediate DX status notifications require status reports and Include DX. The trigger distance controls when a new DX may notify. Repeated notifications for the same station obey the minimum interval; a different, farther station can trigger immediately. Window expiry alone never transmits a report. Notifications are disabled by default; no DX-cluster packet generation is implemented.</p>
+  <h2>Queries</h2>
+  <p>A directed, unnumbered <code>?DX</code> message to the configured station callsign returns an unnumbered one-shot DX reply. A directed <code>?IGATE?</code> returns capabilities. Replies follow the incoming transport: RF queries reply on their receive channel, APRS-IS queries reply on APRS-IS. Queries do not create ACKs or reliable-message retries. Replies are throttled to one per sender per 30 seconds; generic broadcast queries are not implemented.</p>
+  <h2>Counter meanings</h2>
+  <table><thead><tr><th>Token</th><th>Meaning</th></tr></thead><tbody>
+    <tr><td>MSG_CNT</td><td>APRS-IS message packets successfully handed to this channel's RF output since process startup. Queue admission and failed sends do not count. A successful handoff is not confirmation of RF delivery.</td></tr>
+    <tr><td>LOC_CNT</td><td>Distinct source callsigns heard directly within 30 minutes, following Graywolf's current direct-only message reachability rule. Equals DIR_CNT. APRSISCE/32 allows relayed local stations under its own policy; this counter can therefore differ.</td></tr>
+    <tr><td>DIR_CNT</td><td>Distinct source callsigns heard directly within 30 minutes, including positionless packets. A relayed copy does not erase a still-recent direct reception.</td></tr>
+    <tr><td>RF_CNT</td><td>Distinct source callsigns received on RF within 30 minutes, including relayed sources. Objects and third-party packets count the outer RF source, not an object name or inner Internet source.</td></tr>
+  </tbody></table>
+  <p>Heard counts and the current DX window restart empty. Max-ever records and settings persist. The initial local test build's dedicated DX beacon entries are transferred to the station-report settings once and retained disabled; new DX beacon entries are rejected.</p>
+  <h2>Reference and limits</h2>
+  <p>The detection/settings model and distinction between status and capabilities follow the <a href="https://aprsisce.wikidot.com/en-contexthelp">APRSISCE/32 context help</a>. The capability format is defined in <a href="https://www.aprs.org/doc/APRS101.PDF">APRS101 chapter 15</a>. Graywolf implements the features described here; it is not a complete APRSISCE/32 clone and does not claim equivalent PinPoint behavior.</p>
+</main></div></body></html>

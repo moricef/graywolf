@@ -84,6 +84,39 @@ The TX-funnel rule lives in [invariant 16](invariants.md).
 
 ## Go service: APRS features
 
+DX and station reports: `pkg/rfdx/` owns direct-RF detection, heard counters,
+independent status/capability timers and report encoders. `pkg/app/rxfanout.go`
+and channel-bound `tnc2.go` record physical RX only; mixed station-cache and
+APRS-IS positions never supply DX. Configurable distance/ignore/window filters
+apply to positions, not heard counts. A newer closer position does not erase an
+older farther observation before its window expires. Distances are measured at
+reception; ties choose the newer observation. `DXSettings` and per-channel
+`DXRecord` are AutoMigrated (`pkg/configstore/dx.go`); records survive restarts.
+Old local-test `dx` beacon rows seed the settings once and are retained disabled;
+`loadBeaconConfigs` always skips them. New `dx` beacon writes are rejected.
+`pkg/app/dx.go` owns the report worker, bounded query-reply queue, record writes
+and reloads; no user beacon row is created. It calls `Scheduler.SendReport`
+through existing RF/TNC2/APRS-IS gates using runtime custom-info configurations.
+`>` status packets and `<IGATE,...` capability packets have separate timers,
+60 minutes by default, and independent opt-ins. Optional immediate status
+notifications use distance thresholds/minimum intervals; expiration emits nothing.
+Directed unnumbered `?DX` and `?IGATE?` messages to the station callsign get
+source-aware, unnumbered replies, throttled per sender for 30 seconds. Cluster
+packets and generic broadcast queries are not implemented.
+`GET /api/rf/dx` returns current DX, max-ever and 30-minute heard counts;
+`GET/PUT /api/dx/config`, `POST /api/dx/reports/{kind}` and
+`DELETE /api/dx/record` are registered by `pkg/webapi/dx.go` on the authenticated
+API mux. `DxStatus.svelte` (`#/dx`, sidebar DX / Status) replaces the former iGate
+panel and beacon type. `Igate.svelte` links there. Settings do not require APRS-IS
+to be enabled; report transmission still requires its configured backend.
+MSG_CNT increments only in the successful governor TX hook for `igate/is2rf`
+third-party messages (`pkg/app/rf_stats.go`), not queue admission or failed sends.
+LOC_CNT equals DIR_CNT under Graywolf's current direct-only reachability rule.
+All heard counters restart empty; max-ever records persist. Unassigned TNC2 and
+RXT telemetry are excluded. `CreateBeacon` preserves explicit disabled flags
+atomically despite GORM bool defaults; POST omission still defaults to enabled.
+Operator guide: [`../handbook/dx-status.html`](../handbook/dx-status.html).
+
 | Package | Purpose | Handbook |
 |---|---|---|
 | `weather` / `weather/davis` | Hardware-independent `Observation`, common APRS complete-weather encoder, WxNow.txt adapter, native Davis Vantage driver, and native Peet Bros Ultimeter serial reader. `davis/protocol.go` ports the 99-byte LOOP/LOOP2 decoder, CRC-16, sentinels and conversions; `davis/serial.go` owns the wake → `LPS 3 2` → ACK → alternating-packet exchange. `weather/peet.go` reads and validates continuous `!!` Data Logger or `$ULTW` Packet Mode records at 2400 8N1. | [`../handbook/beacons.html`](../handbook/beacons.html) |

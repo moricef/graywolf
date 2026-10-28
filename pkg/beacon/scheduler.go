@@ -140,6 +140,12 @@ func (s *Scheduler) SetISSink(sink ISSink) {
 	s.mu.Unlock()
 }
 
+// SendReport routes an already configured station report without registering
+// a user beacon. It retains the same TX authorization and dedup rules.
+func (s *Scheduler) SendReport(ctx context.Context, c Config) error {
+	return s.sendBeaconWith(ctx, c, false)
+}
+
 // SetBeacons replaces the beacon list. If Run is active, call Reload
 // instead to also tell the scheduler to pick up the new config.
 func (s *Scheduler) SetBeacons(b []Config) {

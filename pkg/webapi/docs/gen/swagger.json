@@ -51,6 +51,10 @@
             "description": "Igate configuration, filters, status, and simulation."
         },
         {
+            "name": "dx",
+            "description": "Direct RF DX detection, records and station status/capability reports."
+        },
+        {
             "name": "station",
             "description": "Station-wide callsign (APRS-IS login, messaging identity, default for beacons and digipeater)."
         },
@@ -3345,6 +3349,133 @@
                         "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/webtypes.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/dx/config": {
+            "get": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dx"
+                ],
+                "summary": "Get DX and station report configuration",
+                "operationId": "getDXConfig",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/rfdx.Config"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dx"
+                ],
+                "summary": "Configure DX detection and periodic station reports",
+                "operationId": "updateDXConfig",
+                "parameters": [
+                    {
+                        "description": "DX and station report settings",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/rfdx.Config"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/rfdx.Config"
+                        }
+                    }
+                }
+            }
+        },
+        "/dx/record": {
+            "delete": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dx"
+                ],
+                "summary": "Clear the all-time DX record",
+                "operationId": "resetDXRecord",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "boolean"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/dx/reports/{kind}": {
+            "post": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dx"
+                ],
+                "summary": "Send a station report now",
+                "operationId": "sendDXReport",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "status or capabilities",
+                        "name": "kind",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "boolean"
+                            }
                         }
                     }
                 }
@@ -7795,6 +7926,31 @@
                         "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/webtypes.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/rf/dx": {
+            "get": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "igate"
+                ],
+                "summary": "Get iGate statistics and direct RF DX",
+                "operationId": "getRFDX",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/rfdx.Snapshot"
                         }
                     }
                 }
@@ -12499,6 +12655,128 @@
                 "used": {
                     "description": "Used is true when another driver has claimed this line (e.g. SPI, I2C,\nUART, or a previously-running graywolf process).",
                     "type": "boolean"
+                }
+            }
+        },
+        "rfdx.ChannelStatistics": {
+            "type": "object",
+            "properties": {
+                "channel": {
+                    "type": "integer"
+                },
+                "dir_cnt": {
+                    "type": "integer"
+                },
+                "loc_cnt": {
+                    "type": "integer"
+                },
+                "msg_cnt": {
+                    "type": "integer"
+                },
+                "rf_cnt": {
+                    "type": "integer"
+                }
+            }
+        },
+        "rfdx.Config": {
+            "type": "object",
+            "properties": {
+                "capabilities_enabled": {
+                    "type": "boolean"
+                },
+                "capabilities_interval_minutes": {
+                    "type": "integer"
+                },
+                "channel": {
+                    "type": "integer"
+                },
+                "ignored_calls": {
+                    "type": "string"
+                },
+                "include_dx": {
+                    "type": "boolean"
+                },
+                "min_distance_km": {
+                    "type": "number"
+                },
+                "min_interval_minutes": {
+                    "type": "integer"
+                },
+                "min_trigger_km": {
+                    "type": "number"
+                },
+                "notify_enabled": {
+                    "type": "boolean"
+                },
+                "path": {
+                    "type": "string"
+                },
+                "send_path": {
+                    "type": "string"
+                },
+                "status_enabled": {
+                    "type": "boolean"
+                },
+                "status_interval_minutes": {
+                    "type": "integer"
+                },
+                "status_text": {
+                    "type": "string"
+                },
+                "window_minutes": {
+                    "type": "integer"
+                }
+            }
+        },
+        "rfdx.Result": {
+            "type": "object",
+            "properties": {
+                "bearing_deg": {
+                    "type": "number"
+                },
+                "callsign": {
+                    "type": "string"
+                },
+                "channel": {
+                    "type": "integer"
+                },
+                "distance_km": {
+                    "type": "number"
+                },
+                "received_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "rfdx.Snapshot": {
+            "type": "object",
+            "properties": {
+                "channels": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/rfdx.Result"
+                    }
+                },
+                "heard_window_seconds": {
+                    "type": "integer"
+                },
+                "max_ever": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/rfdx.Result"
+                    }
+                },
+                "position_available": {
+                    "type": "boolean"
+                },
+                "statistics": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/rfdx.ChannelStatistics"
+                    }
+                },
+                "window_seconds": {
+                    "type": "integer"
                 }
             }
         },

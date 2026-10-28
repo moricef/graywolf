@@ -43,6 +43,7 @@ import (
 	"github.com/chrissnell/graywolf/pkg/platform"
 	"github.com/chrissnell/graywolf/pkg/pttdevice"
 	"github.com/chrissnell/graywolf/pkg/remoteactions"
+	"github.com/chrissnell/graywolf/pkg/rfdx"
 	"github.com/chrissnell/graywolf/pkg/rxttelemetry"
 	"github.com/chrissnell/graywolf/pkg/stationcache"
 	"github.com/chrissnell/graywolf/pkg/tnc2"
@@ -508,6 +509,7 @@ func (a *App) wireServicesInner(ctx context.Context) error {
 		}
 
 		plog.Record(e)
+		a.recordIGateMessageTX(channel, pkt, source)
 
 		// Feed our own beacon position into the station cache.
 		if source.Kind == "beacon" && pkt != nil {
@@ -604,6 +606,19 @@ func (a *App) wireServicesInner(ctx context.Context) error {
 	a.gpsCache = gps.NewMemCache()
 	a.satelliteCache = a.gpsCache
 	a.stationPos = gps.NewStationPos(a.gpsCache)
+	a.rfDX = rfdx.New(a.stationPos)
+	a.dxWake = make(chan struct{}, 1)
+	a.dxReplies = make(chan dxReply, 32)
+	dxCfg, err := a.store.GetDXSettings(ctx)
+	if err != nil {
+		return fmt.Errorf("load DX settings: %w", err)
+	}
+	a.configureDX(dxCfg)
+	records, err := a.store.LoadDXRecords(ctx)
+	if err != nil {
+		return fmt.Errorf("load DX records: %w", err)
+	}
+	a.rfDX.RestoreRecords(records)
 	a.gpsReload = make(chan struct{}, 1)
 	a.gpsMgr = newGPSManager(a, a.store, a.gpsCache, a.logger, a.metrics)
 
@@ -794,6 +809,7 @@ func (a *App) wireServicesInner(ctx context.Context) error {
 		a.bridgeComponent(),
 		a.agwComponent(),
 		a.igateComponent(),
+		a.dxComponent(),
 		// messages runs after igate (sender needs IGateLineSender) and
 		// after the bridge fan-out is spun up (Router is already in the
 		// outputs slice). It runs BEFORE http so handlers see a fully
@@ -1036,6 +1052,7 @@ func (a *App) onIGateIsRxPacket(pkt *aprs.DecodedAPRSPacket, line string) {
 	if pkt == nil {
 		return
 	}
+	a.handleDXQuery(pkt)
 	a.plog.Record(packetlog.Entry{
 		Channel:   uint32(pkt.Channel),
 		Direction: packetlog.DirIS,
@@ -1611,6 +1628,8 @@ func (a *App) wireHTTP(ctx context.Context) error {
 	webapi.RegisterPackets(apiSrv, apiMux, a.plog, a.stationPos)
 	webapi.RegisterStations(apiSrv, apiMux, a.stationCache)
 	webapi.RegisterHeatmap(apiSrv, apiMux, a.stationCache)
+	webapi.RegisterRFDX(apiSrv, apiMux, a.rfDX)
+	webapi.RegisterDX(apiSrv, apiMux, a.configureDX, a.sendDXReport, a.clearDXRecords)
 	webapi.RegisterPosition(apiSrv, apiMux, a.stationPos)
 	webapi.RegisterRXT(apiSrv, apiMux, a.rxtTelemetry, a.stationCache, a.store)
 	webapi.RegisterTNC2TX(apiSrv, apiMux, a.submitTNC2TX)
@@ -2688,6 +2707,9 @@ func (a *App) loadBeaconConfigs(ctx context.Context, source string) []beacon.Con
 	stationCall, _ := a.store.ResolveStationCallsign(ctx)
 	var configs []beacon.Config
 	for _, b := range stored {
+		if b.Type == "dx" {
+			continue
+		} // old test-build rows are migrated to DX / Status
 		bc, err := beaconConfigFromStoreWithMode(b, smart, stationCall, (tnc2MessageRF{app: a}).Enabled(b.Channel))
 		if err != nil {
 			a.logger.Warn("beacon config", "id", b.ID, "err", err)

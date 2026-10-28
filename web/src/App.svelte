@@ -21,6 +21,7 @@
   import Kiss from './routes/Kiss.svelte';
   import Agw from './routes/Agw.svelte';
   import Igate from './routes/Igate.svelte';
+  import DxStatus from './routes/DxStatus.svelte';
   import Digipeater from './routes/Digipeater.svelte';
   import Beacons from './routes/Beacons.svelte';
   import Callsign from './routes/Callsign.svelte';
@@ -58,6 +59,7 @@
     '/kiss': Kiss,
     '/agw': Agw,
     '/igate': Igate,
+    '/dx': DxStatus,
     '/digipeater': Digipeater,
     '/beacons': Beacons,
     '/callsign': Callsign,

@@ -699,6 +699,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/dx/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get DX and station report configuration */
+        get: operations["getDXConfig"];
+        /** Configure DX detection and periodic station reports */
+        put: operations["updateDXConfig"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dx/record": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Clear the all-time DX record */
+        delete: operations["resetDXRecord"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dx/reports/{kind}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Send a station report now */
+        post: operations["sendDXReport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/fixed-points": {
         parameters: {
             query?: never;
@@ -1874,6 +1926,23 @@ export interface paths {
         put?: never;
         /** Generate one-shot TOTP code for a remote credential */
         post: operations["generateRemoteOTPCode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/rf/dx": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get iGate statistics and direct RF DX */
+        get: operations["getRFDX"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -3846,6 +3915,45 @@ export interface components {
              *     UART, or a previously-running graywolf process).
              */
             used?: boolean;
+        };
+        "rfdx.ChannelStatistics": {
+            channel?: number;
+            dir_cnt?: number;
+            loc_cnt?: number;
+            msg_cnt?: number;
+            rf_cnt?: number;
+        };
+        "rfdx.Config": {
+            capabilities_enabled?: boolean;
+            capabilities_interval_minutes?: number;
+            channel?: number;
+            ignored_calls?: string;
+            include_dx?: boolean;
+            min_distance_km?: number;
+            min_interval_minutes?: number;
+            min_trigger_km?: number;
+            notify_enabled?: boolean;
+            path?: string;
+            send_path?: string;
+            status_enabled?: boolean;
+            status_interval_minutes?: number;
+            status_text?: string;
+            window_minutes?: number;
+        };
+        "rfdx.Result": {
+            bearing_deg?: number;
+            callsign?: string;
+            channel?: number;
+            distance_km?: number;
+            received_at?: string;
+        };
+        "rfdx.Snapshot": {
+            channels?: components["schemas"]["rfdx.Result"][];
+            heard_window_seconds?: number;
+            max_ever?: components["schemas"]["rfdx.Result"][];
+            position_available?: boolean;
+            statistics?: components["schemas"]["rfdx.ChannelStatistics"][];
+            window_seconds?: number;
         };
         "rxttelemetry.LocalMetrics": {
             frequency_error_hz?: number;
@@ -7174,6 +7282,98 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["webtypes.ErrorResponse"];
+                };
+            };
+        };
+    };
+    getDXConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["rfdx.Config"];
+                };
+            };
+        };
+    };
+    updateDXConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description DX and station report settings */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["rfdx.Config"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["rfdx.Config"];
+                };
+            };
+        };
+    };
+    resetDXRecord: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: boolean;
+                    };
+                };
+            };
+        };
+    };
+    sendDXReport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description status or capabilities */
+                kind: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: boolean;
+                    };
                 };
             };
         };
@@ -11174,6 +11374,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["webtypes.ErrorResponse"];
+                };
+            };
+        };
+    };
+    getRFDX: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["rfdx.Snapshot"];
                 };
             };
         };

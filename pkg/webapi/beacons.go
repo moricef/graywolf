@@ -18,7 +18,12 @@ import (
 // The generic CRUD helper validates before it knows the configured channel.
 // Defer only address validation until the handler can distinguish the direct
 // textual TNC2 channel from classic AX.25/KISS channels.
-type beaconRequest struct{ dto.BeaconRequest }
+type beaconRequest struct {
+	dto.BeaconRequest
+	// Distinguish an explicit false from omission at creation. Preserve the
+	// legacy enabled-by-default POST behavior while honoring a disabled form.
+	Enabled *bool `json:"enabled"`
+}
 
 func (r beaconRequest) Validate() error {
 	base := r.BeaconRequest
@@ -114,6 +119,7 @@ func (s *Server) createBeacon(w http.ResponseWriter, r *http.Request) {
 	handleCreate[beaconRequest](s, w, r, "create beacon",
 		func(ctx context.Context, wrapped beaconRequest) (configstore.Beacon, error) {
 			req := wrapped.BeaconRequest
+			req.Enabled = wrapped.Enabled == nil || *wrapped.Enabled
 			if err := s.validateBeaconAddresses(req); err != nil {
 				return configstore.Beacon{}, validationError(err)
 			}
@@ -182,6 +188,9 @@ func (s *Server) updateBeacon(w http.ResponseWriter, r *http.Request) {
 	handleUpdate[beaconRequest](s, w, r, "update beacon", id,
 		func(ctx context.Context, id uint32, wrapped beaconRequest) (configstore.Beacon, error) {
 			req := wrapped.BeaconRequest
+			if wrapped.Enabled != nil {
+				req.Enabled = *wrapped.Enabled
+			}
 			if err := dto.ValidateChannelRef(ctx, s.store, "channel", req.Channel); err != nil {
 				return configstore.Beacon{}, validationError(err)
 			}

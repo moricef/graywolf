@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/chrissnell/graywolf/pkg/actions"
 	"github.com/chrissnell/graywolf/pkg/agw"
@@ -26,6 +27,7 @@ import (
 	"github.com/chrissnell/graywolf/pkg/modembridge"
 	"github.com/chrissnell/graywolf/pkg/packetlog"
 	"github.com/chrissnell/graywolf/pkg/remoteactions"
+	"github.com/chrissnell/graywolf/pkg/rfdx"
 	"github.com/chrissnell/graywolf/pkg/rxttelemetry"
 	"github.com/chrissnell/graywolf/pkg/stationcache"
 	"github.com/chrissnell/graywolf/pkg/tnc2link"
@@ -113,6 +115,15 @@ type App struct {
 	// without touching gpsCache.
 	satelliteCache gps.SatelliteCache
 	stationPos     *gps.StationPos
+	rfDX           *rfdx.Tracker
+	dxMu           sync.RWMutex
+	dxConfig       rfdx.Config
+	dxWake         chan struct{}
+	dxWG           sync.WaitGroup
+	dxCancel       context.CancelFunc
+	dxReplies      chan dxReply
+	dxQueryMu      sync.Mutex
+	dxQueryLast    map[string]time.Time
 	gpsMgr         *gpsManager
 	appAndroidExt  // platformClient lives here on Android, empty on desktop
 	beaconSched    *beacon.Scheduler

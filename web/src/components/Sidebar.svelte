@@ -41,6 +41,7 @@
     { path: '/beacons', label: 'Beacons' },
     { path: '/channels', label: 'Channels' },
     { path: '/digipeater', label: 'Digipeater' },
+    { path: '/dx', label: 'DX / Status' },
     { path: '/preferences', label: 'General' },
     { path: '/gps', label: 'GPS' },
     { path: '/igate', label: 'iGate' },

@@ -231,6 +231,8 @@ func (a *App) dispatchRxFrame(ctx context.Context, item rxFanoutItem, aprsSubmit
 		if pkt, err := aprs.Parse(f); err == nil && pkt != nil {
 			pkt.Channel = int(rf.Channel)
 			pkt.Direction = aprs.DirectionRF
+			a.rfDX.Record(pkt)
+			a.handleDXQuery(pkt)
 			e.Type = string(pkt.Type)
 			e.Decoded = pkt
 			// Actions classifier first: if this is a "@@"-prefixed

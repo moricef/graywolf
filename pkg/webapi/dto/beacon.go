@@ -80,6 +80,9 @@ type BeaconRequest struct {
 // constraints: ambiguity must be 0..4; only uncompressed and mic_e
 // carry ambiguity bytes, so compressed must keep ambiguity at zero.
 func (r BeaconRequest) Validate() error {
+	if r.Type == "dx" {
+		return fmt.Errorf("DX is configured in DX / Status, not as a position beacon")
+	}
 	switch r.SendPath {
 	case "", "rf", "both", "is_only":
 		// "" normalizes to rf in normalizedSendPath

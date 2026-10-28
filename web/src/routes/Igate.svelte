@@ -675,6 +675,8 @@
 
 <PageHeader title="iGate" subtitle="Internet gateway configuration" />
 
+<p>DX detection, station status reports and periodic iGate capabilities are configured in <a href="#/dx">DX / Status</a>.</p>
+
 <div class="status-row" data-testid="igate-status">
   <Badge variant={statusVariant}>{statusLabel}</Badge>
   {#if statusDetail}

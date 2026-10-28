@@ -533,7 +533,7 @@
       modalOpen = false;
       beacons = await api.get('/beacons') || [];
       refreshChannels();
-      if (data.send_path === 'is_only') {
+      if (data.enabled && data.send_path === 'is_only') {
         await ensureIgateEnabled();
       }
       if (isTrackerSave) {

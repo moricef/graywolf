@@ -89,6 +89,21 @@
       </div>
     </div>
 
+    <h2>iGate statistics and direct RF DX</h2>
+    <p>
+      The <strong>DX / Status</strong> page displays MSG_CNT, LOC_CNT, DIR_CNT and RF_CNT per
+      channel, plus the farthest positioned station heard directly on
+      each channel over its configured window, with distance, true bearing and receipt
+      time. It operates independently of the APRS-IS connection. Relayed packets,
+      Internet traffic and station positions obtained only from APRS-IS do not
+      qualify. Configure a local station position through GPS or an enabled
+      fixed-position beacon. Optional publication is configured in the
+      <a href="dx-status.html">DX / Status settings</a>, defaulting to one report per hour.
+      Station counts use a 30-minute window; MSG_CNT accumulates successful
+      handoffs of APRS-IS messages to RF output since startup. With Graywolf&rsquo;s
+      current direct-only message reachability rule, LOC_CNT equals DIR_CNT.
+    </p>
+
     <h2>RF &rarr; APRS-IS (Connection)</h2>
 
     <div class="screenshot">

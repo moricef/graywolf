@@ -2867,6 +2867,86 @@ definitions:
           UART, or a previously-running graywolf process).
         type: boolean
     type: object
+  rfdx.ChannelStatistics:
+    properties:
+      channel:
+        type: integer
+      dir_cnt:
+        type: integer
+      loc_cnt:
+        type: integer
+      msg_cnt:
+        type: integer
+      rf_cnt:
+        type: integer
+    type: object
+  rfdx.Config:
+    properties:
+      capabilities_enabled:
+        type: boolean
+      capabilities_interval_minutes:
+        type: integer
+      channel:
+        type: integer
+      ignored_calls:
+        type: string
+      include_dx:
+        type: boolean
+      min_distance_km:
+        type: number
+      min_interval_minutes:
+        type: integer
+      min_trigger_km:
+        type: number
+      notify_enabled:
+        type: boolean
+      path:
+        type: string
+      send_path:
+        type: string
+      status_enabled:
+        type: boolean
+      status_interval_minutes:
+        type: integer
+      status_text:
+        type: string
+      window_minutes:
+        type: integer
+    type: object
+  rfdx.Result:
+    properties:
+      bearing_deg:
+        type: number
+      callsign:
+        type: string
+      channel:
+        type: integer
+      distance_km:
+        type: number
+      received_at:
+        type: string
+    type: object
+  rfdx.Snapshot:
+    properties:
+      channels:
+        items:
+          $ref: '#/definitions/rfdx.Result'
+        type: array
+      heard_window_seconds:
+        type: integer
+      max_ever:
+        items:
+          $ref: '#/definitions/rfdx.Result'
+        type: array
+      position_available:
+        type: boolean
+      statistics:
+        items:
+          $ref: '#/definitions/rfdx.ChannelStatistics'
+        type: array
+      window_seconds:
+        type: integer
+    type: object
   rxttelemetry.LocalMetrics:
     properties:
       frequency_error_hz:
@@ -3570,6 +3650,8 @@ tags:
     description: Digipeater configuration and rules.
   - name: igate
     description: Igate configuration, filters, status, and simulation.
+  - name: dx
+    description: Direct RF DX detection, records and station status/capability reports.
   - name: station
     description: Station-wide callsign (APRS-IS login, messaging identity, default for beacons and digipeater).
   - name: gps
@@ -5650,6 +5732,84 @@ paths:
       summary: Replace a manual direction-finding observation
       tags:
         - direction-findings
+  /dx/config:
+    get:
+      operationId: getDXConfig
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/rfdx.Config'
+      security:
+        - CookieAuth: []
+      summary: Get DX and station report configuration
+      tags:
+        - dx
+    put:
+      consumes:
+        - application/json
+      operationId: updateDXConfig
+      parameters:
+        - description: DX and station report settings
+          in: body
+          name: body
+          required: true
+          schema:
+            $ref: '#/definitions/rfdx.Config'
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/rfdx.Config'
+      security:
+        - CookieAuth: []
+      summary: Configure DX detection and periodic station reports
+      tags:
+        - dx
+  /dx/record:
+    delete:
+      operationId: resetDXRecord
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: boolean
+            type: object
+      security:
+        - CookieAuth: []
+      summary: Clear the all-time DX record
+      tags:
+        - dx
+  /dx/reports/{kind}:
+    post:
+      operationId: sendDXReport
+      parameters:
+        - description: status or capabilities
+          in: path
+          name: kind
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: boolean
+            type: object
+      security:
+        - CookieAuth: []
+      summary: Send a station report now
+      tags:
+        - dx
   /fixed-points:
     get:
       operationId: listFixedPoints
@@ -8469,6 +8629,21 @@ paths:
       summary: Generate one-shot TOTP code for a remote credential
       tags:
         - remote-actions
+  /rf/dx:
+    get:
+      operationId: getRFDX
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/rfdx.Snapshot'
+      security:
+        - CookieAuth: []
+      summary: Get iGate statistics and direct RF DX
+      tags:
+        - igate
   /smart-beacon:
     get:
       description: |-

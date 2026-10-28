@@ -171,6 +171,8 @@ func (s *Store) Migrate() error {
 		&UpdatesConfig{},
 		&RXTConfig{},
 		&TNC2Config{},
+		&DXSettings{},
+		&DXRecord{},
 		&UnitsConfig{},
 		&ThemeConfig{},
 		&MapsConfig{},
@@ -186,6 +188,9 @@ func (s *Store) Migrate() error {
 		return err
 	}
 	_ = s.db.Exec("PRAGMA foreign_keys = ON").Error
+	if err := s.seedDXSettings(context.Background()); err != nil {
+		return fmt.Errorf("migrate DX reports: %w", err)
+	}
 	if err := s.runMigrations(postAutoMigrate); err != nil {
 		return err
 	}
@@ -1365,7 +1370,20 @@ func (s *Store) GetBeacon(ctx context.Context, id uint32) (*Beacon, error) {
 }
 
 func (s *Store) CreateBeacon(ctx context.Context, b *Beacon) error {
-	return s.db.WithContext(ctx).Create(b).Error
+	// GORM replaces a false bool with the column's default:true on Create.
+	// Preserve the operator's disabled selection in the same transaction so
+	// no scheduler can observe a temporarily enabled beacon.
+	enabled := b.Enabled
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(b).Error; err != nil {
+			return err
+		}
+		if !enabled {
+			b.Enabled = false
+			return tx.Model(b).UpdateColumn("enabled", false).Error
+		}
+		return nil
+	})
 }
 func (s *Store) UpdateBeacon(ctx context.Context, b *Beacon) error {
 	return s.db.WithContext(ctx).Save(b).Error
