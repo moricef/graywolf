@@ -51,7 +51,9 @@ jobs:
             arch: amd64
             platform: darwin
             use_cross: false
-          - os: macos-latest
+          # Compile Apple Silicon with the Intel runner's macOS SDK too.
+          # Hosted ARM runners can exhaust capacity before a job starts.
+          - os: macos-15-intel
             target: aarch64-apple-darwin
             arch: arm64
             platform: darwin
@@ -152,9 +154,13 @@ jobs:
           CFLAGS_armv7_unknown_linux_gnueabihf: '-idirafter /usr/include'
         run: cross build --release --target ${{ matrix.target }} --bin graywolf-modem
 
-      - name: Verify native macOS runner architecture
+      - name: Verify macOS build host and SDK
         if: matrix.platform == 'darwin'
-        run: test "$(uname -m)" = "${{ matrix.arch == 'amd64' && 'x86_64' || 'arm64' }}"
+        run: |
+          test "$(uname -m)" = "x86_64"
+          sdk_path="$(xcrun --sdk macosx --show-sdk-path)"
+          test -d "$sdk_path"
+          echo "SDKROOT=$sdk_path" >> "$GITHUB_ENV"
 
       - name: Build with cargo
         if: matrix.use_cross == false
@@ -162,6 +168,15 @@ jobs:
           GRAYWOLF_VERSION: ${{ steps.ver.outputs.version }}
           GRAYWOLF_GIT_COMMIT: ${{ steps.ver.outputs.commit }}
         run: cargo build --release --target ${{ matrix.target }} --bin graywolf-modem
+
+      - name: Verify macOS binary architecture
+        if: matrix.platform == 'darwin'
+        env:
+          EXPECTED_ARCH: ${{ matrix.arch == 'amd64' && 'x86_64' || 'arm64' }}
+        run: |
+          binary="target/${{ matrix.target }}/release/graywolf-modem"
+          file "$binary"
+          test "$(lipo -archs "$binary")" = "$EXPECTED_ARCH"
 
       - name: Verify Linux amd64 runtime baseline
         if: matrix.platform == 'linux' && matrix.arch == 'amd64'

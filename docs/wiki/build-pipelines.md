@@ -78,12 +78,20 @@ objects across runner baselines. Before uploading the Linux amd64 modem,
 `--version`, requiring the expected version and commit. Changing this baseline
 requires reviewing supported Linux distributions and validating real artifacts.
 
-### Native macOS runner architecture
+### macOS build host and target architectures
 
-The native macOS amd64 job uses `macos-15-intel`, not `macos-15`: GitHub's
-current `macos-15` label selects ARM64. A pre-build `uname -m` check verifies
-the runner architecture matches the native target for both macOS jobs. The
-ARM64 job continues using `macos-latest`. Cache keys include the runner label.
+Both macOS modem builds use `macos-15-intel`. The amd64 binary builds for
+`x86_64-apple-darwin`; Apple Silicon cross-compiles for
+`aarch64-apple-darwin` using the same runner's Apple SDK and Clang. Hosted
+macOS ARM capacity shortages cancelled the October 28 build before assigning
+a runner, so native ARM runners are no longer required for packaging.
+
+A pre-build guard verifies an Intel host and resolves `SDKROOT` through
+`xcrun`. A post-build `lipo -archs` guard verifies the actual Mach-O binary is
+exactly x86_64 or arm64 as requested. ARM binaries are not runtime-tested on
+the Intel host. Cache keys include both the Rust target and runner label.
+Rust documents this cross-compilation path in
+https://doc.rust-lang.org/rustc/platform-support/apple-darwin.html.
 
 The CM108 HID PTT path depends on `hidapi`, but
 [`../../graywolf-modem/Cargo.toml`](../../graywolf-modem/Cargo.toml) pins it
