@@ -484,6 +484,10 @@ is enabled. `StationDTO.igate` carries the report through full and delta map
 responses. `map/igate-presentation.js` formats advertised counters/DX;
 `popup.js` renders the shared card for map popups and pinned station windows.
 These are remote advertised values, never the local `rfdx` measurements.
+`igate-presentation.js::unknownDXMessage` supplies an explicit unknown-DX note
+for real stations without receiver observations or advertised DX, distinguishing
+a capability bulletin that omits DX from absence of reception data; objects
+and items are excluded. The shared popup renderer also covers pinned cards.
 No raw-history backfill is performed; reception of a new capability bulletin
 populates the card. A known station position is still required for a marker.
 

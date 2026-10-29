@@ -35,3 +35,14 @@ export function receiverDXRows(report) {
   }
   return rows;
 }
+
+// Unknown reception data must not look like a measured zero-distance DX.
+export function unknownDXMessage(station) {
+  if (station.is_object || station.receiver_dx) return '';
+  const advertised = igateRows(station.igate);
+  if (advertised.some(([, , token]) => token === 'DX')) return '';
+  if (Object.hasOwn(station.igate?.entries ?? {}, 'IGATE')) {
+    return 'DX inconnu — aucun DX annoncé';
+  }
+  return 'DX inconnu — aucune réception documentée';
+}

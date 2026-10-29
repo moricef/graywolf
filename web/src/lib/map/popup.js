@@ -14,7 +14,7 @@ import {
   formatWeatherRows,
   formatWindDirection,
 } from './popup-helpers.js';
-import { igateRows, receiverDXRows } from './igate-presentation.js';
+import { igateRows, receiverDXRows, unknownDXMessage } from './igate-presentation.js';
 import { rfReachableDespiteNonRfLatest } from './rf-only-core.js';
 import { unitsState } from '../settings/units-store.svelte.js';
 import { formatSpeed, formatAltitude } from '../settings/units.js';
@@ -141,6 +141,11 @@ export function renderStationPopupHTML(
       html += `<div class="stn-weather-metric${token === 'DX' ? ' stn-igate-dx' : ''}" title="${esc(token)}: value reported by this station"><span class="stn-weather-label">${esc(label)}</span><span class="stn-weather-val">${esc(value)}</span></div>`;
     }
     html += `</div><div class="stn-igate-time">Received ${esc(received)}</div></section>`;
+  }
+
+  const unknownDX = unknownDXMessage(s);
+  if (unknownDX) {
+    html += `<div class="stn-sep"></div><div class="stn-meta stn-dx-unknown">${esc(unknownDX)}</div>`;
   }
 
   if (s.comment) {
