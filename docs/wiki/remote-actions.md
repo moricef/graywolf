@@ -75,8 +75,23 @@ The legacy managers list still gates
 The same drawer also contains a separate controller for CA2RXU iGates using
 the `!RC1` protocol. It is deliberately independent from the `@@`/TOTP macro
 system: CA2RXU commands use HMAC-SHA-256 over the controller, target, key ID,
-persistent counter and exact command. Supported v1 commands are `EM=ON`,
-`EM=OFF`, `TX=ON`, `TX=OFF` and `COMMIT`.
+persistent counter and exact command. The five shortcuts remain `EM=ON`,
+`EM=OFF`, `TX=ON`, `TX=OFF` and `COMMIT`; a free-form authenticated-command
+field uses the same endpoint, key, signed identity and persistent counter.
+There is no command allowlist in Graywolf: firmware decides which commands it
+supports. Commands are trimmed and uppercased, start with an ASCII letter,
+and contain printable ASCII without spaces, colon, braces, pipe or tilde.
+The maximum is 41 command bytes, reduced by the actual counter length so the
+complete `!RC1:A:<base36-counter>:<command>:<tag>` body stays within 67 bytes.
+Envelope validation runs inside the reservation transaction; rejected input
+rolls back the counter, while an ambiguous transport failure still consumes it.
+Never prepend `@@#`: that belongs to the separate Actions mechanism.
+OTA examples are `OTA=?`, `OTA=PROFILE,434550000,250000,8,6,3`,
+`OTA=FAST,30` and `OTA=NORMAL`. The iGate OTA firmware on `experiment/lora-ota`
+at `ca82256` supports these signed commands. On 31 October 2026, the operator
+verified signed `RXT=?` and `OTA=?` queries over RF to `GENATX`, with replies
+`RXT=ON` and `OTA NORMAL ARMED=0 PROFILE=0`. OTA setting changes
+(`PROFILE`, `FAST`, `NORMAL`) still require radio validation.
 
 The sender implementation is in `command_auth.go`. One 32-byte Base64URL key
 and one monotonically increasing counter are stored per target in
@@ -159,7 +174,7 @@ swagger tag `remote-actions`.
 | POST | `/api/remote-actions/otp/{credId}` | `generateRemoteOTPCode` | Returns `{code, expires_at}` (RFC3339 UTC, inclusive upper edge of current TOTP step). Bumps `last_used_at` (non-fatal on error). |
 | GET/POST | `/api/remote-actions/command-credentials` | list/create command credential | Lists safe metadata or installs one key for a target. |
 | PUT/DELETE | `/api/remote-actions/command-credentials/{id}` | update/delete command credential | Empty secret preserves the key; replacing it resets the sender counter. |
-| POST | `/api/remote-actions/commands/{target}` | `sendRemoteCommand` | Reserves a counter, signs an allowed command and queues it through Messages. |
+| POST | `/api/remote-actions/commands/{target}` | `sendRemoteCommand` | Reserves a counter, signs a format- and length-validated command and queues it through Messages. |
 
 ## Wiring
 

@@ -269,6 +269,10 @@ func (s *Server) sendRemoteCommand(w http.ResponseWriter, r *http.Request) {
 			notFound(w)
 			return
 		}
+		if errors.Is(err, remoteactions.ErrRemoteCommandTooLong) {
+			badRequest(w, err.Error())
+			return
+		}
 		s.internalError(w, r, "reserve remote command counter", err)
 		return
 	}

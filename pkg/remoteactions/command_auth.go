@@ -24,13 +24,11 @@ const (
 	remoteCommandTagLen    = 12
 )
 
-var allowedRemoteCommands = map[string]struct{}{
-	"EM=ON":  {},
-	"EM=OFF": {},
-	"TX=ON":  {},
-	"TX=OFF": {},
-	"COMMIT": {},
-}
+// The shortest envelope uses 26 bytes, leaving 41 command bytes in APRS.
+const MaxRemoteCommandLength = 41
+const maxRemoteCommandEnvelopeLength = 67
+
+var ErrRemoteCommandTooLong = errors.New("authenticated command exceeds the 67-character APRS message limit")
 
 type RemoteCommandCredential struct {
 	ID              uint   `gorm:"primaryKey"`
@@ -67,8 +65,17 @@ func NormalizeRemoteCommandSecret(value string) (string, error) {
 
 func NormalizeRemoteCommand(command string) (string, error) {
 	clean := strings.ToUpper(strings.TrimSpace(command))
-	if _, ok := allowedRemoteCommands[clean]; !ok {
-		return "", fmt.Errorf("unsupported remote command %q", command)
+	if len(clean) == 0 || len(clean) > MaxRemoteCommandLength {
+		return "", fmt.Errorf("command must contain 1 to %d ASCII characters", MaxRemoteCommandLength)
+	}
+	if clean[0] < 'A' || clean[0] > 'Z' {
+		return "", errors.New("command must start with a letter")
+	}
+	for _, ch := range clean {
+		// ':' delimits !RC1 fields; APRS reserves '{', '|', and '~'.
+		if ch < '!' || ch > '~' || strings.ContainsRune(":{}|~", ch) {
+			return "", errors.New("command must use printable ASCII without spaces, colon, braces, pipe or tilde")
+		}
 	}
 	return clean, nil
 }
@@ -144,7 +151,11 @@ func BuildRemoteCommandEnvelope(secretBase64URL, controller, target string, coun
 	mac := hmac.New(sha256.New, secret)
 	_, _ = mac.Write(authenticated)
 	tag := base64.RawURLEncoding.EncodeToString(mac.Sum(nil)[:remoteCommandTagLen])
-	return fmt.Sprintf("!RC1:%s:%s:%s:%s", RemoteCommandKeyID, formatBase36(counter), command, tag), nil
+	envelope := fmt.Sprintf("!RC1:%s:%s:%s:%s", RemoteCommandKeyID, formatBase36(counter), command, tag)
+	if len(envelope) > maxRemoteCommandEnvelopeLength {
+		return "", ErrRemoteCommandTooLong
+	}
+	return envelope, nil
 }
 
 type CommandCredentialStore struct {
@@ -265,6 +276,7 @@ func (s *CommandCredentialStore) ReserveEnvelope(ctx context.Context, target, co
 		return "", 0, err
 	}
 	var reserved RemoteCommandCredential
+	var envelope string
 	now := time.Now().UTC()
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		result := tx.Model(&RemoteCommandCredential{}).
@@ -287,16 +299,17 @@ func (s *CommandCredentialStore) ReserveEnvelope(ctx context.Context, target, co
 			}
 			return errors.New("remote command counter exhausted")
 		}
-		return tx.Where("target_call = ?", target).First(&reserved).Error
+		if err := tx.Where("target_call = ?", target).First(&reserved).Error; err != nil {
+			return err
+		}
+		// Validate before committing the reservation: rejected input consumes no counter.
+		envelope, err = BuildRemoteCommandEnvelope(
+			reserved.SecretBase64URL, controller, reserved.SignedTarget, reserved.LastCounter, command,
+		)
+		return err
 	})
 	if err != nil {
 		return "", 0, err
-	}
-	envelope, err := BuildRemoteCommandEnvelope(
-		reserved.SecretBase64URL, controller, reserved.SignedTarget, reserved.LastCounter, command,
-	)
-	if err != nil {
-		return "", reserved.LastCounter, err
 	}
 	return envelope, reserved.LastCounter, nil
 }

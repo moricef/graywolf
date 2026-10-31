@@ -276,3 +276,45 @@ func TestRemoteCommandUpdateOmittedIdentityPreservesSignature(t *testing.T) {
 		t.Fatalf("signature changed after rename: %d %+v", rec.Code, captured)
 	}
 }
+
+func TestSendFreeFormAuthenticatedCommands(t *testing.T) {
+	var captured messages.SendMessageRequest
+	srv, mux := newRemoteCommandTestServer(t, func(_ context.Context, req messages.SendMessageRequest) (*configstore.Message, error) {
+		captured = req
+		return &configstore.Message{ID: 46, Text: req.Text}, nil
+	})
+	rec := requestJSON(t, mux, http.MethodPost, "/api/remote-actions/command-credentials", map[string]any{
+		"name": "tactical", "target_call": "GENATX", "signed_target": "F4MLV-15", "secret_b64url": testRemoteCommandSecret,
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d %s", rec.Code, rec.Body.String())
+	}
+	commands := []string{"OTA=?", "OTA=PROFILE,434550000,250000,8,6,3", "OTA=FAST,30", "OTA=NORMAL", "FUTURE=ON"}
+	for i, command := range commands {
+		rec = requestJSON(t, mux, http.MethodPost, "/api/remote-actions/commands/GENATX", map[string]any{"command": command, "channel": 1})
+		want, err := remoteactions.BuildRemoteCommandEnvelope(testRemoteCommandSecret, "F4MLV-2", "F4MLV-15", uint64(i+1), command)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if rec.Code != http.StatusAccepted || captured.To != "GENATX" || captured.Text != want || captured.Channel != 1 {
+			t.Fatalf("%s: %d %+v %s", command, rec.Code, captured, rec.Body.String())
+		}
+	}
+	for _, command := range []string{"@@#OTA=?", "OTA=?:tag", strings.Repeat("A", 42)} {
+		rec = requestJSON(t, mux, http.MethodPost, "/api/remote-actions/commands/GENATX", map[string]any{"command": command})
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("invalid command: %d %s", rec.Code, rec.Body.String())
+		}
+	}
+	if err := srv.store.DB().Exec("UPDATE remote_command_credentials SET last_counter=35 WHERE target_call='GENATX'").Error; err != nil {
+		t.Fatal(err)
+	}
+	rec = requestJSON(t, mux, http.MethodPost, "/api/remote-actions/commands/GENATX", map[string]any{"command": strings.Repeat("A", 41)})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("oversized envelope: %d %s", rec.Code, rec.Body.String())
+	}
+	row, err := srv.remoteActions.Commands().GetByTarget(context.Background(), "GENATX")
+	if err != nil || row.LastCounter != 35 {
+		t.Fatalf("rejected command consumed counter: %+v %v", row, err)
+	}
+}

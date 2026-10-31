@@ -389,7 +389,7 @@
       <tbody>
         <tr><td>Read the firmware version</td><td>Type <code>?APRSV</code> in the normal message composer and send.</td></tr>
         <tr><td>Read TX or eco-mode state</td><td>Type <code>?TX=?</code> or <code>?EM=?</code> in the normal composer. These queries require the sender to match the iGate&rsquo;s managers list and obey its RF-only restriction.</td></tr>
-        <tr><td>Change a setting on an authenticated iGate</td><td>Use one of the signed-command buttons below.</td></tr>
+        <tr><td>Change a setting on an authenticated iGate</td><td>Use a shortcut below or the <strong>Authenticated command</strong> field in the same panel.</td></tr>
       </tbody>
     </table>
 
@@ -416,6 +416,31 @@
       command with the saved key and a new counter, then sends it through
       that conversation&rsquo;s route and selected channel. You do not type
       the signature, counter or <code>!RC1</code> envelope yourself.
+    </p>
+
+    <p>
+      For another command, enter it in <strong>Authenticated command</strong>
+      and click <strong>Send signed command</strong>, for example
+      <code>OTA=?</code>, <code>OTA=PROFILE,434550000,250000,8,6,3</code>,
+      <code>OTA=FAST,30</code> or <code>OTA=NORMAL</code>.
+      Enter only the command, without <code>@@#</code> or <code>!RC1</code>.
+      The same saved key, signed identity, counter and conversation route apply.
+      Commands are trimmed and uppercased, must start with an ASCII letter,
+      and cannot contain spaces, colons, braces, pipes or tildes.
+      Up to 41 ASCII characters are accepted; the available length decreases
+      as the counter grows to keep the entire signed message within 67 characters.
+      Graywolf rejects an oversized envelope without consuming a counter.
+    </p>
+    <p>
+      The receiving firmware must implement the command. Signed OTA commands
+      are supported by the iGate <code>experiment/lora-ota</code> firmware at
+      <code>ca82256</code>; host tests and compilation passed. The operator verified signed
+      <code>RXT=?</code> and <code>OTA=?</code> queries over RF to GENATX on
+      31 October 2026, receiving <code>RXT=ON</code> and
+      <code>OTA NORMAL ARMED=0 PROFILE=0</code>. OTA setting changes
+      (<code>PROFILE</code>, <code>FAST</code>, <code>NORMAL</code>) still
+      require radio validation. An ACK for an unsigned <code>@@#OTA=?</code> message
+      does not validate OTA execution.
     </p>
 
     <p class="note">

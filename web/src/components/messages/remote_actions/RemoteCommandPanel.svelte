@@ -1,5 +1,5 @@
 <script>
-  import { Button, toast } from '@chrissnell/chonky-ui';
+  import { Button, Input, toast } from '@chrissnell/chonky-ui';
   import RemoteCommandCredentialModal from './RemoteCommandCredentialModal.svelte';
   import { remoteCommandsApi } from '../../../lib/remote_actions/api.js';
   import { remoteActionsStore } from '../../../lib/remote_actions/store.svelte.js';
@@ -8,6 +8,8 @@
   let { target, channel = 0 } = $props();
   let modalOpen = $state(false);
   let sending = $state('');
+  let command = $state('');
+  $effect(() => { target; command = ''; });
   const credential = $derived(remoteActionsStore.commandCredFor(target));
 
   const controls = [
@@ -65,6 +67,18 @@
         >{sending === control.command ? 'Queueing…' : control.label}</Button>
       {/each}
     </div>
+    <form class="custom-command" onsubmit={(event) => {
+      event.preventDefault();
+      const value = command.trim().toUpperCase();
+      if (value) send({ command: value, dangerous: value === 'TX=OFF' });
+    }}>
+      <label for="rc-command">Authenticated command</label>
+      <Input id="rc-command" bind:value={command} maxlength={41}
+        placeholder="OTA=?" autocomplete="off" disabled={!!sending}
+        aria-describedby="rc-command-help" />
+      <Button type="submit" variant="secondary" size="sm" disabled={!!sending || !command.trim()}>Send signed command</Button>
+      <p id="rc-command-help" class="note">Enter the command only, without a prefix. The iGate must support it. Graywolf signs it with this target's key and identity.</p>
+    </form>
     <p class="note">Queued means Graywolf accepted the APRS message. It does not prove that the remote command was applied.</p>
   {/if}
 </section>
@@ -76,5 +90,7 @@
   .heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
   h3 { margin: 0; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; }
   .heading p, .note { margin: 3px 0 0; font-size: 11px; color: var(--color-text-muted); }
+  .custom-command { display: flex; flex-direction: column; gap: 6px; }
+  .custom-command label { font-size: 12px; }
   .controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
 </style>

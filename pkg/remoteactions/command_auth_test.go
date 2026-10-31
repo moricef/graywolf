@@ -227,3 +227,51 @@ func TestSignedIdentityValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestNormalizeRemoteCommandOpenFormat(t *testing.T) {
+	for _, command := range []string{"EM=ON", "EM=OFF", "TX=ON", "TX=OFF", "COMMIT", "OTA=?", "OTA=PROFILE,434550000,250000,8,6,3", "OTA=FAST,30", "OTA=NORMAL", "FUTURE=1.5,-2_3/4+5"} {
+		got, err := NormalizeRemoteCommand(" " + strings.ToLower(command) + " ")
+		if err != nil || got != command {
+			t.Errorf("normalize %q: %q, %v", command, got, err)
+		}
+	}
+	for _, command := range []string{"", " ", "@@#OTA=?", "!RC1:A:1:OTA=?", "OTA=ON:OFF", "OTA={1", "OTA=1}", "OTA=1|2", "OTA=~", "OTA=é", "OTA=O\nN", "OTA=O\x00N", "OTA=O\x7fN", "OTA=FAST 30", strings.Repeat("A", 42)} {
+		if _, err := NormalizeRemoteCommand(command); err == nil {
+			t.Errorf("accepted invalid command %q", command)
+		}
+	}
+}
+
+func TestRemoteCommandEnvelopeLengthAndReservationRollback(t *testing.T) {
+	ctx := context.Background()
+	store := newCommandCredentialStore(t)
+	row := &RemoteCommandCredential{TargetCall: "GENATX", SignedTarget: "F4MLV-15", SecretBase64URL: publishedRemoteCommandSecret}
+	if err := store.Create(ctx, row); err != nil {
+		t.Fatal(err)
+	}
+	command := strings.Repeat("A", 41)
+	body, counter, err := store.ReserveEnvelope(ctx, "GENATX", "F4MLV-2", command)
+	if err != nil || len(body) != 67 || counter != 1 {
+		t.Fatalf("boundary: %q %d %v", body, counter, err)
+	}
+	if err := store.db.Model(row).Update("last_counter", 35).Error; err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := store.ReserveEnvelope(ctx, "GENATX", "F4MLV-2", command); err != ErrRemoteCommandTooLong {
+		t.Fatalf("counter expansion accepted: %v", err)
+	}
+	persisted, err := store.Get(ctx, row.ID)
+	if err != nil || persisted.LastCounter != 35 {
+		t.Fatalf("rejected input consumed counter: %+v %v", persisted, err)
+	}
+	body, counter, err = store.ReserveEnvelope(ctx, "GENATX", "F4MLV-2", command[:40])
+	if err != nil || len(body) != 67 || counter != 36 {
+		t.Fatalf("expanded boundary: %q %d %v", body, counter, err)
+	}
+	if _, err := BuildRemoteCommandEnvelope(publishedRemoteCommandSecret, "F4MLV-2", "F4MLV-15", ^uint64(0), strings.Repeat("A", 29)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := BuildRemoteCommandEnvelope(publishedRemoteCommandSecret, "F4MLV-2", "F4MLV-15", ^uint64(0), strings.Repeat("A", 30)); err != ErrRemoteCommandTooLong {
+		t.Fatalf("max counter length: %v", err)
+	}
+}
