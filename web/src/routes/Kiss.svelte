@@ -938,12 +938,8 @@
 
 {#snippet statusCell(_value, row)}
   {@const disabled = row.enabled === false}
-  <!-- Only tcp-client rows carry live connection diagnostics worth an
-       expandable panel (peer, reconnect count, backoff, last error,
-       Retry now). For server / serial / disabled rows the status is a
-       plain badge — the old expand popped a gray box that just echoed
-       the Endpoint column and buried the disable action (GRA-85). -->
-  {@const expandable = !disabled && row.type === 'tcp-client'}
+  {@const serialTransport = ['serial', 'usbserial', 'bluetooth'].includes(row.type)}
+  {@const expandable = !disabled && (row.type === 'tcp-client' || serialTransport)}
   <div class="status-cell" data-tick={clockTick}>
     <!-- clockTick is in data-tick so any change triggers snippet
          re-render; that propagates to the countdownText call below. -->
@@ -973,16 +969,16 @@
     {/if}
     {#if expandable && expandedId === row.id}
       <div id={`status-detail-${row.id}`} class="status-detail" role="region" aria-label="Status detail">
-        <div class="detail-row"><span class="detail-label">Peer:</span> <span>{row.peer_addr || `${row.remote_host}:${row.remote_port}`}</span></div>
+        <div class="detail-row"><span class="detail-label">Peer:</span> <span>{row.peer_addr || (serialTransport ? endpointText(row) : `${row.remote_host}:${row.remote_port}`)}</span></div>
         <div class="detail-row"><span class="detail-label">Connected since:</span> <span>{formatLocalTime(row.connected_since) || '—'}</span></div>
         <div class="detail-row"><span class="detail-label">Reconnect count:</span> <span>{row.reconnect_count || 0}</span></div>
         <div class="detail-row"><span class="detail-label">Backoff:</span> <span>{row.backoff_seconds || 0}s</span></div>
         {#if row.last_error}
           <div class="detail-row detail-err"><span class="detail-label">Last error:</span> <span>{row.last_error}</span></div>
         {/if}
-        {#if canRetryNow(row.state)}
+        {#if canRetryNow(row.state) || serialTransport}
           <div class="detail-actions">
-            <Button variant="primary" onclick={(e) => { e.stopPropagation?.(); handleRetryNow(row); }}>Retry now</Button>
+            <Button variant="primary" onclick={(e) => { e.stopPropagation?.(); handleRetryNow(row); }}>{serialTransport ? 'Reconnect' : 'Retry now'}</Button>
           </div>
         {/if}
       </div>

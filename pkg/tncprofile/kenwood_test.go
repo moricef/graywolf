@@ -16,11 +16,13 @@ import (
 // Model the distinct radio-control/TNC command sets, including the initial
 // KISS/converse escape states and rejection of the other model's commands.
 type modelRadioSpeed struct {
-	rate          uint32
-	state         *atomic.Uint32
-	restoreAfter  time.Duration
-	restored      chan struct{}
-	wrongReadback bool
+	rate             uint32
+	state            *atomic.Uint32
+	restoreAfter     time.Duration
+	restored         chan struct{}
+	wrongReadback    bool
+	missFirstControl bool
+	startupNoise     bool
 }
 
 func modelRadio(t *testing.T, profile, initial, band, rejectAt, id string, speed ...modelRadioSpeed) (io.ReadWriteCloser, <-chan error) {
@@ -80,18 +82,34 @@ func modelRadio(t *testing.T, profile, initial, band, rejectAt, id string, speed
 		if initial == "off" {
 			mode = "0"
 		}
-		expected := []struct{ request, response string }{
-			{"TC 1", "\rTS 1\r"}, {"ID", "\r" + id + "\r"},
-		}
+		expected := []struct{ request, response string }{}
 		if profile == TMD700 {
-			expected = append(expected, struct{ request, response string }{"AI 1", "\rAI 1\r"}, struct{ request, response string }{"TNC 2", "\rTNC 2\r"}, struct{ request, response string }{"TC 0", "\rcmd:"})
+			expected = append(expected,
+				struct{ request, response string }{"AI 1", "\rAI 1\r"},
+				struct{ request, response string }{"TC 1", "\rTS 1\r"},
+				struct{ request, response string }{"AI 1", "\rAI 1\r"},
+				struct{ request, response string }{"ID", "\r" + id + "\r"},
+				struct{ request, response string }{"TNC 2", "\rTNC 2\r"},
+				struct{ request, response string }{"BC 0,0", "\rBC 0,0\r"},
+				struct{ request, response string }{"DTB 0", "\rDTB 0\r"},
+				struct{ request, response string }{"TC 0", ""}, struct{ request, response string }{"", "\rcmd:"})
 		} else {
-			expected = append(expected, struct{ request, response string }{"TN", "\rTN " + mode + "," + band + "\r"}, struct{ request, response string }{"TN 2," + band, "\rTN 2," + band + "\rcmd:"}, struct{ request, response string }{"", "\rcmd:"})
+			if radioSpeed.missFirstControl {
+				expected = append(expected, struct{ request, response string }{"TC 1", ""})
+			}
+			expected = append(expected, struct{ request, response string }{"TC 1", "\rTS 1\r"}, struct{ request, response string }{"ID", "\r" + id + "\r"})
+			if id == "ID TM-D710P" {
+				// Exact UI-View sequence: no bare TN query; force band A.
+				band = "0"
+			} else {
+				expected = append(expected, struct{ request, response string }{"TN", "\rTN " + mode + "," + band + "\r"})
+			}
+			expected = append(expected, struct{ request, response string }{"TN 2," + band, "\rTN 2," + band + "\rcmd:"}, struct{ request, response string }{"", "\rcmd:"})
 		}
 		if radioSpeed.rate != 0 {
 			expected = append(expected, struct{ request, response string }{fmt.Sprintf("HBAUD %d", radioSpeed.rate), fmt.Sprintf("HBAUD %d\rHBAUD      was 1200\rcmd:", radioSpeed.rate)}, struct{ request, response string }{"HBAUD", ""})
 		}
-		expected = append(expected, struct{ request, response string }{"KISS ON", "\rKISS was OFF\rcmd:"}, struct{ request, response string }{"RESTART", ""})
+		expected = append(expected, struct{ request, response string }{"ECHO OFF", "\rECHO     was ON\rcmd:"}, struct{ request, response string }{"KISS ON", "\rKISS     was OFF\r\ncmd:"}, struct{ request, response string }{"RESTART", ""})
 		for _, step := range expected {
 			request, err := r.ReadString('\r')
 			if err != nil {
@@ -130,7 +148,9 @@ func modelRadio(t *testing.T, profile, initial, band, rejectAt, id string, speed
 				}
 				responses <- fmt.Sprintf("HBAUD %d\rcmd:", actual)
 			}
-			if step.response != "" {
+			if step.request == "" && radioSpeed.startupNoise {
+				responses <- "cmd:?EH\r\ncmd:HBAUD    was 1200\r\ncmd:"
+			} else if step.response != "" {
 				responses <- step.response
 			}
 		}
@@ -179,14 +199,40 @@ func TestModelProfilesAndInitialStates(t *testing.T) {
 	}
 }
 
+func TestD710ModelSuffixes(t *testing.T) {
+	for _, suffix := range []string{"", "A", "E", "P", "G", "GA", "GE"} {
+		t.Run(suffix, func(t *testing.T) {
+			port, done := modelRadio(t, TMD710, "control", "1", "never", "ID TM-D710"+suffix)
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			stream, err := initialize(ctx, port, TMD710, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			frame := make([]byte, 4)
+			if _, err := io.ReadFull(stream, frame); err != nil || string(frame) != "\xc0\x00\x42\xc0" {
+				t.Fatalf("KISS startup frame: %x, %v", frame, err)
+			}
+			_ = stream.Close()
+			if err := <-done; err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
 func TestModelProfileRejectsCommandErrorAndWrongModel(t *testing.T) {
 	for _, tc := range []struct{ profile, reject, id string }{
 		{TMD700, "TNC 2", "ID TM-D700"},
+		{TMD700, "BC 0,0", "ID TM-D700"},
+		{TMD700, "DTB 0", "ID TM-D700"},
 		{TMD710, "TN 2,1", "ID TM-D710"},
 		{TMD710, "KISS ON", "ID TM-D710"},
 		{TMD710, "RESTART", "ID TM-D710"},
 		{TMD700, "never", "ID TM-D710"},
 		{TMD710, "never", "ID TM-D700"},
+		{TMD710, "never", "ID TM-D710UNKNOWN"},
+		{TMD700, "never", "ID TM-D700P"},
 	} {
 		t.Run(tc.profile+tc.reject+tc.id, func(t *testing.T) {
 			port, _ := modelRadio(t, tc.profile, "kiss", "1", tc.reject, tc.id)
@@ -213,5 +259,23 @@ func TestModelProfileCancellationClosesBlockedPort(t *testing.T) {
 				t.Fatalf("expected cancellation, got %v", err)
 			}
 		})
+	}
+}
+
+func TestD710RetriesControlCommandAfterKISSExit(t *testing.T) {
+	port, done := modelRadio(t, TMD710, "control", "0", "never", "ID TM-D710P", modelRadioSpeed{missFirstControl: true, startupNoise: true})
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	stream, err := initialize(ctx, port, TMD710, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	frame := make([]byte, 4)
+	if _, err := io.ReadFull(stream, frame); err != nil || string(frame) != "\xc0\x00\x42\xc0" {
+		t.Fatalf("lost frame after retry: %x %v", frame, err)
+	}
+	_ = stream.Close()
+	if err := <-done; err != nil {
+		t.Fatal(err)
 	}
 }

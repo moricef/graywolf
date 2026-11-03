@@ -302,23 +302,25 @@ SUBSYSTEM=="tty", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6015", ATTRS{seria
     <table>
       <thead><tr><th>Profile</th><th>Radio-control sequence</th></tr></thead>
       <tbody>
-        <tr><td>TM-D700</td><td>Synchronize, require <code>TS 1</code> after <code>TC 1</code>, verify <code>ID TM-D700</code>, then <code>AI 1</code>, <code>TNC 2</code>, <code>TC 0</code> and wait for <code>cmd:</code>. AI enables radio-control reporting.</td></tr>
-        <tr><td>TM-D710 / G</td><td>Synchronize, require <code>TS 1</code> after <code>TC 1</code>, verify <code>ID TM-D710</code> (including regional/G variants), query <code>TN</code>, then send <code>TN 2,&lt;band&gt;</code> preserving the reported band selection (A, B or split TX/RX). Wait for <code>cmd:</code>.</td></tr>
+        <tr><td>TM-D700</td><td>Synchronize, send the initial <code>AI 1</code>, then request <code>TC 1</code> and require its distinct <code>TS 1</code> reply (verified on the real D700). Repeat and verify <code>AI 1</code> in radio-control mode before verifying <code>ID TM-D700</code>. Send <code>TNC 2</code>, wait for mode stabilization, select operating band A with <code>BC 0,0</code> and data band A with <code>DTB 0</code>, then send <code>TC 0</code>, pause briefly and send CR to obtain <code>cmd:</code>. This follows the supplied UI-View <code>TM-D700.CMD</code> sequence while keeping frequency and shift configured on the radio; the sample file's fixed 144.800 MHz command is not sent.</td></tr>
+        <tr><td>TM-D710 / G</td><td>Synchronize, require <code>TS 1</code> after <code>TC 1</code>, verify <code>ID TM-D710</code> (including A, E, P and G/GA/GE replies), for the <code>ID TM-D710P</code> reply send <code>TN 2,0</code> directly (PACKET on band A, following the supplied UI-View initialization file; this firmware rejects a bare <code>TN</code> query). Other variants query <code>TN</code>, then send <code>TN 2,&lt;band&gt;</code> preserving the reported band selection (A, B or split TX/RX). Wait for <code>cmd:</code>.</td></tr>
       </tbody>
     </table>
 
     <p>
       On every open or reconnect, synchronization uses three Ctrl-C characters,
       the binary KISS return sequence <code>C0 FF C0</code>, a short pause,
-      then three Ctrl-C characters and CR. The model-specific sequence above
-      follows. After the mode-selection acknowledgement (<code>TNC 2</code> or
+      then three Ctrl-C characters and CR. On both models, the control-mode request <code>TC 1</code> is retried up to three times with 1.5-second reply deadlines if the radio misses the first request during KISS exit. A single reader preserves replies across these waits. The model-specific sequence above
+      follows. After the first PACKET prompt, Graywolf drains delayed startup
+      replies until a 200 ms quiet interval (at most one second) before setting
+      HBAUD or ECHO; startup errors are not used as replies to later commands. After the mode-selection acknowledgement (<code>TNC 2</code> or
       <code>TN 2,&lt;band&gt;</code>), Graywolf waits four seconds before continuing,
       even if an early <code>cmd:</code> is already present. Some firmware
       restores saved state and speed during this interval. When an RF speed is
       selected, Graywolf sets <code>HBAUD 1200</code> or <code>HBAUD 9600</code>,
       waits for its setting response, queries <code>HBAUD</code> and verifies the
       current value. A mismatch or rejected command fails initialization.
-      Finally it sends <code>KISS ON</code>, checks the
+      It first disables command echo with <code>ECHO OFF</code> and requires the setting reply and prompt. Finally it sends <code>KISS ON</code>, checks the
       response and prompt, sends <code>RESTART</code> and waits five seconds.
       During this wait, it continues reading: an explicit rejection or a
       serial disconnection fails initialization instead of showing Connected.
@@ -328,6 +330,19 @@ SUBSYSTEM=="tty", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6015", ATTRS{seria
       The interface stays <strong>Connecting</strong> until this finishes;
       initialization has a 30-second deadline and failures use normal reconnect
       backoff. Startup bytes are preserved for the KISS decoder.
+    </p>
+
+    <p>
+      For Serial, USB Serial and Bluetooth interfaces, expand the connection
+      status to inspect diagnostics and use <strong>Reconnect</strong>.
+      This closes an active serial session or interrupts initialization and
+      reopens the port immediately; it also bypasses a pending retry delay.
+      With a Kenwood model profile, Graywolf automatically reinitializes the
+      radio if it receives a new command prompt, the Kenwood startup banner, an ASCII TNC2 monitor header outside KISS,
+      or the exact altered echo of a recently sent KISS frame with its AX.25
+      Ctrl-C byte consumed by command mode. Valid binary APRS payload is not
+      interpreted as a prompt. A powered USB adapter alone cannot reveal a
+      completely silent radio reset, and radio silence does not trigger resets.
     </p>
 
     <p>
@@ -344,7 +359,7 @@ SUBSYSTEM=="tty", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6015", ATTRS{seria
       Linux virtual-serial-port (PTY) checks also exercise Graywolf's real
       serial driver, restart rejection/retry and closing a blocked reader.
       A successful simulation does not validate the commands against a real
-      firmware; physical TM-D700/TM-D710 validation is still required.
+      firmware; TM-D700 initialization and APRS reception were validated on 3 November 2026: Connected at 17:26:49 after a clean radio start, and F1ZXR-3 decoded at 17:27:08. D700 RF transmission was confirmed by operator-provided APRS-IS reception records matching F6DEV-7&gt;APGRWO, including 17:27:14 and 18:03:55 on 3 November 2026 via F1ZCP-3 and other relays. These records report Invalid uncompressed location because Graywolf emitted a numeric overlay directly in a compressed position; APRS101 requires overlays 0-9 to be transmitted as a-j in that format. That position-encoding defect has been corrected: numeric overlays now map to a-j on air and back to digits when decoded. The operator-provided records predate this correction. Automatic D700 power-cycle recovery was validated at 17:52:12 (command-mode return detected) and 17:52:25 (KISS reconnected), with valid KISS reception resumed. D700 USB removal/replug was validated at 17:59:25 (removal detected) and 18:00:09 (automatic reconnect), with the by-id path remapping from ttyUSB1 to ttyUSB0 and valid KISS reception resumed. D700 manual Reconnect was validated at 18:03:00, with decoded APRS reception immediately resumed. A Graywolf service restart at 18:03:20 reconnected the powered-on D700 at 18:03:30 with immediate APRS reception. On 3 November 2026, the operator validated TM-D710P initialization, APRS reception and beacon transmission with copies received back via F5ZQC-3 and F1ZCP-3. On the same TM-D710P, a power-cycle test detected command-mode return at 16:46:29 and reconnected automatically at 16:46:40 with KISS reception resumed, without operator action. USB cable-drop recovery was also validated on 3 November 2026: removal was detected at 16:50:17, the same by-id path returned pointing to ttyUSB1 instead of ttyUSB0, and Graywolf reconnected automatically at 16:51:03. Valid KISS reception was confirmed on the reopened device. The manual Reconnect action was validated at 17:02:38 on the same day, with decoded APRS packets received from 17:02:40 onward. A Graywolf service restart at 17:04:33 reconnected the unchanged, powered-on D710P at 17:04:43 and immediately resumed APRS reception.
     </p>
 
     <p>

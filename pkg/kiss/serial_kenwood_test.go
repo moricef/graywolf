@@ -61,13 +61,13 @@ func TestModelSupervisorRejectRetryAndReconnect(t *testing.T) {
 					if !check("\x03\x03\x03\xc0\xff\xc0") || !check("\x03\x03\x03\r") {
 						return
 					}
-					steps := []struct{ request, response string }{{"TC 1", "TS 1\r"}}
+					steps := []struct{ request, response string }{}
 					if model == "kenwood-tm-d700" {
-						steps = append(steps, struct{ request, response string }{"ID", "ID TM-D700\r"}, struct{ request, response string }{"AI 1", "AI 1\r"}, struct{ request, response string }{"TNC 2", "TNC 2\r"}, struct{ request, response string }{"TC 0", "cmd:"})
+						steps = append(steps, struct{ request, response string }{"AI 1", "AI 1\r"}, struct{ request, response string }{"TC 1", "TS 1\r"}, struct{ request, response string }{"AI 1", "AI 1\r"}, struct{ request, response string }{"ID", "ID TM-D700\r"}, struct{ request, response string }{"TNC 2", "TNC 2\r"}, struct{ request, response string }{"BC 0,0", "BC 0,0\r"}, struct{ request, response string }{"DTB 0", "DTB 0\r"}, struct{ request, response string }{"TC 0", ""}, struct{ request, response string }{"", "cmd:"})
 					} else {
-						steps = append(steps, struct{ request, response string }{"ID", "ID TM-D710G\r"}, struct{ request, response string }{"TN", "TN 2,1\r"}, struct{ request, response string }{"TN 2,1", "TN 2,1\rcmd:"}, struct{ request, response string }{"", "cmd:"})
+						steps = append(steps, struct{ request, response string }{"TC 1", "TS 1\r"}, struct{ request, response string }{"ID", "ID TM-D710G\r"}, struct{ request, response string }{"TN", "TN 2,1\r"}, struct{ request, response string }{"TN 2,1", "TN 2,1\rcmd:"}, struct{ request, response string }{"", "cmd:"})
 					}
-					steps = append(steps, struct{ request, response string }{"KISS ON", "KISS was OFF\rcmd:"})
+					steps = append(steps, struct{ request, response string }{"ECHO OFF", "ECHO was ON\rcmd:"}, struct{ request, response string }{"KISS ON", "KISS was OFF\rcmd:"})
 					for _, step := range steps {
 						if !check(step.request + "\r") {
 							return

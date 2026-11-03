@@ -36,7 +36,7 @@ func TestKenwoodKISSReplyRequiresKnownSetting(t *testing.T) {
 }
 
 func TestKenwoodFragmentedPromptAndStartupBytes(t *testing.T) {
-	for _, text := range []string{"cmd:\rKISS was OFF\rcmd:", "KISS was ON\ncmd:", "KISS ON\rcmd:", "KISS was OFFcmd:"} {
+	for _, text := range []string{"cmd:\rKISS was OFF\rcmd:", "KISS was ON\ncmd:", "KISS ON\rcmd:", "KISS was OFFcmd:", "cmd:\rKISS     was OFF\r\ncmd:", "KISS\twas\tON\r\ncmd:"} {
 		r := bufio.NewReader(bytewiseReader{strings.NewReader(text + "\xc0\x00\x42\xc0")})
 		if _, err := readKenwoodPrompt(r, true); err != nil {
 			t.Errorf("%q: %v", text, err)

@@ -73,6 +73,12 @@ func (p *restartPort) Close() error {
 }
 
 func (p *restartPort) Read(dst []byte) (int, error) {
+	return p.readContext(context.Background(), dst)
+}
+
+// readContext permits bounded initialization waits without abandoning a serial
+// read. The one pump remains alive, preserving replies for a retry.
+func (p *restartPort) readContext(ctx context.Context, dst []byte) (int, error) {
 	if len(dst) == 0 {
 		return 0, nil
 	}
@@ -81,6 +87,8 @@ func (p *restartPort) Read(dst []byte) (int, error) {
 			return 0, p.readErr
 		}
 		select {
+		case <-ctx.Done():
+			return 0, ctx.Err()
 		case next := <-p.reads:
 			p.pending, p.readErr = next.data, next.err
 		case <-p.stop:

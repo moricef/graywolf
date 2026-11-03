@@ -20,13 +20,15 @@ func TestModeStabilizationPreventsLateFirmwareSpeedRestore(t *testing.T) {
 				if profile == TMD710 {
 					id = "ID TM-D710"
 				}
-				port, done := modelRadio(t, profile, "aprs", "1", "never", id, modelRadioSpeed{rate: 9600, state: &state, restoreAfter: 60 * time.Millisecond, restored: restored})
+				port, done := modelRadio(t, profile, "aprs", "1", "never", id, modelRadioSpeed{rate: 9600, state: &state, restoreAfter: 500 * time.Millisecond, restored: restored})
 				defer port.Close()
 				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 				defer cancel()
 				modeWait := time.Duration(0)
 				if wait {
-					modeWait = 100 * time.Millisecond
+					// Keep the delayed restore later than the D700 TC 0 pause plus startup drain,
+					// so the negative control still detects a missing mode wait.
+					modeWait = 700 * time.Millisecond
 				}
 				stream, err := initializeConfigured(ctx, port, profile, 9600, modeWait, 0)
 				if err != nil {

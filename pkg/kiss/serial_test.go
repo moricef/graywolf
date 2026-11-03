@@ -411,3 +411,63 @@ func TestSerialSupervisor_BluetoothShapedConfig_RxRoundTrip(t *testing.T) {
 	cancel()
 	sup.close()
 }
+
+func TestSerialSupervisorReconnectClosesConnectedSession(t *testing.T) {
+	var mu sync.Mutex
+	var ports []*fakeRWC
+	sup := NewSerial(SerialConfig{Device: "test", BaudRate: 9600, ReconnectInitMs: 60000, ReconnectMaxMs: 60000,
+		OpenFunc: func(string, uint32) (io.ReadWriteCloser, error) {
+			p := newFakeRWC()
+			mu.Lock()
+			ports = append(ports, p)
+			mu.Unlock()
+			return p, nil
+		},
+	}, newTestSerialServer(t, &txSinkRecorder{}))
+	ctx, cancel := context.WithCancel(context.Background())
+	go sup.run(ctx)
+	defer sup.close()
+	defer cancel()
+	waitState(t, sup, StateConnected)
+	sup.Reconnect()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if sup.Status().ReconnectCount >= 2 {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(ports) < 2 || sup.Status().ReconnectCount < 2 {
+		t.Fatalf("did not reopen connected port: opens=%d status=%+v", len(ports), sup.Status())
+	}
+	select {
+	case <-ports[0].closed:
+	default:
+		t.Fatal("previous reader still open")
+	}
+}
+
+func TestSerialSupervisorReconnectInterruptsInitialization(t *testing.T) {
+	opened := make(chan *fakeRWC, 8)
+	sup := NewSerial(SerialConfig{Device: "test", BaudRate: 9600, InitProfile: "kenwood-tm-d710",
+		OpenFunc: func(string, uint32) (io.ReadWriteCloser, error) { p := newFakeRWC(); opened <- p; return p, nil },
+	}, newTestSerialServer(t, &txSinkRecorder{}))
+	ctx, cancel := context.WithCancel(context.Background())
+	go sup.run(ctx)
+	defer sup.close()
+	defer cancel()
+	first := <-opened
+	sup.Reconnect()
+	select {
+	case <-opened:
+	case <-time.After(2 * time.Second):
+		t.Fatal("reconnect waited for initialization timeout")
+	}
+	select {
+	case <-first.closed:
+	default:
+		t.Fatal("initializing port remained open")
+	}
+}

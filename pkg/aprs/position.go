@@ -11,10 +11,13 @@ import (
 )
 
 // Uncompressed position field is exactly 19 bytes:
-//   DDMM.mmN[/|\]DDDMM.mmW[/|\]S
+//
+//	DDMM.mmN[/|\]DDDMM.mmW[/|\]S
+//
 // Where the first symbol byte is the symbol table (/ or \) and the last
 // is the symbol code. Compressed position field is 13 bytes:
-//   sYYYYXXXXcsTT  where s is the symbol table and T is the comp type.
+//
+//	sYYYYXXXXcsTT  where s is the symbol table and T is the comp type.
 const (
 	uncompressedPosLen = 19
 	compressedPosLen   = 13
@@ -122,17 +125,22 @@ func parseUncompressedPosition(pkt *DecodedAPRSPacket, body []byte) error {
 // parseCompressedPosition implements APRS Protocol Reference section
 // "Compressed Lat/Long Position Report Format". The 13-byte form is:
 //
-//   byte 0  : symbol table (/ or \ or overlay alphanumeric)
-//   bytes 1..4: YYYY base-91 latitude
-//   bytes 5..8: XXXX base-91 longitude
-//   byte 9  : symbol code
-//   bytes 10..11: cs (course/speed or altitude or range)
-//   byte 12 : compression type byte
+//	byte 0  : symbol table (/ or \ or overlay alphanumeric)
+//	bytes 1..4: YYYY base-91 latitude
+//	bytes 5..8: XXXX base-91 longitude
+//	byte 9  : symbol code
+//	bytes 10..11: cs (course/speed or altitude or range)
+//	byte 12 : compression type byte
 func parseCompressedPosition(pkt *DecodedAPRSPacket, body []byte) error {
 	if len(body) < compressedPosLen {
 		return errors.New("aprs: compressed position too short")
 	}
 	table := body[0]
+	// Normalize the compressed a-j wire representation to the same
+	// numeric overlay used by uncompressed positions and map symbols.
+	if table >= 'a' && table <= 'j' {
+		table = '0' + (table - 'a')
+	}
 	lat := 90.0 - float64(base91Decode4(body[1:5]))/380926.0
 	lon := -180.0 + float64(base91Decode4(body[5:9]))/190463.0
 	code := body[9]
@@ -333,9 +341,9 @@ func parseLongitude(s string) (float64, error) {
 
 // parseAPRSTimestamp parses a 7-byte APRS timestamp. Supported forms:
 //
-//   DDHHMMz — day of month, hours, minutes UTC
-//   DDHHMM/ — day of month, hours, minutes local
-//   HHMMSSh — hours, minutes, seconds UTC ("hms" form)
+//	DDHHMMz — day of month, hours, minutes UTC
+//	DDHHMM/ — day of month, hours, minutes local
+//	HHMMSSh — hours, minutes, seconds UTC ("hms" form)
 func parseAPRSTimestamp(b []byte) (*time.Time, error) {
 	if len(b) != 7 {
 		return nil, errors.New("aprs: timestamp length")
@@ -499,4 +507,3 @@ func allDigitsOrSign(b []byte) bool {
 	}
 	return true
 }
-

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -871,4 +872,70 @@ func fetchList(t *testing.T, mux *http.ServeMux) []dto.KissResponse {
 		t.Fatalf("decode list: %v", err)
 	}
 	return list
+}
+
+func TestKissReconnectSerialEndpoint(t *testing.T) {
+	for _, kind := range []string{configstore.KissTypeSerial, configstore.KissTypeUsbSerial, configstore.KissTypeBluetooth} {
+		t.Run(kind, func(t *testing.T) {
+			srv, _ := newTestServer(t)
+			ctx, cancel := context.WithCancel(context.Background())
+			mgr := kiss.NewManager(kiss.ManagerConfig{Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
+			srv.kissManager = mgr
+			defer mgr.StopAll()
+			defer cancel()
+			row := configstore.KissInterface{Name: "test", InterfaceType: kind, Enabled: true, Device: "test", BaudRate: 9600, Channel: 1, Mode: configstore.KissModeModem}
+			if err := srv.store.CreateKissInterface(ctx, &row); err != nil {
+				t.Fatal(err)
+			}
+			mgr.StartSerial(ctx, row.ID, kiss.SerialConfig{Name: "test", Device: "test", BaudRate: 9600, OpenFunc: func(string, uint32) (io.ReadWriteCloser, error) {
+				port, peer := net.Pipe()
+				go func() { defer peer.Close(); _, _ = io.Copy(io.Discard, peer) }()
+				return port, nil
+			}})
+			deadline := time.Now().Add(time.Second)
+			for mgr.Status()[row.ID].State != kiss.StateConnected && time.Now().Before(deadline) {
+				time.Sleep(time.Millisecond)
+			}
+			mux := http.NewServeMux()
+			srv.RegisterRoutes(mux)
+			rec := doPost(mux, "/api/kiss/"+itoa(row.ID)+"/reconnect", nil)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("reconnect %s: %d %s", kind, rec.Code, rec.Body.String())
+			}
+			deadline = time.Now().Add(time.Second)
+			for mgr.Status()[row.ID].ReconnectCount < 2 && time.Now().Before(deadline) {
+				time.Sleep(time.Millisecond)
+			}
+			if mgr.Status()[row.ID].ReconnectCount < 2 {
+				t.Fatal("serial API accepted but did not reopen the port")
+			}
+		})
+	}
+}
+
+func TestKissUpdatePortPreservesNameAcrossSavedProfiles(t *testing.T) {
+	srv, _ := newTestServer(t)
+	ctx := context.Background()
+	path := "/dev/serial/by-id/usb-test"
+	saved := configstore.KissInterface{Name: "kiss-serial-" + path, InterfaceType: configstore.KissTypeSerial, Device: path, BaudRate: 9600, Channel: 1, Mode: configstore.KissModeModem, Enabled: false}
+	current := configstore.KissInterface{Name: "kiss-serial-/dev/ttyUSB0", InterfaceType: configstore.KissTypeSerial, Device: "/dev/ttyUSB0", BaudRate: 9600, Channel: 1, Mode: configstore.KissModeModem, Enabled: false}
+	for _, row := range []*configstore.KissInterface{&saved, &current} {
+		if err := srv.store.CreateKissInterface(ctx, row); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mux := http.NewServeMux()
+	srv.RegisterRoutes(mux)
+	rec := requestJSON(t, mux, http.MethodPut, "/api/kiss/"+itoa(current.ID), map[string]any{"type": "serial", "serial_device": path, "baud_rate": 9600, "channel": 1, "mode": "modem", "enabled": false})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("port update: %d %s", rec.Code, rec.Body.String())
+	}
+	updated, err := srv.store.GetKissInterface(ctx, current.ID)
+	if err != nil || updated.Name != current.Name || updated.Device != path || updated.Enabled || !updated.CreatedAt.Equal(current.CreatedAt) {
+		t.Fatalf("changed identity or config: %+v %v", updated, err)
+	}
+	other, err := srv.store.GetKissInterface(ctx, saved.ID)
+	if err != nil || other.Name != saved.Name || other.Enabled || other.Device != path {
+		t.Fatalf("modified saved profile: %+v %v", other, err)
+	}
 }

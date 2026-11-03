@@ -3,6 +3,7 @@ package tncprofile
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -14,6 +15,10 @@ import (
 // D710: Kenwood TM-D710AE_IDM_R1.pdf, section 5.1.3; TN mode/band query
 // documented by LA3QMA/TM-V71_TM-D710-Kenwood, commands/TN.md.
 func initializeModel(parent context.Context, port io.ReadWriteCloser, profile string, radioBaud uint32, modeSettle, settle time.Duration) (result io.ReadWriteCloser, err error) {
+	// Keep a single raw reader across command retries and transport handoff.
+	// A per-command timeout must never leave a competing blocked serial read.
+	pump := newRestartPort(port, port)
+	port = pump
 	ctx, cancel := context.WithTimeout(parent, 30*time.Second)
 	defer cancel()
 	stopClose := context.AfterFunc(ctx, func() { _ = port.Close() })
@@ -22,11 +27,12 @@ func initializeModel(parent context.Context, port io.ReadWriteCloser, profile st
 		if err != nil {
 			_ = port.Close()
 			if ctx.Err() != nil {
-				err = fmt.Errorf("%s initialization: %w", profile, ctx.Err())
+				err = fmt.Errorf("%s initialization: %w (%v)", profile, ctx.Err(), err)
 			}
 		}
 	}()
-	r := bufio.NewReader(port)
+	input := &kenwoodContextReader{port: pump, ctx: ctx}
+	r := bufio.NewReader(input)
 	write := func(s string) error {
 		n, err := io.WriteString(port, s)
 		if err == nil && n != len(s) {
@@ -55,13 +61,40 @@ func initializeModel(parent context.Context, port io.ReadWriteCloser, profile st
 	if err = write("\x03\x03\x03\r"); err != nil {
 		return nil, err
 	}
-	// Discard only the synchronization transcript. A stale cmd: must never
-	// acknowledge TC 1: require its distinct TS 1 radio-control reply.
-	if err = write("TC 1\r"); err != nil {
-		return nil, err
+	if profile == TMD700 {
+		// UI-View sends AI before TC. In TNC command mode AI can be
+		// rejected or merely echoed; require the distinct TC response first.
+		if err = write("AI 1\r"); err != nil {
+			return nil, err
+		}
 	}
-	if _, err = readKenwoodResponse(r, false, func(s string) bool { return s == "TS 1" }); err != nil {
+	for attempt := 0; attempt < 3; attempt++ {
+		if err = write("TC 1\r"); err != nil {
+			return nil, err
+		}
+		stepCtx, stepCancel := context.WithTimeout(ctx, 1500*time.Millisecond)
+		input.ctx = stepCtx
+		_, err = readKenwoodResponse(r, false, func(s string) bool { return s == "TS 1" })
+		stepCancel()
+		input.ctx = ctx
+		if err == nil {
+			break
+		}
+		if !errors.Is(err, context.DeadlineExceeded) || ctx.Err() != nil {
+			break
+		}
+	}
+	if err != nil {
 		return nil, fmt.Errorf("%s TC 1: %w", profile, err)
+	}
+	if profile == TMD700 {
+		// Now AI 1 is a radio-control command rather than a TNC echo.
+		if err = write("AI 1\r"); err != nil {
+			return nil, err
+		}
+		if _, err = readKenwoodResponse(r, true, func(s string) bool { return s == "AI 1" }); err != nil {
+			return nil, fmt.Errorf("TM-D700 AI 1: %w", err)
+		}
 	}
 	if err = write("ID\r"); err != nil {
 		return nil, err
@@ -75,7 +108,7 @@ func initializeModel(parent context.Context, port io.ReadWriteCloser, profile st
 		expected = "ID TM-D710"
 	}
 	suffix := strings.TrimPrefix(model, expected)
-	allowedSuffix := suffix == "" || suffix == "A" || suffix == "E" || (profile == TMD710 && (suffix == "G" || suffix == "GA" || suffix == "GE"))
+	allowedSuffix := suffix == "" || suffix == "A" || suffix == "E" || (profile == TMD710 && (suffix == "P" || suffix == "G" || suffix == "GA" || suffix == "GE"))
 	if !strings.HasPrefix(model, expected) || !allowedSuffix {
 		return nil, fmt.Errorf("%s: unexpected radio model %q", profile, model)
 	}
@@ -91,30 +124,46 @@ func initializeModel(parent context.Context, port io.ReadWriteCloser, profile st
 		return err
 	}
 	if profile == TMD700 {
-		for _, request := range []string{"AI 1", "TNC 2"} {
-			if err = command(request, false, func(s string) bool { return s == request }); err != nil {
-				return nil, fmt.Errorf("TM-D700 %s: %w", request, err)
-			}
+		if err = command("TNC 2", false, func(s string) bool { return s == "TNC 2" }); err != nil {
+			return nil, fmt.Errorf("TM-D700 TNC 2: %w", err)
 		}
 		if err = pause(modeSettle); err != nil {
 			return nil, err
 		}
-		if err = command("TC 0", true, nil); err != nil {
+		// Select operating/data band A as in the supplied UI-View file.
+		// Frequency and shift remain the operator's radio settings.
+		for _, request := range []string{"BC 0,0", "DTB 0"} {
+			if err = command(request, false, func(s string) bool { return s == request }); err != nil {
+				return nil, fmt.Errorf("TM-D700 %s: %w", request, err)
+			}
+		}
+		if err = write("TC 0\r"); err != nil {
+			return nil, err
+		}
+		if err = pause(200 * time.Millisecond); err != nil {
+			return nil, err
+		}
+		if err = command("", true, nil); err != nil {
 			return nil, fmt.Errorf("TM-D700 TC 0: %w", err)
 		}
 	} else {
-		if err = write("TN\r"); err != nil {
-			return nil, err
+		// The TM-D710P rejects a bare TN query. Its working UI-View
+		// initialization selects PACKET directly on band A (docs/TM-D710.cmd).
+		request := "TN 2,0"
+		if model != "ID TM-D710P" {
+			if err = write("TN\r"); err != nil {
+				return nil, err
+			}
+			state, err := readKenwoodResponse(r, true, func(s string) bool { return strings.HasPrefix(s, "TN ") })
+			if err != nil {
+				return nil, fmt.Errorf("TM-D710 TN: %w", err)
+			}
+			parts := strings.Split(strings.TrimPrefix(state, "TN "), ",")
+			if len(parts) != 2 || len(parts[0]) != 1 || !strings.Contains("012", parts[0]) || len(parts[1]) != 1 || !strings.Contains("0123", parts[1]) {
+				return nil, fmt.Errorf("TM-D710: invalid TNC mode/band %q", state)
+			}
+			request = "TN 2," + parts[1]
 		}
-		state, err := readKenwoodResponse(r, true, func(s string) bool { return strings.HasPrefix(s, "TN ") })
-		if err != nil {
-			return nil, fmt.Errorf("TM-D710 TN: %w", err)
-		}
-		parts := strings.Split(strings.TrimPrefix(state, "TN "), ",")
-		if len(parts) != 2 || len(parts[0]) != 1 || !strings.Contains("012", parts[0]) || len(parts[1]) != 1 || !strings.Contains("0123", parts[1]) {
-			return nil, fmt.Errorf("TM-D710: invalid TNC mode/band %q", state)
-		}
-		request := "TN 2," + parts[1]
 		if err = command(request, false, func(s string) bool { return s == request }); err != nil {
 			return nil, fmt.Errorf("TM-D710 %s: %w", request, err)
 		}
@@ -125,6 +174,24 @@ func initializeModel(parent context.Context, port io.ReadWriteCloser, profile st
 		}
 		if err = command("", true, nil); err != nil {
 			return nil, fmt.Errorf("TM-D710 PACKET prompt: %w", err)
+		}
+	}
+	// TN may emit several prompts and saved-setting replies after its first
+	// cmd:. Drain only this startup transcript before issuing our settings;
+	// a delayed ?EH from synchronization must not reject ECHO OFF or HBAUD.
+	startupEnd := time.Now().Add(time.Second)
+	for time.Now().Before(startupEnd) {
+		quietCtx, quietCancel := context.WithDeadline(ctx, minTime(startupEnd, time.Now().Add(200*time.Millisecond)))
+		input.ctx = quietCtx
+		var discard [1024]byte
+		_, readErr := r.Read(discard[:])
+		quietCancel()
+		input.ctx = ctx
+		if errors.Is(readErr, context.DeadlineExceeded) && ctx.Err() == nil {
+			break
+		}
+		if readErr != nil {
+			return nil, fmt.Errorf("%s startup drain: %w", profile, readErr)
 		}
 	}
 	if radioBaud != 0 {
@@ -156,12 +223,24 @@ func initializeModel(parent context.Context, port io.ReadWriteCloser, profile st
 			return nil, fmt.Errorf("%s HBAUD prompt: %w", profile, err)
 		}
 	}
+	// Disable command echo before KISS so an echoed command plus a stale
+	// prompt cannot be mistaken for the TNC's setting acknowledgement.
+	if err = write("ECHO OFF\r"); err != nil {
+		return nil, err
+	}
+	if _, err = readKenwoodPromptMatching(r, func(line string) bool {
+		text := strings.Join(strings.Fields(strings.ToUpper(line)), " ")
+		return text == "ECHO WAS ON" || text == "ECHO WAS OFF"
+	}); err != nil {
+		return nil, fmt.Errorf("%s ECHO OFF: %w", profile, err)
+	}
 	if err = command("KISS ON", true, nil); err != nil {
 		return nil, fmt.Errorf("%s KISS ON: %w", profile, err)
 	}
 	if err = write("RESTART\r"); err != nil {
 		return nil, err
 	}
+	input.ctx = context.Background() // runtime reads outlive initialization
 	stream := newRestartPort(port, r)
 	if err = stream.waitRestart(ctx, settle); err != nil {
 		_ = stream.Close()
@@ -169,7 +248,7 @@ func initializeModel(parent context.Context, port io.ReadWriteCloser, profile st
 	}
 	// KISS has no mandatory startup acknowledgement. This means the serial
 	// session is ready, not that an RF exchange has been validated.
-	return stream, nil
+	return newKenwoodSession(stream, len(stream.pending)), nil
 }
 
 func kenwoodRejected(line string) bool {
@@ -193,7 +272,7 @@ func readKenwoodResponse(r *bufio.Reader, reject bool, match func(string) bool) 
 			if match(text) {
 				return text, nil
 			}
-		} else if b >= 32 && b < 127 {
+		} else if b == '\t' || (b >= 32 && b < 127) {
 			line += string(b)
 		}
 		if strings.HasSuffix(strings.ToLower(line), "cmd:") {
@@ -231,7 +310,7 @@ func readKenwoodPromptMatching(r *bufio.Reader, match func(string) bool) (string
 				acknowledged = true
 			}
 			line = ""
-		} else if b >= 32 && b < 127 {
+		} else if b == '\t' || (b >= 32 && b < 127) {
 			line += string(b)
 		}
 		if strings.HasSuffix(strings.ToLower(line), "cmd:") {
@@ -252,10 +331,27 @@ func readKenwoodPromptMatching(r *bufio.Reader, match func(string) bool) (string
 }
 
 func kenwoodKISSAcknowledgement(line string) bool {
-	switch strings.ToUpper(strings.TrimSpace(line)) {
+	switch strings.Join(strings.Fields(strings.ToUpper(line)), " ") {
 	case "KISS ON", "KISS WAS OFF", "KISS WAS ON":
 		return true
 	default:
 		return false
 	}
+}
+
+// Used only by the initialization goroutine until runtime handoff.
+type kenwoodContextReader struct {
+	port *restartPort
+	ctx  context.Context
+}
+
+func (r *kenwoodContextReader) Read(dst []byte) (int, error) {
+	return r.port.readContext(r.ctx, dst)
+}
+
+func minTime(a, b time.Time) time.Time {
+	if a.Before(b) {
+		return a
+	}
+	return b
 }
