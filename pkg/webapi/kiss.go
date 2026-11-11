@@ -307,6 +307,8 @@ func (s *Server) notifyKissManager(ki configstore.KissInterface) {
 		}
 		s.kissManager.StartClient(s.kissCtx, ki.ID, kiss.ClientConfig{
 			Name:                ki.Name,
+			TCPProtocol:         ki.TCPProtocol,
+			AgwPort:             ki.AgwPort,
 			RemoteHost:          ki.RemoteHost,
 			RemotePort:          ki.RemotePort,
 			ReconnectInitMs:     ki.ReconnectInitMs,

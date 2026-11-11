@@ -40,121 +40,37 @@
 package agw
 
 import (
-	"encoding/binary"
-	"errors"
+	"github.com/chrissnell/graywolf/pkg/agw/wire"
 	"io"
 )
 
-// HeaderSize is the fixed AGW frame header length.
-const HeaderSize = 36
+const HeaderSize = wire.HeaderSize
 
-// Header is the 36-byte AGWPE frame header.
-type Header struct {
-	Port     uint8
-	DataKind byte
-	PID      uint8
-	CallFrom string // 10-char NUL-padded
-	CallTo   string // 10-char NUL-padded
-	DataLen  uint32 // little-endian on the wire
-	User     uint32
-}
+type Header = wire.Header
 
-// Data kinds as single ASCII bytes. Direction is context-dependent (some
-// kinds appear in both directions).
 const (
-	KindVersion            byte = 'R'
-	KindPortInfo           byte = 'G'
-	KindPortCaps           byte = 'g'
-	KindRegisterCallsign   byte = 'X'
-	KindUnregisterCallsign byte = 'x'
-	KindMonitorOn          byte = 'm'
-	KindSendUnproto        byte = 'M' // client → server: send UI frame
-	KindSendUnprotoVia     byte = 'V' // client → server: send UI frame via digipeaters
-	KindSendRaw            byte = 'K' // both directions: raw AX.25
-	KindToggleRawKISS      byte = 'k' // client → server: toggle raw KISS frame reception
-	KindMonitoredUI        byte = 'U' // server → client: rx UI frame
-
-	// Connected-mode kinds
-	KindConnect           byte = 'C'
-	KindConnectVia        byte = 'v'
-	KindDisconnect        byte = 'd'
-	KindConnectedData     byte = 'D'
-	KindOutstandingFrames byte = 'Y'
+	KindVersion            = wire.KindVersion
+	KindPortInfo           = wire.KindPortInfo
+	KindPortCaps           = wire.KindPortCaps
+	KindRegisterCallsign   = wire.KindRegisterCallsign
+	KindUnregisterCallsign = wire.KindUnregisterCallsign
+	KindMonitorOn          = wire.KindMonitorOn
+	KindSendUnproto        = wire.KindSendUnproto
+	KindSendUnprotoVia     = wire.KindSendUnprotoVia
+	KindSendRaw            = wire.KindSendRaw
+	KindToggleRawKISS      = wire.KindToggleRawKISS
+	KindMonitoredUI        = wire.KindMonitoredUI
+	KindConnect            = wire.KindConnect
+	KindConnectVia         = wire.KindConnectVia
+	KindDisconnect         = wire.KindDisconnect
+	KindConnectedData      = wire.KindConnectedData
+	KindOutstandingFrames  = wire.KindOutstandingFrames
 )
 
-// EncodeHeader writes h into a 36-byte buffer.
-func EncodeHeader(h *Header) []byte {
-	buf := make([]byte, HeaderSize)
-	buf[0] = h.Port
-	buf[4] = h.DataKind
-	buf[6] = h.PID
-	copyPadded(buf[8:18], h.CallFrom)
-	copyPadded(buf[18:28], h.CallTo)
-	binary.LittleEndian.PutUint32(buf[28:32], h.DataLen)
-	binary.LittleEndian.PutUint32(buf[32:36], h.User)
-	return buf
-}
-
-// DecodeHeader parses a 36-byte header.
-func DecodeHeader(buf []byte) (*Header, error) {
-	if len(buf) < HeaderSize {
-		return nil, errors.New("agw: short header")
-	}
-	h := &Header{
-		Port:     buf[0],
-		DataKind: buf[4],
-		PID:      buf[6],
-		CallFrom: trimNul(string(buf[8:18])),
-		CallTo:   trimNul(string(buf[18:28])),
-		DataLen:  binary.LittleEndian.Uint32(buf[28:32]),
-		User:     binary.LittleEndian.Uint32(buf[32:36]),
-	}
-	return h, nil
-}
-
-// ReadFrame reads one header + data payload from r.
-func ReadFrame(r io.Reader) (*Header, []byte, error) {
-	hbuf := make([]byte, HeaderSize)
-	if _, err := io.ReadFull(r, hbuf); err != nil {
-		return nil, nil, err
-	}
-	h, err := DecodeHeader(hbuf)
-	if err != nil {
-		return nil, nil, err
-	}
-	const maxDataLen = 1 << 16
-	if h.DataLen > maxDataLen {
-		return nil, nil, errors.New("agw: data_len too large")
-	}
-	var data []byte
-	if h.DataLen > 0 {
-		data = make([]byte, h.DataLen)
-		if _, err := io.ReadFull(r, data); err != nil {
-			return nil, nil, err
-		}
-	}
-	return h, data, nil
-}
-
-// WriteFrame serialises h (with DataLen overwritten to len(data)) and
-// writes header+data to w atomically using a single buffer allocation.
-func WriteFrame(w io.Writer, h *Header, data []byte) error {
-	h.DataLen = uint32(len(data))
-	hbuf := EncodeHeader(h)
-	buf := make([]byte, 0, HeaderSize+len(data))
-	buf = append(buf, hbuf...)
-	buf = append(buf, data...)
-	_, err := w.Write(buf)
-	return err
-}
-
-func copyPadded(dst []byte, s string) {
-	n := copy(dst, s)
-	for i := n; i < len(dst); i++ {
-		dst[i] = 0
-	}
-}
-
+func EncodeHeader(h *Header) []byte                        { return wire.EncodeHeader(h) }
+func DecodeHeader(b []byte) (*Header, error)               { return wire.DecodeHeader(b) }
+func ReadFrame(r io.Reader) (*Header, []byte, error)       { return wire.ReadFrame(r) }
+func WriteFrame(w io.Writer, h *Header, data []byte) error { return wire.WriteFrame(w, h, data) }
 func trimNul(s string) string {
 	for i := 0; i < len(s); i++ {
 		if s[i] == 0 {

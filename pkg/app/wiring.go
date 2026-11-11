@@ -2104,6 +2104,8 @@ func (a *App) kissComponent() namedComponent {
 					}
 					a.kissMgr.StartClient(ctx, ki.ID, kiss.ClientConfig{
 						Name:                name,
+						TCPProtocol:         ki.TCPProtocol,
+						AgwPort:             ki.AgwPort,
 						RemoteHost:          ki.RemoteHost,
 						RemotePort:          ki.RemotePort,
 						ReconnectInitMs:     ki.ReconnectInitMs,

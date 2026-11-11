@@ -3,6 +3,19 @@
 These instructions apply to the whole repository. Read `CLAUDE.md` and
 `docs/wiki/README.md` before changing a cross-system workflow.
 
+## Local installation after feature work
+
+After implementing a feature and passing the relevant checks, build and
+install it into the local Graywolf instance, restart the service, and verify
+that the installed binary and web UI expose the change. The user tests the
+installed application; do not stop at an uninstalled implementation or ask
+again for permission to install locally. Preserve the existing configuration
+and local work, and keep a bounded rollback copy when a binary or database
+changes. Report the local URL, how to reach the feature, and remaining limits.
+This authorization covers local installation; publication still follows the
+release approval rules below. An explicit request to pause or avoid a restart
+takes precedence.
+
 ## Release lanes
 
 Before changing a version, creating a tag, or publishing anything, identify

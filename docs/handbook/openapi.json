@@ -11092,6 +11092,9 @@
         "dto.KissRequest": {
             "type": "object",
             "properties": {
+                "agw_port": {
+                    "type": "integer"
+                },
                 "allow_connected_mode": {
                     "description": "AllowConnectedMode opts a KISS interface in to passing non-UI\n(connected-mode) AX.25 frames through to the radio instead of\ndropping them, so connected-mode packet apps (Pat/Winlink via the\nkernel AX.25 stack + kissattach) can use graywolf as a raw KISS\nmodem. Default false; the far end owns the LAPB session state.",
                     "type": "boolean"
@@ -11136,7 +11139,6 @@
                     "type": "integer"
                 },
                 "remote_host": {
-                    "description": "Tcp-client fields (Phase 4): RemoteHost:RemotePort is the dial\ntarget; ReconnectInitMs / ReconnectMaxMs size the supervisor's\nexponential-backoff reconnect schedule. Unused / zero for\nType != \"tcp-client\".",
                     "type": "string"
                 },
                 "remote_port": {
@@ -11147,6 +11149,10 @@
                 },
                 "tcp_port": {
                     "type": "integer"
+                },
+                "tcp_protocol": {
+                    "description": "Tcp-client fields (Phase 4): RemoteHost:RemotePort is the dial\ntarget; ReconnectInitMs / ReconnectMaxMs size the supervisor's\nexponential-backoff reconnect schedule. Unused / zero for\nType != \"tcp-client\".",
+                    "type": "string"
                 },
                 "tnc_ingress_burst": {
                     "type": "integer"
@@ -11162,6 +11168,9 @@
         "dto.KissResponse": {
             "type": "object",
             "properties": {
+                "agw_port": {
+                    "type": "integer"
+                },
                 "allow_connected_mode": {
                     "type": "boolean"
                 },
@@ -11224,7 +11233,6 @@
                     "type": "integer"
                 },
                 "remote_host": {
-                    "description": "Tcp-client fields (Phase 4). Zero-valued for non-tcp-client rows.",
                     "type": "string"
                 },
                 "remote_port": {
@@ -11242,6 +11250,10 @@
                 },
                 "tcp_port": {
                     "type": "integer"
+                },
+                "tcp_protocol": {
+                    "description": "Tcp-client fields (Phase 4). Zero-valued for non-tcp-client rows.",
+                    "type": "string"
                 },
                 "tnc_ingress_burst": {
                     "type": "integer"

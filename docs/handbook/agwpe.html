@@ -109,10 +109,36 @@
       </div>
     </div>
 
+    <h2 id="client">Use Graywolf as an AGWPE client</h2>
+    <p>To keep an existing AGW Packet Engine installation in charge of the
+      radio, open the <strong>KISS</strong> page (KISS / AGWPE Interfaces) and add a
+      <strong>TCP Client</strong> with protocol <strong>AGWPE (APRS client)</strong>.
+      Enter its host (127.0.0.1 on the same computer), TCP port (normally 8000),
+      and radio port as numbered in AGWPE (1 through 16). Assign a Graywolf
+      channel with external TNC backing. Leave connected-mode passthrough off.</p>
+    <p>Enable the TCP/IP application interface in AGWPE and permit connections
+      from the Graywolf computer. This initial client does not send an AGWPE
+      username/password login. Do not point it at Graywolf's own AGW listener.</p>
+    <p>One saved interface selects one remote radio port; add another interface
+      and channel to use another port. Graywolf queries the server's port list,
+      checks that the selected port exists, and subscribes to raw reception.
+      Only packets from that radio port enter its channel. Emission uses the
+      normal Graywolf transmission queue and its enable/disable controls.
+      Enable “Allow digipeater/beacon/iGate to transmit” when transmission is
+      wanted. Choose APRS mode on the channel.</p>
+    <p>Disconnects trigger automatic retry. The existing status and Reconnect
+      controls apply. This client transports APRS UI frames; it does not expose
+      AGWPE-managed connected packet sessions. The server documented below is
+      a separate function and need not be enabled to use the client.</p>
+    <p><strong>Validation:</strong> protocol fixtures and automated tests cover
+      binary APRS RX/TX, radio-port filtering, discovery failures, cancellation
+      and reconnect. Validation with DEV's actual AGW Packet Engine and radio
+      remains required.</p>
+
     <h2>Port Mapping</h2>
 
     <p>
-      AGWPE supports up to four radio ports (numbered 0&ndash;3). Each port
+      Graywolf’s AGW server exposes up to four radio ports (numbered 0&ndash;3). Each port
       is mapped to a callsign specified in the <code>callsigns</code> field.
       The order determines the port number:
     </p>

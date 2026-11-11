@@ -3091,6 +3091,7 @@ export interface components {
             enabled?: boolean;
         };
         "dto.KissRequest": {
+            agw_port?: number;
             /**
              * @description AllowConnectedMode opts a KISS interface in to passing non-UI
              *     (connected-mode) AX.25 frames through to the radio instead of
@@ -3155,21 +3156,23 @@ export interface components {
             radio_baud_rate?: number;
             reconnect_init_ms?: number;
             reconnect_max_ms?: number;
+            remote_host?: string;
+            remote_port?: number;
+            serial_device?: string;
+            tcp_port?: number;
             /**
              * @description Tcp-client fields (Phase 4): RemoteHost:RemotePort is the dial
              *     target; ReconnectInitMs / ReconnectMaxMs size the supervisor's
              *     exponential-backoff reconnect schedule. Unused / zero for
              *     Type != "tcp-client".
              */
-            remote_host?: string;
-            remote_port?: number;
-            serial_device?: string;
-            tcp_port?: number;
+            tcp_protocol?: string;
             tnc_ingress_burst?: number;
             tnc_ingress_rate_hz?: number;
             type?: string;
         };
         "dto.KissResponse": {
+            agw_port?: number;
             allow_connected_mode?: boolean;
             allow_tx_from_governor?: boolean;
             backoff_seconds?: number;
@@ -3204,7 +3207,6 @@ export interface components {
             reconnect_count?: number;
             reconnect_init_ms?: number;
             reconnect_max_ms?: number;
-            /** @description Tcp-client fields (Phase 4). Zero-valued for non-tcp-client rows. */
             remote_host?: string;
             remote_port?: number;
             retry_at_unix_ms?: number;
@@ -3218,6 +3220,8 @@ export interface components {
              */
             state?: string;
             tcp_port?: number;
+            /** @description Tcp-client fields (Phase 4). Zero-valued for non-tcp-client rows. */
+            tcp_protocol?: string;
             tnc_ingress_burst?: number;
             tnc_ingress_rate_hz?: number;
             type?: string;

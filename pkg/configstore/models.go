@@ -146,6 +146,10 @@ type KissInterface struct {
 	// supervisor's backoff schedule. ListenAddr is ignored on tcp-client
 	// rows. Unused / zero on all other interface types; see Phase 4 in
 	// .context/2026-04-20-kiss-tcp-client-and-channel-backing.md.
+	// TCPProtocol is empty for KISS or "agwpe" for an APRS-only AGW client.
+	TCPProtocol string `gorm:"not null;default:''" json:"tcp_protocol"`
+	// AgwPort is zero-based on the wire (0 is AGWPE Port 1).
+	AgwPort         uint8  `gorm:"not null;default:0" json:"agw_port"`
 	RemoteHost      string `gorm:"column:remote_host;not null;default:''" json:"remote_host"`
 	RemotePort      uint16 `gorm:"column:remote_port;not null;default:0" json:"remote_port"`
 	ReconnectInitMs uint32 `gorm:"column:reconnect_init_ms;not null;default:1000" json:"reconnect_init_ms"`

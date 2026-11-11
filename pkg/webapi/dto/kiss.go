@@ -78,6 +78,8 @@ type KissRequest struct {
 	// target; ReconnectInitMs / ReconnectMaxMs size the supervisor's
 	// exponential-backoff reconnect schedule. Unused / zero for
 	// Type != "tcp-client".
+	TCPProtocol     string `json:"tcp_protocol"`
+	AgwPort         uint8  `json:"agw_port"`
 	RemoteHost      string `json:"remote_host"`
 	RemotePort      uint16 `json:"remote_port"`
 	ReconnectInitMs uint32 `json:"reconnect_init_ms"`
@@ -104,6 +106,9 @@ const (
 )
 
 func (r KissRequest) Validate() error {
+	if err := configstore.ValidateTCPProtocol(r.Type, r.Mode, r.TCPProtocol, r.AgwPort, r.AllowConnectedMode); err != nil {
+		return err
+	}
 	if err := tncprofile.ValidateRadioBaud(r.InitProfile, r.RadioBaudRate); err != nil {
 		return err
 	}
@@ -246,6 +251,8 @@ func (r KissRequest) ToModel() configstore.KissInterface {
 		AllowTxFromGovernor: allowTx,
 		GateTxToIs:          r.GateTxToIs,
 		AllowConnectedMode:  r.AllowConnectedMode,
+		TCPProtocol:         r.TCPProtocol,
+		AgwPort:             r.AgwPort,
 		RemoteHost:          r.RemoteHost,
 		RemotePort:          r.RemotePort,
 		ReconnectInitMs:     initMs,
@@ -266,6 +273,9 @@ func (r KissRequest) ToModel() configstore.KissInterface {
 		// specific interface is human-readable without cross-referencing
 		// the DB row ID. Truncation not needed — hostnames are bounded.
 		ki.Name = fmt.Sprintf("kiss-tcp-client-%s-%d", r.RemoteHost, r.RemotePort)
+		if r.TCPProtocol == "agwpe" {
+			ki.Name = fmt.Sprintf("agwpe-client-%s-%d-port%d", r.RemoteHost, r.RemotePort, int(r.AgwPort)+1)
+		}
 	default:
 		if r.SerialDevice != "" {
 			ki.Name = fmt.Sprintf("kiss-serial-%s", r.SerialDevice)
@@ -328,6 +338,8 @@ type KissResponse struct {
 	// for it.
 	Enabled bool `json:"enabled"`
 	// Tcp-client fields (Phase 4). Zero-valued for non-tcp-client rows.
+	TCPProtocol     string `json:"tcp_protocol"`
+	AgwPort         uint8  `json:"agw_port"`
 	RemoteHost      string `json:"remote_host"`
 	RemotePort      uint16 `json:"remote_port"`
 	ReconnectInitMs uint32 `json:"reconnect_init_ms"`
@@ -380,6 +392,8 @@ func KissFromModel(m configstore.KissInterface) KissResponse {
 		AllowConnectedMode:  m.AllowConnectedMode,
 		NeedsReconfig:       m.NeedsReconfig,
 		Enabled:             m.Enabled,
+		TCPProtocol:         m.TCPProtocol,
+		AgwPort:             m.AgwPort,
 		RemoteHost:          m.RemoteHost,
 		RemotePort:          m.RemotePort,
 		ReconnectInitMs:     m.ReconnectInitMs,

@@ -464,6 +464,25 @@ Bluetooth code on this surface is [invariant 35](invariants.md).
 | Windows NSIS installer | [`../../packaging/nsis/graywolf.nsi`](../../packaging/nsis/graywolf.nsi) |
 | Grafana dashboard | [`../../packaging/grafana/remote-kiss-tnc.json`](../../packaging/grafana/remote-kiss-tnc.json) |
 
+## AGWPE client radio transport
+
+The existing network-radio interface (`KissInterface`, `/api/kiss`,
+`web/src/routes/Kiss.svelte`) also supports `tcp_protocol="agwpe"` on
+`type="tcp-client"` in TNC mode. Empty protocol retains existing KISS behavior.
+`agw_port` is zero-based in storage/API, one-based in the UI (Port 1-16).
+AutoMigrate adds both fields without changing old interfaces. The store and
+DTO reject modem mode, connected-mode passthrough and incompatible transports.
+Boot wiring and API hot reload both pass the fields to `kiss.ClientConfig`.
+
+`pkg/kiss/agw_client.go` performs bounded G port discovery and one k raw toggle
+per connection; `client.go` uses K raw TX. Port filtering happens before the
+shared ingress dispatcher. Only UI frames are supported; normal TX governor,
+per-interface enable/TX controls, reconnect and ingress echo suppression still
+apply. `pkg/agw/wire` holds the codec shared with the AGW server without
+importing its AX.25 connection engine. The AGW server API remains independent.
+No P username/password login or AGW-managed connected sessions in this client.
+Operator setup and validation limits: [`../handbook/agwpe.html#client`](../handbook/agwpe.html#client).
+
 ## KISS TCP transmit stalls
 
 `pkg/kiss/client.go` configures Linux `TCP_USER_TIMEOUT` through

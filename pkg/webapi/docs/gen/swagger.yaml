@@ -1635,6 +1635,8 @@ definitions:
     type: object
   dto.KissRequest:
     properties:
+      agw_port:
+        type: integer
       allow_connected_mode:
         description: |-
           AllowConnectedMode opts a KISS interface in to passing non-UI
@@ -1705,11 +1707,6 @@ definitions:
       reconnect_max_ms:
         type: integer
       remote_host:
-        description: |-
-          Tcp-client fields (Phase 4): RemoteHost:RemotePort is the dial
-          target; ReconnectInitMs / ReconnectMaxMs size the supervisor's
-          exponential-backoff reconnect schedule. Unused / zero for
-          Type != "tcp-client".
         type: string
       remote_port:
         type: integer
@@ -1717,6 +1714,13 @@ definitions:
         type: string
       tcp_port:
         type: integer
+      tcp_protocol:
+        description: |-
+          Tcp-client fields (Phase 4): RemoteHost:RemotePort is the dial
+          target; ReconnectInitMs / ReconnectMaxMs size the supervisor's
+          exponential-backoff reconnect schedule. Unused / zero for
+          Type != "tcp-client".
+        type: string
       tnc_ingress_burst:
         type: integer
       tnc_ingress_rate_hz:
@@ -1726,6 +1730,8 @@ definitions:
     type: object
   dto.KissResponse:
     properties:
+      agw_port:
+        type: integer
       allow_connected_mode:
         type: boolean
       allow_tx_from_governor:
@@ -1777,7 +1783,6 @@ definitions:
       reconnect_max_ms:
         type: integer
       remote_host:
-        description: Tcp-client fields (Phase 4). Zero-valued for non-tcp-client rows.
         type: string
       remote_port:
         type: integer
@@ -1795,6 +1800,9 @@ definitions:
         type: string
       tcp_port:
         type: integer
+      tcp_protocol:
+        description: Tcp-client fields (Phase 4). Zero-valued for non-tcp-client rows.
+        type: string
       tnc_ingress_burst:
         type: integer
       tnc_ingress_rate_hz:

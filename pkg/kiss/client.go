@@ -3,6 +3,7 @@ package kiss
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"math/rand"
@@ -12,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	agw "github.com/chrissnell/graywolf/pkg/agw/wire"
 	"github.com/chrissnell/graywolf/pkg/app/ingress"
 	"github.com/chrissnell/graywolf/pkg/ax25"
 	"github.com/chrissnell/graywolf/pkg/internal/backoff"
@@ -32,7 +34,7 @@ const (
 	txStallTimeout = 20 * time.Second
 )
 
-// Client is the outbound-dial KISS interface: a single supervised TCP
+// Client is an outbound radio interface (KISS or APRS over AGWPE): a supervised TCP
 // connection to a remote KISS TNC, with exponential-backoff reconnect
 // and unified Status() telemetry for the UI countdown + Retry-now
 // affordance. One Client per KissInterface row with
@@ -114,8 +116,10 @@ type ClientConfig struct {
 	// Name identifies the interface in logs and metrics.
 	Name string
 	// RemoteHost / RemotePort are the dial target.
-	RemoteHost string
-	RemotePort uint16
+	TCPProtocol string
+	AgwPort     uint8
+	RemoteHost  string
+	RemotePort  uint16
 	// ChannelMap mirrors the server side — the per-port → channel
 	// translation applied to inbound frames. Outbound TX uses the
 	// reverse mapping (first port whose value equals the target
@@ -212,7 +216,7 @@ func newClient(cfg ClientConfig) *Client {
 	}
 	c := &Client{
 		cfg:         cfg,
-		logger:      lg.With("kiss_iface", cfg.Name, "kiss_type", "tcp-client"),
+		logger:      lg.With("kiss_iface", cfg.Name, "kiss_type", "tcp-client", "radio_protocol", cfg.TCPProtocol),
 		state:       StateDisconnected,
 		channel:     ch,
 		wakeBackoff: make(chan struct{}, 1),
@@ -360,17 +364,36 @@ func (c *Client) closeTxQueue() {
 // during shutdown.
 func (c *Client) dial(ctx context.Context) (net.Conn, error) {
 	addr := net.JoinHostPort(c.cfg.RemoteHost, strconv.FormatUint(uint64(c.cfg.RemotePort), 10))
-	if c.cfg.DialFunc != nil {
-		return c.cfg.DialFunc(ctx, "tcp", addr)
-	}
 	dialer := c.cfg.Dialer
 	if dialer == nil {
 		dialer = &net.Dialer{Timeout: defaultDialTimeout}
 	}
-	conn, err := dialer.DialContext(ctx, "tcp", addr)
+	var conn net.Conn
+	var err error
+	if c.cfg.DialFunc != nil {
+		conn, err = c.cfg.DialFunc(ctx, "tcp", addr)
+	} else {
+		conn, err = dialer.DialContext(ctx, "tcp", addr)
+	}
 	if err == nil {
 		if serr := tcpstall.Set(conn, txStallTimeout); serr != nil {
 			c.logger.Debug("kiss client TCP_USER_TIMEOUT not set", "err", serr)
+		}
+	}
+	if err == nil && c.cfg.TCPProtocol == "agwpe" {
+		stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
+		err = conn.SetDeadline(time.Now().Add(defaultDialTimeout))
+		if err == nil {
+			err = c.initializeAGW(conn)
+		}
+		stop()
+		if err != nil {
+			_ = conn.Close()
+			return nil, fmt.Errorf("AGWPE initialization: %w", err)
+		}
+		if err = conn.SetDeadline(time.Time{}); err != nil {
+			_ = conn.Close()
+			return nil, err
 		}
 	}
 	return conn, err
@@ -404,6 +427,9 @@ func (c *Client) frameLoop(ctx context.Context, conn net.Conn) error {
 	defer watcherWG.Wait()
 	defer close(done)
 
+	if c.cfg.TCPProtocol == "agwpe" {
+		return c.agwFrameLoop(ctx, conn)
+	}
 	d := NewDecoder(conn)
 	for {
 		f, err := d.Next()
@@ -547,11 +573,24 @@ func (c *Client) writeFrame(channel uint32, axBytes []byte) {
 		}
 	}
 	raw := Encode(port, axBytes)
+	if c.cfg.TCPProtocol == "agwpe" {
+		ax, err := ax25.Decode(axBytes)
+		if err != nil || !ax.IsUI() {
+			c.logger.Warn("AGWPE client supports only valid APRS UI frames")
+			if c.onTxDrop != nil {
+				c.onTxDrop("unsupported-frame")
+			}
+			return
+		}
+		// AGW raw data has a port/command prefix, with no escaping or FCS.
+		data := append([]byte{c.cfg.AgwPort << 4}, axBytes...)
+		raw = append(agw.EncodeHeader(&agw.Header{Port: c.cfg.AgwPort, DataKind: agw.KindSendRaw, DataLen: uint32(len(data))}), data...)
+	}
 	if err := conn.SetWriteDeadline(time.Now().Add(instanceTxSocketDeadline)); err != nil {
 		c.logger.Debug("kiss client SetWriteDeadline failed", "err", err)
 	}
 	defer func() { _ = conn.SetWriteDeadline(time.Time{}) }()
-	if _, err := conn.Write(raw); err != nil {
+	if n, err := conn.Write(raw); err != nil || n != len(raw) {
 		c.logger.Warn("kiss client tx write failed; forcing reconnect", "err", err)
 		if c.onTxDrop != nil {
 			c.onTxDrop("write-failed")

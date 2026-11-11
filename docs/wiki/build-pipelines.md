@@ -185,3 +185,12 @@ under `ghcr.io/moricef/graywolf` and uses the fork as the package homepage.
 The Android signing and Play upload job runs only in `chrissnell/graywolf`;
 the fork's tag still builds the Android debug variant but does not publish a
 signed Android release.
+
+## Local feature validation
+
+The local operator workflow in `AGENTS.md` requires installing completed,
+checked features for testing. Build the web UI and Go binary with
+`make graywolf-quick` when Rust, proto and VERSION are unchanged. Preserve the
+existing systemd configuration and database, retain a bounded rollback copy,
+replace the binary while the service is stopped, then restart and verify the
+HTTP UI and service logs. Local installation does not authorize publication.

@@ -299,6 +299,8 @@
       local_only: false,
       // tcp-client fields:
       remote_host: '',
+      tcp_protocol: 'kiss',
+      agw_port: '1',
       remote_port: TCP_PORT_DEFAULT,
       reconnect_init_ms: String(RECONNECT_INIT_DEFAULT_MS),
       reconnect_max_ms: String(RECONNECT_MAX_DEFAULT_MS),
@@ -400,6 +402,8 @@
       tcp_port: String(row.tcp_port ?? ''),
       local_only: !!row.local_only,
       remote_host: row.remote_host || '',
+      tcp_protocol: row.tcp_protocol || 'kiss',
+      agw_port: String((row.agw_port || 0) + 1),
       remote_port: String(row.remote_port || ''),
       reconnect_init_ms: String(row.reconnect_init_ms || RECONNECT_INIT_DEFAULT_MS),
       reconnect_max_ms: String(row.reconnect_max_ms || RECONNECT_MAX_DEFAULT_MS),
@@ -692,6 +696,8 @@
         break;
       case 'tcp-client':
         data.remote_host = (form.remote_host || '').trim();
+        data.tcp_protocol = form.tcp_protocol;
+        data.agw_port = form.tcp_protocol === 'agwpe' ? Number(form.agw_port) - 1 : 0;
         data.remote_port = parseInt(form.remote_port) || 0;
         data.reconnect_init_ms = parseInt(form.reconnect_init_ms) || RECONNECT_INIT_DEFAULT_MS;
         data.reconnect_max_ms = parseInt(form.reconnect_max_ms) || RECONNECT_MAX_DEFAULT_MS;
@@ -803,7 +809,7 @@
 
   function endpointText(row) {
     if (row.type === 'tcp') return row.local_only ? `127.0.0.1:${row.tcp_port}` : `:${row.tcp_port}`;
-    if (row.type === 'tcp-client') return `${row.remote_host}:${row.remote_port}`;
+    if (row.type === 'tcp-client') return `${row.remote_host}:${row.remote_port}${row.tcp_protocol === 'agwpe' ? ` · Radio ${row.agw_port + 1}` : ''}`;
     if (row.type === 'serial') return row.serial_device || '—';
     if (row.type === 'bluetooth') return friendlyDevice(row) || '—';
     if (row.type === 'usbserial') return row.serial_device || '—';
@@ -877,7 +883,7 @@
   }
 </script>
 
-<PageHeader title="KISS Interfaces" subtitle="KISS interface configuration">
+<PageHeader title="KISS / AGWPE Interfaces" subtitle="Radio interface configuration">
   {#if pollIsStale}
     <!-- Stale indicator (D16 polish): /api/kiss has failed ≥5 times
          consecutively; status columns may be out of date. Muted on
@@ -887,7 +893,7 @@
       Status stale
     </span>
   {/if}
-  <Button variant="primary" onclick={openCreate}>+ Add KISS</Button>
+  <Button variant="primary" onclick={openCreate}>+ Add interface</Button>
 </PageHeader>
 
 {#each items.filter(i => i.needs_reconfig) as reconfigRow (reconfigRow.id)}
@@ -916,9 +922,9 @@
   <Badge variant={value === 'tnc' ? 'success' : 'info'}>{modeLabels[value] || 'Modem'}</Badge>
 {/snippet}
 
-{#snippet typeCell(value, _row)}
+{#snippet typeCell(value, row)}
   {#if value === 'tcp-client'}
-    <Badge variant="info">{labelForType(value)}</Badge>
+    <Badge variant="info">{row.tcp_protocol === 'agwpe' ? 'AGWPE Client' : labelForType(value)}</Badge>
   {:else if value === 'tcp'}
     <Badge>TCP Server</Badge>
   {:else if value === 'bluetooth'}
@@ -1005,11 +1011,11 @@
   />
 {/snippet}
 
-<Modal bind:open={modalOpen} title={editing ? 'Edit KISS' : 'New KISS Interface'}>
+<Modal bind:open={modalOpen} title={editing ? 'Edit radio interface' : 'New radio interface'}>
     {#if form.type !== 'bluetooth'}
       <FormField label="Mode" id="kiss-mode" hint={modeHint}>
         {#snippet children(describedBy)}
-          <Select id="kiss-mode" bind:value={form.mode} options={modeOptions} aria-describedby={describedBy} />
+          <Select id="kiss-mode" bind:value={form.mode} disabled={form.type === 'tcp-client' && form.tcp_protocol === 'agwpe'} options={modeOptions} aria-describedby={describedBy} />
         {/snippet}
       </FormField>
     {/if}
@@ -1036,17 +1042,31 @@
         </span>
       </div>
     {:else if form.type === 'tcp-client'}
+      <FormField label="Protocol" id="radio-network-protocol">
+        <Select id="radio-network-protocol" bind:value={form.tcp_protocol}
+          options={[{value: 'kiss', label: 'KISS'}, {value: 'agwpe', label: 'AGWPE (APRS client)'}]}
+          onValueChange={(value) => {
+            form.remote_port = value === 'agwpe' ? '8000' : TCP_PORT_DEFAULT;
+            if (value === 'agwpe') { form.mode = 'tnc'; form.allow_connected_mode = false; }
+          }} />
+      </FormField>
+      {#if form.tcp_protocol === 'agwpe'}
+        <FormField label="AGWPE radio port" id="agw-radio-port"
+          hint="Port number shown in AGWPE, starting at 1. One radio port per interface; APRS only. Enable AGWPE's TCP/IP application interface and permit this computer.">
+          <Input id="agw-radio-port" bind:value={form.agw_port} type="number" min={1} max={16} />
+        </FormField>
+      {/if}
       <FormField
         label="Remote Host"
         id="kiss-remote-host"
-        hint="Hostname or IP of the remote KISS TNC to dial."
+        hint="Hostname or IP of the radio server. Use 127.0.0.1 if it runs on this computer."
       >
         <Input id="kiss-remote-host" bind:value={form.remote_host} placeholder="lora.example.com" />
       </FormField>
       <FormField
         label="Remote Port"
         id="kiss-remote-port"
-        hint="TCP port on the remote KISS TNC."
+        hint="Server TCP port: usually 8001 for KISS or 8000 for AGWPE."
       >
         <Input id="kiss-remote-port" bind:value={form.remote_port} type="number" min={1} max={65535} placeholder="8001" />
       </FormField>
@@ -1219,7 +1239,7 @@
          the radio verbatim instead of being dropped. -->
     <div class="field checkbox-field">
       <label class="checkbox-row" for="kiss-allow-connected-mode">
-        <Checkbox id="kiss-allow-connected-mode" bind:checked={form.allow_connected_mode} />
+        <Checkbox id="kiss-allow-connected-mode" bind:checked={form.allow_connected_mode} disabled={form.type === 'tcp-client' && form.tcp_protocol === 'agwpe'} />
         <span>Allow connected-mode (non-UI) frames from KISS clients</span>
       </label>
       <span class="field-hint">

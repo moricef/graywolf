@@ -1081,6 +1081,9 @@ func (s *Store) validateKissInterface(ctx context.Context, k *KissInterface) err
 // the Phase 3 token bucket entirely, which is almost certainly not what
 // the caller meant.
 func normalizeKissInterface(k *KissInterface) error {
+	if err := ValidateTCPProtocol(k.InterfaceType, k.Mode, k.TCPProtocol, k.AgwPort, k.AllowConnectedMode); err != nil {
+		return err
+	}
 	if k.Mode == "" {
 		if KissTypeDefaultsTnc(k.InterfaceType) {
 			k.Mode = KissModeTnc
