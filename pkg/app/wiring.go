@@ -1634,10 +1634,11 @@ func (a *App) wireHTTP(ctx context.Context) error {
 	webapi.RegisterPosition(apiSrv, apiMux, a.stationPos)
 	webapi.RegisterRXT(apiSrv, apiMux, a.rxtTelemetry, a.stationCache, a.store)
 	webapi.RegisterTNC2TX(apiSrv, apiMux, a.submitTNC2TX)
+	apiSrv.SetRadioOTATNC2Device(func() string { cfg, _, _ := a.tnc2Settings(); return cfg.SerialDevice })
 	webapi.RegisterTNC2Config(apiMux, func() webapi.TNC2ConfigStatus {
 		cfg, tcp, serial := a.tnc2Settings()
 		return webapi.TNC2ConfigStatus{TNC2Config: cfg, TCPConnected: tcp, SerialConnected: serial}
-	}, a.updateTNC2Config)
+	}, a.updateTNC2Config, apiSrv.GuardRadioConfig)
 	// /api/system-logs reads the slog ring buffer. a.cfg.LogBuffer is a
 	// concrete *logbuffer.DB that may be nil; assign through a typed
 	// interface variable so a nil DB arrives as a true nil interface

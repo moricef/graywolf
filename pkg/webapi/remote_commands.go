@@ -122,6 +122,8 @@ func (s *Server) createRemoteCommandCredential(w http.ResponseWriter, r *http.Re
 // @Security CookieAuth
 // @Router   /remote-actions/command-credentials/{id} [put]
 func (s *Server) updateRemoteCommandCredential(w http.ResponseWriter, r *http.Request) {
+	s.otaPorts.Lock()
+	defer s.otaPorts.Unlock()
 	if !s.requireRemoteActions(w) {
 		return
 	}
@@ -137,6 +139,10 @@ func (s *Server) updateRemoteCommandCredential(w http.ResponseWriter, r *http.Re
 			return
 		}
 		s.internalError(w, r, "get remote command credential", err)
+		return
+	}
+	if s.ota().OwnsTarget(row.TargetCall) || s.ota().OwnsTarget(row.SignedTarget) {
+		conflict(w, "Control credentials are reserved by an active OTA route")
 		return
 	}
 	var in dto.RemoteCommandCredentialRequest
@@ -181,12 +187,19 @@ func (s *Server) updateRemoteCommandCredential(w http.ResponseWriter, r *http.Re
 // @Security CookieAuth
 // @Router   /remote-actions/command-credentials/{id} [delete]
 func (s *Server) deleteRemoteCommandCredential(w http.ResponseWriter, r *http.Request) {
+	s.otaPorts.Lock()
+	defer s.otaPorts.Unlock()
 	if !s.requireRemoteActions(w) {
 		return
 	}
 	id, err := parseID(r.PathValue("id"))
 	if err != nil {
 		badRequest(w, "invalid id")
+		return
+	}
+	row, lookupErr := s.remoteActions.Commands().Get(r.Context(), uint(id))
+	if lookupErr == nil && (s.ota().OwnsTarget(row.TargetCall) || s.ota().OwnsTarget(row.SignedTarget)) {
+		conflict(w, "Control credentials are reserved by an active OTA route")
 		return
 	}
 	if err := s.remoteActions.Commands().Delete(r.Context(), uint(id)); err != nil {
@@ -213,6 +226,13 @@ func (s *Server) deleteRemoteCommandCredential(w http.ResponseWriter, r *http.Re
 // @Security CookieAuth
 // @Router   /remote-actions/commands/{target} [post]
 func (s *Server) sendRemoteCommand(w http.ResponseWriter, r *http.Request) {
+	s.otaPorts.Lock()
+	defer s.otaPorts.Unlock()
+	if s.ota().OwnsTarget(strings.ToUpper(strings.TrimSpace(r.PathValue("target")))) {
+		conflict(w, "This station belongs to an active OTA route. Wait for the operation to finish.")
+		return
+	}
+
 	if !s.requireRemoteActions(w) {
 		return
 	}

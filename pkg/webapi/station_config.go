@@ -34,7 +34,7 @@ const (
 // mux using Go 1.22+ method-scoped patterns.
 func (s *Server) registerStationConfig(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/station/config", s.getStationConfig)
-	mux.HandleFunc("PUT /api/station/config", s.updateStationConfig)
+	mux.HandleFunc("PUT /api/station/config", s.GuardRadioConfig(s.updateStationConfig))
 }
 
 // getStationConfig returns the singleton station config. On a fresh

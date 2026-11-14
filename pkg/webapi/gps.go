@@ -12,7 +12,7 @@ import (
 // method-scoped patterns.
 func (s *Server) registerGps(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/gps", s.getGps)
-	mux.HandleFunc("PUT /api/gps", s.updateGps)
+	mux.HandleFunc("PUT /api/gps", s.GuardRadioConfig(s.updateGps))
 	mux.HandleFunc("GET /api/gps/available", s.listAvailableGps)
 }
 

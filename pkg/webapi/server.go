@@ -27,10 +27,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/chrissnell/graywolf/pkg/radioota"
 	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/chrissnell/graywolf/pkg/actions"
@@ -53,6 +55,10 @@ import (
 // Server routes /api/* requests. It does not own the underlying
 // listener; cmd/graywolf composes it into its main mux.
 type Server struct {
+	otaInit            sync.Once
+	otaPorts           sync.Mutex
+	radioOTA           *radioota.Service
+	otaTNC2Device      func() string
 	store              *configstore.Store
 	bridge             *modembridge.Bridge
 	kissManager        *kiss.Manager
@@ -332,6 +338,7 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	s.registerRemoteActionsMacros(mux)
 	s.registerRemoteActionsOTP(mux)
 	s.registerRemoteCommands(mux)
+	s.registerRadioOTA(mux)
 	s.registerStorageUsage(mux)
 
 	mux.HandleFunc("GET /api/health", s.handleHealth)

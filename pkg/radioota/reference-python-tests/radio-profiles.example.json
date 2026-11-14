@@ -1,0 +1,16 @@
+{
+  "normal": {
+    "frequency_hz": 434100000,
+    "bandwidth_hz": 125000,
+    "spreading_factor": 12,
+    "coding_rate": 5,
+    "power_dbm": 2
+  },
+  "transfer": {
+    "frequency_hz": 434550000,
+    "bandwidth_hz": 250000,
+    "spreading_factor": 8,
+    "coding_rate": 6,
+    "power_dbm": 3
+  }
+}

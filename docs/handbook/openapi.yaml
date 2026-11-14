@@ -2875,6 +2875,133 @@ definitions:
           UART, or a previously-running graywolf process).
         type: boolean
     type: object
+  radioota.BootProof:
+    properties:
+      boot:
+        type: integer
+      image_sha:
+        type: string
+      pending:
+        type: boolean
+      running:
+        type: integer
+      version:
+        type: string
+    type: object
+  radioota.Job:
+    properties:
+      block_size:
+        type: integer
+      board_id:
+        type: integer
+      can_pause:
+        type: boolean
+      controller_service_restored:
+        type: boolean
+      engine:
+        type: string
+      error:
+        type: string
+      expected_version:
+        type: string
+      final:
+        $ref: '#/definitions/radioota.BootProof'
+      id:
+        type: string
+      options:
+        $ref: '#/definitions/radioota.Options'
+      phase:
+        type: string
+      post_install_verified:
+        type: boolean
+      preflight_verified:
+        type: boolean
+      relay:
+        type: string
+      relay_recipient:
+        type: string
+      relay_service_restored:
+        type: boolean
+      roles_changed:
+        items:
+          type: string
+        type: array
+      route_authenticated:
+        type: boolean
+      route_proof:
+        $ref: '#/definitions/radioota.BootProof'
+      session_released:
+        type: boolean
+      sha256:
+        type: string
+      signed_target:
+        type: string
+      source:
+        type: string
+      started:
+        type: string
+      state:
+        type: string
+      target:
+        type: string
+      target_board:
+        type: string
+      target_service_verified:
+        type: boolean
+      total:
+        type: integer
+      written:
+        type: integer
+    type: object
+  radioota.Options:
+    properties:
+      exercise_confirm_timeout:
+        type: boolean
+      expected_version:
+        type: string
+      preflight_only:
+        type: boolean
+      prepare_route:
+        type: boolean
+      replace_existing:
+        type: boolean
+      require_offline:
+        type: boolean
+    type: object
+  radioota.Profile:
+    properties:
+      bandwidth_hz:
+        type: integer
+      coding_rate:
+        type: integer
+      frequency_hz:
+        type: integer
+      power_dbm:
+        type: integer
+      spreading_factor:
+        type: integer
+    type: object
+  radioota.Settings:
+    properties:
+      bridge:
+        type: string
+      has_route_secret:
+        type: boolean
+      normal:
+        $ref: '#/definitions/radioota.Profile'
+      relay_recipient:
+        type: string
+      route_secret:
+        type: string
+      target_board:
+        type: string
+      target_normal:
+        $ref: '#/definitions/radioota.Profile'
+      transfer:
+        $ref: '#/definitions/radioota.Profile'
+      via:
+        type: string
+    type: object
   rfdx.ChannelStatistics:
     properties:
       channel:
@@ -3739,6 +3866,8 @@ tags:
     description: 'On-air remote command/webhook execution: action definitions, OTP credentials, listener addressees, audit log, and operator test-fire.'
   - name: remote-actions
     description: 'Outbound Actions: operator-curated macros plus remote-station TOTP credentials used to fire @@<otp>#<action> invocations from inside Messages.'
+  - name: radio-ota
+    description: 'LoRa firmware updates: station settings, transfer progress and pause.'
   - name: auth
     description: Session login, logout, and first-user setup.
   - name: version
@@ -8297,6 +8426,158 @@ paths:
       summary: Test rigctld connection
       tags:
         - ptt
+  /radio-ota/{target}:
+    get:
+      operationId: getRadioOTA
+      parameters:
+        - description: Station RF identity
+          in: path
+          name: target
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+        - CookieAuth: []
+      summary: Get radio OTA station settings and progress
+      tags:
+        - radio-ota
+  /radio-ota/{target}/firmware:
+    post:
+      consumes:
+        - application/octet-stream
+      operationId: startRadioOTA
+      parameters:
+        - description: Station RF identity
+          in: path
+          name: target
+          required: true
+          type: string
+        - description: Expected firmware version reported by the target after reboot
+          in: query
+          name: expected_version
+          required: true
+          type: string
+        - description: Explicitly discard the old inactive candidate and its resume point
+          in: query
+          name: replace_existing
+          type: boolean
+        - description: Require target Wi-Fi off and no active IP interface
+          in: query
+          name: require_offline
+          type: boolean
+        - description: 'Validation only: withhold confirmation, observe rollback, reactivate and confirm'
+          in: query
+          name: exercise_confirm_timeout
+          type: boolean
+        - description: ESP32 application firmware binary
+          in: body
+          name: firmware
+          required: true
+          schema:
+            type: string
+      produces:
+        - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            $ref: '#/definitions/radioota.Job'
+      security:
+        - CookieAuth: []
+      summary: Upload firmware and start an OTA job on the Graywolf host
+      tags:
+        - radio-ota
+  /radio-ota/{target}/pause:
+    post:
+      operationId: pauseRadioOTA
+      parameters:
+        - description: Station RF identity
+          in: path
+          name: target
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/radioota.Job'
+      security:
+        - CookieAuth: []
+      summary: Pause a radio OTA job before activation
+      tags:
+        - radio-ota
+  /radio-ota/{target}/preflight:
+    post:
+      consumes:
+        - application/octet-stream
+      operationId: preflightRadioOTA
+      parameters:
+        - description: Station RF identity
+          in: path
+          name: target
+          required: true
+          type: string
+        - description: Expected candidate firmware version
+          in: query
+          name: expected_version
+          required: true
+          type: string
+        - description: Image to validate locally; no firmware blocks transmitted
+          in: body
+          name: firmware
+          required: true
+          schema:
+            type: string
+      produces:
+        - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            $ref: '#/definitions/radioota.Job'
+      security:
+        - CookieAuth: []
+      summary: Prepare and verify a LoRa OTA route without transferring firmware
+      tags:
+        - radio-ota
+  /radio-ota/{target}/settings:
+    put:
+      consumes:
+        - application/json
+      operationId: saveRadioOTA
+      parameters:
+        - description: Station RF identity
+          in: path
+          name: target
+          required: true
+          type: string
+        - description: Radio settings; blank route secret preserves existing secret
+          in: body
+          name: body
+          required: true
+          schema:
+            $ref: '#/definitions/radioota.Settings'
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/radioota.Settings'
+      security:
+        - CookieAuth: []
+      summary: Save radio OTA station settings
+      tags:
+        - radio-ota
   /release-notes:
     get:
       operationId: listReleaseNotes

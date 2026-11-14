@@ -1722,6 +1722,91 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/radio-ota/{target}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get radio OTA station settings and progress */
+        get: operations["getRadioOTA"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/radio-ota/{target}/firmware": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Upload firmware and start an OTA job on the Graywolf host */
+        post: operations["startRadioOTA"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/radio-ota/{target}/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Pause a radio OTA job before activation */
+        post: operations["pauseRadioOTA"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/radio-ota/{target}/preflight": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Prepare and verify a LoRa OTA route without transferring firmware */
+        post: operations["preflightRadioOTA"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/radio-ota/{target}/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Save radio OTA station settings */
+        put: operations["saveRadioOTA"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/release-notes": {
         parameters: {
             query?: never;
@@ -3919,6 +4004,71 @@ export interface components {
              *     UART, or a previously-running graywolf process).
              */
             used?: boolean;
+        };
+        "radioota.BootProof": {
+            boot?: number;
+            image_sha?: string;
+            pending?: boolean;
+            running?: number;
+            version?: string;
+        };
+        "radioota.Job": {
+            block_size?: number;
+            board_id?: number;
+            can_pause?: boolean;
+            controller_service_restored?: boolean;
+            engine?: string;
+            error?: string;
+            expected_version?: string;
+            final?: components["schemas"]["radioota.BootProof"];
+            id?: string;
+            options?: components["schemas"]["radioota.Options"];
+            phase?: string;
+            post_install_verified?: boolean;
+            preflight_verified?: boolean;
+            relay?: string;
+            relay_recipient?: string;
+            relay_service_restored?: boolean;
+            roles_changed?: string[];
+            route_authenticated?: boolean;
+            route_proof?: components["schemas"]["radioota.BootProof"];
+            session_released?: boolean;
+            sha256?: string;
+            signed_target?: string;
+            source?: string;
+            started?: string;
+            state?: string;
+            target?: string;
+            target_board?: string;
+            target_service_verified?: boolean;
+            total?: number;
+            written?: number;
+        };
+        "radioota.Options": {
+            exercise_confirm_timeout?: boolean;
+            expected_version?: string;
+            preflight_only?: boolean;
+            prepare_route?: boolean;
+            replace_existing?: boolean;
+            require_offline?: boolean;
+        };
+        "radioota.Profile": {
+            bandwidth_hz?: number;
+            coding_rate?: number;
+            frequency_hz?: number;
+            power_dbm?: number;
+            spreading_factor?: number;
+        };
+        "radioota.Settings": {
+            bridge?: string;
+            has_route_secret?: boolean;
+            normal?: components["schemas"]["radioota.Profile"];
+            relay_recipient?: string;
+            route_secret?: string;
+            target_board?: string;
+            target_normal?: components["schemas"]["radioota.Profile"];
+            transfer?: components["schemas"]["radioota.Profile"];
+            via?: string;
         };
         "rfdx.ChannelStatistics": {
             channel?: number;
@@ -10835,6 +10985,150 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["webtypes.ErrorResponse"];
+                };
+            };
+        };
+    };
+    getRadioOTA: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Station RF identity */
+                target: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    startRadioOTA: {
+        parameters: {
+            query: {
+                /** @description Expected firmware version reported by the target after reboot */
+                expected_version: string;
+                /** @description Explicitly discard the old inactive candidate and its resume point */
+                replace_existing?: boolean;
+                /** @description Require target Wi-Fi off and no active IP interface */
+                require_offline?: boolean;
+                /** @description Validation only: withhold confirmation, observe rollback, reactivate and confirm */
+                exercise_confirm_timeout?: boolean;
+            };
+            header?: never;
+            path: {
+                /** @description Station RF identity */
+                target: string;
+            };
+            cookie?: never;
+        };
+        /** @description ESP32 application firmware binary */
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["radioota.Job"];
+                };
+            };
+        };
+    };
+    pauseRadioOTA: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Station RF identity */
+                target: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["radioota.Job"];
+                };
+            };
+        };
+    };
+    preflightRadioOTA: {
+        parameters: {
+            query: {
+                /** @description Expected candidate firmware version */
+                expected_version: string;
+            };
+            header?: never;
+            path: {
+                /** @description Station RF identity */
+                target: string;
+            };
+            cookie?: never;
+        };
+        /** @description Image to validate locally; no firmware blocks transmitted */
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["radioota.Job"];
+                };
+            };
+        };
+    };
+    saveRadioOTA: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Station RF identity */
+                target: string;
+            };
+            cookie?: never;
+        };
+        /** @description Radio settings; blank route secret preserves existing secret */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["radioota.Settings"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["radioota.Settings"];
                 };
             };
         };

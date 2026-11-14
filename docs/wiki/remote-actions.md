@@ -202,3 +202,222 @@ piggy-back on `pkg/messages`.
   table.
 - Original design intent: `docs/superpowers/specs/2026-05-03-messages-action-sender-design.md`,
   Phase A plan `docs/superpowers/plans/2026-05-03-messages-action-sender.md`.
+
+## LoRa firmware updates in Messages
+
+The authenticated-command panel opens `RadioOtaModal.svelte` with **Update
+firmware over LoRa**. The browser uploads an application image to Graywolf;
+it never opens USB. Routes under `/api/radio-ota/{target}` handle station
+settings, upload/start, progress and pause. `pkg/webapi/radio_ota.go` resolves
+the RF recipient, controller and stored signed identity. GET reports
+`engine: native-go`; it performs no hardware access or external runtime probe.
+
+`pkg/radioota/` now implements the transfer natively in Go:
+
+- `service.go`: private settings, immutable attempt files, persistent counters,
+  job lifecycle, boot-proof validation and exclusive job reservation.
+- `protocol.go`: end-to-end HMAC domain `LORA-APRS-OTA2`, routed HMAC domain
+  `LORA-APRS-OTA-HOP1`, strict identities/lengths/nonces and boot replies.
+- `bridge.go`: `go.bug.st/serial`, RTS/DTR initially low, Unix exclusive open,
+  bounded console reads, `OTABRIDGE 921600` handshake from 115200 and cleanup.
+- `native.go`: profiles, HELLO, 128-byte uncompressed page bursts, bitmap
+  repair, durable recovery, activation, confirmation and fresh-session readback.
+
+No Python, PySerial, interpreter discovery or subprocess is required or used.
+The archived `reference-python/` and `reference-python-tests/` files are retained only as development references;
+they are neither embedded in the binary nor extracted into new attempts.
+`testdata/reference-vectors.json` contains frozen vectors from the independent
+client, with its commit and source hashes. Go tests compare both codecs and
+actual pre-activation engine emissions, direct/routed and for all board IDs.
+Tests also run complete simulated cycles with an empty executable search path.
+This is software verification, not an RF flash validation of the Go engine.
+
+The operator must explicitly select TTGO LoRa32 V2.1, Heltec V3 or QRP Labs
+LightGateway Plus. No board is silently selected for old settings. The board ID
+is retained in job.json and the image event and sent in the manifest. Header
+validation distinguishes ESP32 from ESP32-S3, not Heltec from QRP Labs. The
+receiver checks its board ID too. Only the separate TTGO CLI cycle has physical
+validation; Heltec/QRP bench tests and the Go 128-byte path remain to validate.
+FORMAT is explained according to its operation, never automatically blamed on
+the model; logs retain op/status/offset/payload length.
+
+Station settings, counters and attempt files live in `radio-ota/` alongside
+the config DB. Secrets are private, never returned to the browser, and temporary
+key files are removed at attempt completion. The APRS command secret remains
+in `remote_command_credentials`; binary HELLO counters are separate and persist
+`max(Unix time, saved counter + 1)` before transmission. Corrupt/exhausted counters
+fail closed. Never reset radio anti-replay state to reconcile clients.
+
+One job owns the bridge. Configured TNC2 (including flags), KISS, GPS and weather
+serial ports are rejected. Radio-setting mutations are locked during a job;
+a second signed command to its target is rejected. Automatic preparation runs on the configured common normal profile before
+firmware transfer: signed role commands use the reserved USB bridge and the
+existing credential store/counters, bypassing the generic APRS retry queue.
+Keys must already be provisioned; no key is generated or distributed. The
+firmware suppresses ordinary APRS forwarding while its OTA session is active. The local USB bridge is the controller,
+never the remote target. TCP TNC2 does not carry firmware blocks.
+
+Options `replace_existing`, `require_offline`, `exercise_confirm_timeout` are
+per-attempt and default false; `expected_version` is required. Replacement
+explicitly destroys the inactive candidate checkpoint. Normal mode confirms
+immediately. Advanced validation waits 190 seconds for rollback, verifies the
+old boot, reactivates and confirms. Success requires the expected version/SHA,
+matching active/boot partitions, pending=false, a fresh authenticated HELLO,
+engine completion and controller bridge-off acknowledgement. A full byte count
+is not proof of installation. Pause is cooperative before activation. Cleanup
+failures are not a clean pause; the public job reports unconfirmed restoration.
+Closing the browser leaves the native Go job running; it cannot leave a detached
+Python process after a Graywolf crash. On restart an unfinished job is marked
+interrupted; no blind activation/retry is performed.
+
+The image descriptor may name ESP-IDF, not the radio version; never infer the
+expected version from it or a filename. Browser SHA is available on localhost
+or HTTPS; plain HTTP LAN clients still upload and use the authoritative server
+SHA. Draft settings stay in memory per target, not browser storage; polling
+never replaces edits, and outside clicks do not dismiss the OTA modal.
+
+**Generate route key (initial setup)** uses browser crypto.getRandomValues for
+32 bytes encoded as 43 Base64URL characters. It does not provision devices.
+Normal updates reuse the existing shared route key; blank preserves the saved
+key for the same relay. A replacement requires explicit browser confirmation.
+Saved secrets remain write-only; copy failures select the visible draft for
+manual Ctrl+C. Initial keys are provisioned before deployment, not by visiting
+remote relays during each update.
+
+Reference duration: about 63 minutes to write/verify 1.78 MB at 160 bytes;
+whole-image timing at 128 bytes is not yet measured. The roughly 71-minute
+laboratory cycle included deliberate rollback. The relay is unavailable for
+APRS traffic during the operation. These are not guaranteed update durations.
+
+The full preparation plan and audit remain
+[`../FUOTA_ORCHESTRATION_PLAN_FR.md`](../FUOTA_ORCHESTRATION_PLAN_FR.md) and
+[`../FUOTA_ORCHESTRATION_AUDIT_FR.md`](../FUOTA_ORCHESTRATION_AUDIT_FR.md).
+Operator instructions: [English](../handbook/radio-ota-en.html) /
+[français](../handbook/radio-ota-fr.html), also available as PDFs.
+Validation: `go test -race ./pkg/radioota ./pkg/webapi`, plus the simulated browser
+flow `scripts/screenshots/radio-ota-test.mjs`. Agree hardware availability and
+actual profiles/power/versions before any RF test; software checks do not
+validate the new Go implementation on cards.
+
+
+### Route preparation and non-destructive preflight
+
+`preparation.go` sends signed `!RC1` APRS frames through `TXRAW` on the reserved
+controller USB bridge. It uses `CommandCredentialStore.ReserveEnvelope` through
+a server-provided signer, with the RF recipient and signed identity checked
+separately. `relay_recipient` optionally names the relay tactical identity;
+`via` remains its signed Callsign-SSID for the binary route. The relay needs
+its own existing authenticated-control credential in Graywolf. Route members'
+commands and credential mutations are blocked during checks and updates.
+
+Before binary HELLO, the engine reads `OTA=?`, requires NORMAL/ARMED=0,
+reads `OTA=ROUTE?`, changes RELAY/VIA or direct OFF only if needed, and reads
+back the role. These persistent role changes are explicitly announced before
+launch and recorded in `roles_changed`; they are not silently rolled back.
+Application text replies are source/addressee checked but **not authenticated**.
+APRS ACKs and replies for other command categories are ignored; buffered older
+replies are cleared. Retries are bounded at three and reserve fresh counters.
+The firmware has no request identifier in application text replies, so exact
+cryptographic correlation is not claimed. Readiness requires the subsequent
+fresh binary HMAC roundtrip, including the shared route key when relayed.
+
+`POST /api/radio-ota/{target}/preflight` accepts the chosen image for local
+format/size checks, expected version and the same saved settings. It does not
+send START/DATA/ACTIVATE, does not discard a candidate, and ignores destructive
+and rollback flags. It can configure the selected persistent roles. After HELLO,
+it sends nothing for 65 seconds to let both firmware 60-second sessions expire,
+then reads NORMAL/ARMED=0 again from relay and target. The elapsed timer alone
+is not a readiness proof. The relay cannot carry APRS traffic during this wait.
+Only successful proof, observed idle state and controller bridge cleanup produce
+job state `ready`, distinct from firmware state `succeeded`. The result persists;
+settings changes mark it stale. Every actual update prepares/rechecks the route
+again, rather than trusting an old check. Check/progress/role changes and each
+committed firmware page are persisted for interruption diagnosis.
+
+The normal profile must be compatible on the whole route. Lack of response is
+not diagnosed uniquely as frequency mismatch: credential, path, RF format and
+radio conditions can also cause it. Such uncertainty prevents firmware transfer.
+The bridge cannot independently report the local card identity, so the stable
+USB link must be associated with the controller during initial setup. Dynamic
+Linux ttyACM/ttyUSB names are rejected in favour of stable device links.
+Control replies currently support the legacy text radio envelope; exclusively
+native/compressed repeats can cause preparation to be refused. The binary OTA
+path is independent of this text-envelope limitation. No firmware is modified
+by implementing these controls; their complete hardware sequence remains to test.
+
+### Moving authenticated control between computers
+
+There is currently no supported export/import or backup API for command keys,
+identities and anti-replay counters. Credential reads expose `last_counter` but
+never the secret; create resets the sender counter to zero, and its DTO has no
+counter input. Recreating credentials on another PC therefore does not preserve
+an installed station's replay state. Binary counters and route settings also
+live outside SQLite in the config-adjacent `radio-ota/` directory.
+
+A single active sender is necessary but insufficient: the next PC must resume
+above all previously consumed counters, and the returning PC must receive the
+new state too. A manual cold copy requires both instances stopped, a consistent
+SQLite copy (including proper WAL handling) and the associated radio-ota state;
+it can also overwrite machine-specific port settings. This is not a reliable
+operator handoff feature to recommend as if already supported.
+
+A future export/import must include both counter domains and identities/keys,
+refuse live OTA/signing races and never lower a matching installed counter.
+Simply using the clock is not a complete multi-controller solution: firmware
+accepts one configured controller identity, and clock skew, same-tick collisions
+and radio reordering still matter. Native FUOTA clock-based HELLO counters do
+not remove the sequential APRS counters consumed during route preparation.
+
+
+### Keep the OTA form across incoming-message refreshes
+
+`RadioOtaModal.svelte` derives primitive station/open values before its
+initialization effect. A parent `conversation.key` getter can track the whole
+conversation object; replacing that object during APRS refresh used to rerun
+the effect even for the same station, clearing the selected image, version and
+per-attempt checkboxes. Same-station refresh now only updates server progress.
+The browser fixture `web/tests/RadioOtaPreview.svelte` replaces a conversation
+object while keeping its key and asserts preservation of File/version/options.
+The test failed with the original code and passes with the primitive boundary.
+Actual station changes or reopening still initialize a new attempt.
+
+The selected filename is also exposed in a read-only text field for copying;
+clicking a native file-input filename opens its picker instead of selecting
+text. Empty picker changes/cancellation keep the already selected File;
+**Remove selected firmware** explicitly clears it. None of these UI actions
+transmit firmware or operate a radio.
+
+
+The operator's initial card preparation order and the bench configuration
+example are in [the French handbook](../handbook/radio-ota-fr.html#ordre-preparation)
+and [the English handbook](../handbook/radio-ota-en.html#preparation-order).
+Prepare the remote relay then target; the local controller is ready before
+radio operations. Updating the relay's own firmware is not a prerequisite
+for configuring its route role. These instructions describe required settings,
+not a live readout or proof of the bench cards' current state.
+
+
+### Different service profiles: proposed contract, not installed support
+
+The current contract in `../FUOTA_ORCHESTRATION_PLAN_FR.md` supersedes earlier
+instructions to align permanent service profiles. F4MLV-2/F4MLV-10 remain at
+433.775 MHz; GENATX has a different profile (434.100 MHz is the latest verified state in
+the local 14 November deployment inventory, not a fresh live read). The proposed unified-firmware coordinator
+must distinguish service, rendezvous and transfer, keep the relay on the target
+profile through activation/readback, then verify each node on its own service.
+Timings and new authenticated state/close operations remain to validate/specify;
+no implementation or hardware operation follows merely from this contract.
+The original installed common-profile prototype did not meet it. Local code now
+adds the first two-service-profile rendezvous implementation in
+`pkg/radioota/rendezvous.go`, with explicit optional `Settings.TargetNormal`
+and relay-key resolution through the existing credential store. It requires
+coordination v1 in the unified firmware: OTA2 operations 32 state/challenge,
+33 rendezvous, 34 monotonic keepalive, 35 non-destructive release. The common
+service path remains unchanged when TargetNormal is absent. USB RADIOSERVICE
+and RADIOPROFILE distinguish configured service and successfully applied profile.
+The target and candidate must retain coordination support. The relay remains
+on target service through activation/rollback/confirmation, then its service is
+authenticated before success. The UI exposes controller/relay service, optional
+target service and fast transfer separately. Software tests and local builds
+do not validate RF timing. Automatic reconstruction after a lost rendezvous and
+three distinct service profiles are not implemented; see section 10 of the plan.

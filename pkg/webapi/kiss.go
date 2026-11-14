@@ -13,7 +13,7 @@ import (
 // Go 1.22+ method-scoped patterns. See channels.go for the reference.
 func (s *Server) registerKiss(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/kiss", s.listKiss)
-	mux.HandleFunc("POST /api/kiss", s.createKiss)
+	mux.HandleFunc("POST /api/kiss", s.GuardRadioConfig(s.createKiss))
 	// Static segment before /{id} so the mux routes
 	// /api/kiss/bonded-bt-devices to handleGetBondedBtDevices rather than
 	// the {id} path. Go 1.22+ patterns prefer literal-over-wildcard
@@ -22,10 +22,10 @@ func (s *Server) registerKiss(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/kiss/available-usb-serial-devices", s.handleGetAvailableUsbSerialDevices)
 	mux.HandleFunc("GET /api/kiss/available-serial-ports", s.listAvailableKissSerialPorts)
 	mux.HandleFunc("GET /api/kiss/{id}", s.getKiss)
-	mux.HandleFunc("PUT /api/kiss/{id}", s.updateKiss)
-	mux.HandleFunc("PUT /api/kiss/{id}/enabled", s.setKissEnabled)
-	mux.HandleFunc("DELETE /api/kiss/{id}", s.deleteKiss)
-	mux.HandleFunc("POST /api/kiss/{id}/reconnect", s.reconnectKiss)
+	mux.HandleFunc("PUT /api/kiss/{id}", s.GuardRadioConfig(s.updateKiss))
+	mux.HandleFunc("PUT /api/kiss/{id}/enabled", s.GuardRadioConfig(s.setKissEnabled))
+	mux.HandleFunc("DELETE /api/kiss/{id}", s.GuardRadioConfig(s.deleteKiss))
+	mux.HandleFunc("POST /api/kiss/{id}/reconnect", s.GuardRadioConfig(s.reconnectKiss))
 }
 
 // attachKissStatus folds live manager status onto every response DTO.

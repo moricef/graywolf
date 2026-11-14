@@ -79,10 +79,10 @@ func (s *Server) requireBeaconTxCapableChannel(ctx context.Context, channel uint
 // Go 1.22+ method-scoped patterns. See channels.go for the reference.
 func (s *Server) registerBeacons(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/beacons", s.listBeacons)
-	mux.HandleFunc("POST /api/beacons", s.createBeacon)
+	mux.HandleFunc("POST /api/beacons", s.GuardRadioConfig(s.createBeacon))
 	mux.HandleFunc("GET /api/beacons/{id}", s.getBeacon)
-	mux.HandleFunc("PUT /api/beacons/{id}", s.updateBeacon)
-	mux.HandleFunc("DELETE /api/beacons/{id}", s.deleteBeacon)
+	mux.HandleFunc("PUT /api/beacons/{id}", s.GuardRadioConfig(s.updateBeacon))
+	mux.HandleFunc("DELETE /api/beacons/{id}", s.GuardRadioConfig(s.deleteBeacon))
 	mux.HandleFunc("POST /api/beacons/{id}/send", s.sendBeacon)
 }
 

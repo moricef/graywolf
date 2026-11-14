@@ -123,6 +123,10 @@
             "description": "Outbound Actions: operator-curated macros plus remote-station TOTP credentials used to fire @@\u003cotp\u003e#\u003caction\u003e invocations from inside Messages."
         },
         {
+            "name": "radio-ota",
+            "description": "LoRa firmware updates: station settings, transfer progress and pause."
+        },
+        {
             "name": "auth",
             "description": "Session login, logout, and first-user setup."
         },
@@ -7331,6 +7335,245 @@
                 }
             }
         },
+        "/radio-ota/{target}": {
+            "get": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "radio-ota"
+                ],
+                "summary": "Get radio OTA station settings and progress",
+                "operationId": "getRadioOTA",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Station RF identity",
+                        "name": "target",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/radio-ota/{target}/firmware": {
+            "post": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/octet-stream"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "radio-ota"
+                ],
+                "summary": "Upload firmware and start an OTA job on the Graywolf host",
+                "operationId": "startRadioOTA",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Station RF identity",
+                        "name": "target",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Expected firmware version reported by the target after reboot",
+                        "name": "expected_version",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Explicitly discard the old inactive candidate and its resume point",
+                        "name": "replace_existing",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Require target Wi-Fi off and no active IP interface",
+                        "name": "require_offline",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Validation only: withhold confirmation, observe rollback, reactivate and confirm",
+                        "name": "exercise_confirm_timeout",
+                        "in": "query"
+                    },
+                    {
+                        "description": "ESP32 application firmware binary",
+                        "name": "firmware",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "$ref": "#/definitions/radioota.Job"
+                        }
+                    }
+                }
+            }
+        },
+        "/radio-ota/{target}/pause": {
+            "post": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "radio-ota"
+                ],
+                "summary": "Pause a radio OTA job before activation",
+                "operationId": "pauseRadioOTA",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Station RF identity",
+                        "name": "target",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/radioota.Job"
+                        }
+                    }
+                }
+            }
+        },
+        "/radio-ota/{target}/preflight": {
+            "post": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/octet-stream"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "radio-ota"
+                ],
+                "summary": "Prepare and verify a LoRa OTA route without transferring firmware",
+                "operationId": "preflightRadioOTA",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Station RF identity",
+                        "name": "target",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Expected candidate firmware version",
+                        "name": "expected_version",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "description": "Image to validate locally; no firmware blocks transmitted",
+                        "name": "firmware",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "$ref": "#/definitions/radioota.Job"
+                        }
+                    }
+                }
+            }
+        },
+        "/radio-ota/{target}/settings": {
+            "put": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "radio-ota"
+                ],
+                "summary": "Save radio OTA station settings",
+                "operationId": "saveRadioOTA",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Station RF identity",
+                        "name": "target",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Radio settings; blank route secret preserves existing secret",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/radioota.Settings"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/radioota.Settings"
+                        }
+                    }
+                }
+            }
+        },
         "/release-notes": {
             "get": {
                 "security": [
@@ -12667,6 +12910,199 @@
                 "used": {
                     "description": "Used is true when another driver has claimed this line (e.g. SPI, I2C,\nUART, or a previously-running graywolf process).",
                     "type": "boolean"
+                }
+            }
+        },
+        "radioota.BootProof": {
+            "type": "object",
+            "properties": {
+                "boot": {
+                    "type": "integer"
+                },
+                "image_sha": {
+                    "type": "string"
+                },
+                "pending": {
+                    "type": "boolean"
+                },
+                "running": {
+                    "type": "integer"
+                },
+                "version": {
+                    "type": "string"
+                }
+            }
+        },
+        "radioota.Job": {
+            "type": "object",
+            "properties": {
+                "block_size": {
+                    "type": "integer"
+                },
+                "board_id": {
+                    "type": "integer"
+                },
+                "can_pause": {
+                    "type": "boolean"
+                },
+                "controller_service_restored": {
+                    "type": "boolean"
+                },
+                "engine": {
+                    "type": "string"
+                },
+                "error": {
+                    "type": "string"
+                },
+                "expected_version": {
+                    "type": "string"
+                },
+                "final": {
+                    "$ref": "#/definitions/radioota.BootProof"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "options": {
+                    "$ref": "#/definitions/radioota.Options"
+                },
+                "phase": {
+                    "type": "string"
+                },
+                "post_install_verified": {
+                    "type": "boolean"
+                },
+                "preflight_verified": {
+                    "type": "boolean"
+                },
+                "relay": {
+                    "type": "string"
+                },
+                "relay_recipient": {
+                    "type": "string"
+                },
+                "relay_service_restored": {
+                    "type": "boolean"
+                },
+                "roles_changed": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "route_authenticated": {
+                    "type": "boolean"
+                },
+                "route_proof": {
+                    "$ref": "#/definitions/radioota.BootProof"
+                },
+                "session_released": {
+                    "type": "boolean"
+                },
+                "sha256": {
+                    "type": "string"
+                },
+                "signed_target": {
+                    "type": "string"
+                },
+                "source": {
+                    "type": "string"
+                },
+                "started": {
+                    "type": "string"
+                },
+                "state": {
+                    "type": "string"
+                },
+                "target": {
+                    "type": "string"
+                },
+                "target_board": {
+                    "type": "string"
+                },
+                "target_service_verified": {
+                    "type": "boolean"
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "written": {
+                    "type": "integer"
+                }
+            }
+        },
+        "radioota.Options": {
+            "type": "object",
+            "properties": {
+                "exercise_confirm_timeout": {
+                    "type": "boolean"
+                },
+                "expected_version": {
+                    "type": "string"
+                },
+                "preflight_only": {
+                    "type": "boolean"
+                },
+                "prepare_route": {
+                    "type": "boolean"
+                },
+                "replace_existing": {
+                    "type": "boolean"
+                },
+                "require_offline": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "radioota.Profile": {
+            "type": "object",
+            "properties": {
+                "bandwidth_hz": {
+                    "type": "integer"
+                },
+                "coding_rate": {
+                    "type": "integer"
+                },
+                "frequency_hz": {
+                    "type": "integer"
+                },
+                "power_dbm": {
+                    "type": "integer"
+                },
+                "spreading_factor": {
+                    "type": "integer"
+                }
+            }
+        },
+        "radioota.Settings": {
+            "type": "object",
+            "properties": {
+                "bridge": {
+                    "type": "string"
+                },
+                "has_route_secret": {
+                    "type": "boolean"
+                },
+                "normal": {
+                    "$ref": "#/definitions/radioota.Profile"
+                },
+                "relay_recipient": {
+                    "type": "string"
+                },
+                "route_secret": {
+                    "type": "string"
+                },
+                "target_board": {
+                    "type": "string"
+                },
+                "target_normal": {
+                    "$ref": "#/definitions/radioota.Profile"
+                },
+                "transfer": {
+                    "$ref": "#/definitions/radioota.Profile"
+                },
+                "via": {
+                    "type": "string"
                 }
             }
         },

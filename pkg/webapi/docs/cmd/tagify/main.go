@@ -65,6 +65,8 @@ var tagOrder = []tagEntry{
 	{"actions", "On-air remote command/webhook execution: action definitions, OTP credentials, listener addressees, audit log, and operator test-fire."},
 	{"remote-actions", "Outbound Actions: operator-curated macros plus remote-station TOTP credentials used to fire @@<otp>#<action> invocations from inside Messages."},
 
+	{Name: "radio-ota", Description: "LoRa firmware updates: station settings, transfer progress and pause."},
+
 	// --- Admin / auth / health ------------------------------------------
 	{"auth", "Session login, logout, and first-user setup."},
 	{"version", "Build version and commit hash."},

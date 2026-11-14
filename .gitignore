@@ -52,3 +52,6 @@ android/local.properties
 # fastlane / bundler
 /vendor/bundle/
 .bundle/
+
+# Radio OTA station/route settings, counters, firmware copies and private logs.
+/radio-ota/

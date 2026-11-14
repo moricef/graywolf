@@ -1,5 +1,6 @@
 <script>
   import { Button, Input, toast } from '@chrissnell/chonky-ui';
+  import RadioOtaModal from './RadioOtaModal.svelte';
   import RemoteCommandCredentialModal from './RemoteCommandCredentialModal.svelte';
   import { remoteCommandsApi } from '../../../lib/remote_actions/api.js';
   import { remoteActionsStore } from '../../../lib/remote_actions/store.svelte.js';
@@ -7,6 +8,7 @@
 
   let { target, channel = 0 } = $props();
   let modalOpen = $state(false);
+  let otaOpen = $state(false);
   let sending = $state('');
   let command = $state('');
   $effect(() => { target; command = ''; });
@@ -57,6 +59,7 @@
     </Button>
   </div>
   {#if credential}
+    <Button variant="secondary" size="sm" onclick={() => otaOpen = true}>Update firmware over LoRa</Button>
     <div class="controls">
       {#each controls as control (control.command)}
         <Button
@@ -83,6 +86,7 @@
   {/if}
 </section>
 
+<RadioOtaModal bind:open={otaOpen} {target} {credential} />
 <RemoteCommandCredentialModal bind:open={modalOpen} {target} {credential} />
 
 <style>

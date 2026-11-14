@@ -15,11 +15,11 @@ type TNC2ConfigStatus struct {
 
 // RegisterTNC2Config exposes the receive links and the separately authorized
 // transmit link. Saving the settings applies them immediately and persists them.
-func RegisterTNC2Config(mux *http.ServeMux, get func() TNC2ConfigStatus, save func(context.Context, configstore.TNC2Config) error) {
+func RegisterTNC2Config(mux *http.ServeMux, get func() TNC2ConfigStatus, save func(context.Context, configstore.TNC2Config) error, guards ...func(http.HandlerFunc) http.HandlerFunc) {
 	mux.HandleFunc("GET /api/tnc2/config", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, get())
 	})
-	mux.HandleFunc("PUT /api/tnc2/config", func(w http.ResponseWriter, r *http.Request) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		cfg, err := decodeJSON[configstore.TNC2Config](r)
 		if err != nil {
 			badRequest(w, err.Error())
@@ -35,4 +35,8 @@ func RegisterTNC2Config(mux *http.ServeMux, get func() TNC2ConfigStatus, save fu
 		}
 		writeJSON(w, http.StatusOK, get())
 	})
+	for _, guard := range guards {
+		handler = guard(handler)
+	}
+	mux.HandleFunc("PUT /api/tnc2/config", handler)
 }
