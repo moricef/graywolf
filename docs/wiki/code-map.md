@@ -453,6 +453,16 @@ section), [`../handbook/kiss-bluetooth.html`](../handbook/kiss-bluetooth.html),
 The blocking-call-on-worker-thread rule that applies to USB and
 Bluetooth code on this surface is [invariant 35](invariants.md).
 
+## Windows x86 manual builds
+
+`go.mod` / `go.sum` pin SQLite v1.31.0 with libc v1.55.3 so the pure-Go
+database backend supports Windows/386. Local cross-build and package:
+`scripts/build-windows-386.sh`; Windows runtime check:
+`scripts/windows/smoke-windows-386.ps1`. This is a portable manual ZIP, not
+the x64 NSIS installer. `release.yml` also packages Windows/386 snapshots and
+runs the same runtime check against the packaged MSVC modem and Go binary. See
+[build pipelines](build-pipelines.md#manual-windows-x86-32-bit-package).
+
 ## Packaging (`packaging/`)
 
 | Target | Path |
@@ -481,6 +491,14 @@ per-interface enable/TX controls, reconnect and ingress echo suppression still
 apply. `pkg/agw/wire` holds the codec shared with the AGW server without
 importing its AX.25 connection engine. The AGW server API remains independent.
 No P username/password login or AGW-managed connected sessions in this client.
+Real Windows 11/VirtualBox AGWPE LoopBack APRS RX/TX validation (12 November
+2026) is recorded in the handbook. AGWPE can advertise an idle slot as
+`?>NOTHING IDLE`; consult the returned G descriptions rather than guessing
+the loopback port number. The validated installation used Port 1, channel 2.
+The [dated validation record](../handbook/agwpe.html#loopback-validation-20261112)
+contains the operator-confirmed RX (22:21:42 CET), beacon TX (22:27:00) and
+loopback return (22:27:01), cleanup and deferred audio/PTT/RF tests. APRS Logs
+search applies to the loaded recent packet batch; there is no channel picker.
 Operator setup and validation limits: [`../handbook/agwpe.html#client`](../handbook/agwpe.html#client).
 
 ## KISS TCP transmit stalls

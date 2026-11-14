@@ -194,3 +194,46 @@ checked features for testing. Build the web UI and Go binary with
 existing systemd configuration and database, retain a bounded rollback copy,
 replace the binary while the service is stopped, then restart and verify the
 HTTP UI and service logs. Local installation does not authorize publication.
+
+## Manual Windows x86 (32-bit) package
+
+`scripts/build-windows-386.sh [output-dir]` cross-builds the SPA and Go
+application with `GOOS=windows GOARCH=386 CGO_ENABLED=0`, plus the Rust modem
+with `i686-pc-windows-gnu`, then produces a portable x86 ZIP and checksum file.
+It does not publish or change VERSION. The normal
+NSIS installer remains x64. Snapshot archives now include Windows x86 too.
+Both binaries in the manual ZIP are
+checked as PE32/i386; GNU runtime linkage is static (`+crt-static`).
+
+Linux build prerequisites: Go, Node/npm, Rust with the
+`i686-pc-windows-gnu` target, and `gcc-mingw-w64-i686-win32` (which supplies
+the compiler and binutils). `modernc.org/sqlite` v1.31.0 adds the missing
+Windows/386 backend; keep its required libc v1.55.3 and accompanying Go module
+updates together. The previous SQLite v1.23.1 cannot compile on Windows/386.
+No GORM driver switch or CGO dependency is needed for Go.
+
+`scripts/windows/smoke-windows-386.ps1 -PackageDir <folder> [-Port 18080]
+[-KeepRunning]` checks the PE headers, both version commands, optional
+`configstore.test.exe`, a fresh isolated database, HTTP and Rust IPC startup.
+The test touches only `smoke-state/` beside the supplied package and stops
+only its own process tree unless `-KeepRunning` is set.
+
+Validated on 13 November 2026 in Windows 11 VirtualBox/WOW64: x86 configstore
+migration/persistence tests pass; Web UI HTTP 200; modem RUNNING; versions
+match. This does not replace validation on an actual Windows 10 x86 system.
+Operator instructions: [`../handbook/installation.html#windows-x86`](../handbook/installation.html#windows-x86).
+
+### Windows x86 snapshot packaging and runtime gate
+
+`release.yml` builds the 32-bit modem natively on `windows-latest` with
+`i686-pc-windows-msvc` and static CRT linkage, separately from the existing
+x64 modem. GoReleaser adds only Windows/386 (Linux/Darwin 386 are excluded),
+uses `rust-bin/windows_386`, and names the archive `windows_x86.zip`.
+Manual Linux builds continue to use GNU MinGW; these are distinct toolchains.
+
+On workflow_dispatch, `windows-x86-smoke` downloads the snapshot ZIP, checks
+both PE32 headers and exact commit/version stamps, runs Windows/386 configstore
+migration tests and tests a fresh app database, HTTP UI and Rust IPC startup
+with `scripts/windows/smoke-windows-386.ps1`. A failed check fails the workflow;
+`windows-386-smoke-results` retains the evidence. Snapshot assets must still
+pass the ordinary checksum verification and release approval procedure.

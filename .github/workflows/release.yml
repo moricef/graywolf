@@ -63,6 +63,11 @@ jobs:
             arch: amd64
             platform: windows
             use_cross: false
+          - os: windows-latest
+            target: i686-pc-windows-msvc
+            arch: '386'
+            platform: windows
+            use_cross: false
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -167,6 +172,8 @@ jobs:
         env:
           GRAYWOLF_VERSION: ${{ steps.ver.outputs.version }}
           GRAYWOLF_GIT_COMMIT: ${{ steps.ver.outputs.commit }}
+          # Keep the x86 package independent of an installed VC runtime.
+          RUSTFLAGS: ${{ matrix.platform == 'windows' && matrix.arch == '386' && '-C target-feature=+crt-static' || '' }}
         run: cargo build --release --target ${{ matrix.target }} --bin graywolf-modem
 
       - name: Verify macOS binary architecture
@@ -306,7 +313,7 @@ jobs:
 
       - name: Arrange Rust binaries for GoReleaser
         run: |
-          mkdir -p rust-bin/{linux_amd64,linux_arm64,linux_arm,linux_armv7,darwin_amd64,darwin_arm64,windows_amd64}
+          mkdir -p rust-bin/{linux_amd64,linux_arm64,linux_arm,linux_armv7,darwin_amd64,darwin_arm64,windows_amd64,windows_386}
           cp rust-artifacts/rust-linux-amd64/graywolf-modem       rust-bin/linux_amd64/
           cp rust-artifacts/rust-linux-arm64/graywolf-modem       rust-bin/linux_arm64/
           cp rust-artifacts/rust-linux-arm/graywolf-modem         rust-bin/linux_arm/
@@ -316,6 +323,7 @@ jobs:
           cp rust-artifacts/rust-darwin-amd64/graywolf-modem      rust-bin/darwin_amd64/
           cp rust-artifacts/rust-darwin-arm64/graywolf-modem      rust-bin/darwin_arm64/
           cp rust-artifacts/rust-windows-amd64/graywolf-modem.exe rust-bin/windows_amd64/
+          cp rust-artifacts/rust-windows-386/graywolf-modem.exe   rust-bin/windows_386/
           chmod +x rust-bin/*/graywolf-modem || true
           # Flat copies for Docker builds (extra_files path is preserved in context)
           cp rust-bin/linux_amd64/graywolf-modem graywolf-modem-amd64
@@ -356,6 +364,50 @@ jobs:
             dist/*.tar.gz
             dist/*.zip
             dist/checksums.txt
+          retention-days: 7
+
+  windows-x86-smoke:
+    name: Windows x86 runtime check
+    runs-on: windows-latest
+    needs: release
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - name: Download verified-build candidates
+        uses: actions/download-artifact@v5
+        with:
+          name: snapshot-packages
+          path: snapshots
+      - name: Extract x86 package and build migration tests
+        shell: pwsh
+        env:
+          GOOS: windows
+          GOARCH: '386'
+          CGO_ENABLED: '0'
+        run: |
+          $archives = @(Get-ChildItem snapshots/graywolf_*_windows_x86.zip)
+          if ($archives.Count -ne 1) { throw 'Expected one Windows x86 ZIP' }
+          Expand-Archive $archives[0].FullName -DestinationPath x86-test
+          go test -c -o x86-test/configstore.test.exe ./pkg/configstore
+          if ($LASTEXITCODE -ne 0) { throw 'Could not build x86 migration tests' }
+      - name: Test packaged x86 executables and SQLite
+        shell: pwsh
+        run: |
+          $expected = 'v' + (Get-Content VERSION -Raw).Trim() + '-' + $env:GITHUB_SHA.Substring(0,8)
+          ./scripts/windows/smoke-windows-386.ps1 -PackageDir x86-test -ExpectedVersion $expected
+          if ($LASTEXITCODE -ne 0) { throw 'Windows x86 smoke test failed' }
+      - name: Upload runtime test evidence
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: windows-386-smoke-results
+          path: x86-test/smoke-state/
           retention-days: 7
 
   installer:

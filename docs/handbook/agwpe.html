@@ -132,8 +132,60 @@
       a separate function and need not be enabled to use the client.</p>
     <p><strong>Validation:</strong> protocol fixtures and automated tests cover
       binary APRS RX/TX, radio-port filtering, discovery failures, cancellation
-      and reconnect. Validation with DEV's actual AGW Packet Engine and radio
-      remains required.</p>
+      and reconnect. On 12 November 2026, APRS reception and transmission were
+      also validated against real AGW Packet Engine in a Windows 11 VirtualBox
+      guest, using its LoopBack Port. An independent socket client injected
+      <code>F4MLV-14&gt;APGRWO,RFONLY:&gt;GW-AGW-RX-222142</code>; Graywolf decoded it
+      at 22:21:42 CET on channel 2. A temporary, disabled custom beacon was then
+      sent manually through that channel with marker <code>GW-AGW-TX-20261112</code>.
+      The independent client received its raw K frame from AGWPE, and the
+      temporary beacon was deleted. The channel counters reached RX 2 / TX 1
+      (including loopback reception of the transmitted frame); no test packet
+      was gated to APRS-IS. This validates the software transport, not audio,
+      PTT or an over-the-air radio link.</p>
+    <p>For an off-air test, select a radio port whose advertised description
+      actually identifies <strong>LoopBack Port</strong>. In the validated
+      installation, AGWPE advertised Port 1 as LoopBack and Port 2 as
+      <code>?&gt;NOTHING IDLE</code>. A successful TCP connection to an idle
+      slot does not establish a usable loopback or radio path.</p>
+
+    <h3 id="loopback-validation-20261112">LoopBack validation record: 12 November 2026</h3>
+    <p>Environment: Windows 11 guest in VirtualBox (Arium11_2), with Graywolf
+      and AGW Packet Engine running in that same guest. Connection:
+      <code>127.0.0.1:8000</code>, AGWPE radio port <strong>1</strong>,
+      Graywolf channel <strong>2</strong>, TNC mode and APRS only.
+      No microphone, AudioBox, FT-991A or radio transmission was needed.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Time (CET)</th><th>Observed event</th><th>Raw APRS frame</th></tr></thead>
+        <tbody>
+          <tr><td>22:21:42</td><td>Independent test client injects a frame through
+            AGWPE; Graywolf receives and decodes it.</td>
+            <td><code>F4MLV-14&gt;APGRWO,RFONLY:&gt;GW-AGW-RX-222142</code></td></tr>
+          <tr><td>22:27:00</td><td>Graywolf sends the temporary custom beacon.
+            Its APRS Logs entry is labelled Beacon.</td>
+            <td><code>F4MLV-14&gt;APGRWO,RFONLY:&gt;GW-AGW-TX-20261112</code></td></tr>
+          <tr><td>22:27:01</td><td>AGWPE returns that frame through LoopBack.
+            Graywolf records a receive entry without the Beacon label.</td>
+            <td><code>F4MLV-14&gt;APGRWO,RFONLY:&gt;GW-AGW-TX-20261112</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>The independent socket client also received the outgoing raw AGW K
+      frame, confirming delivery beyond Graywolf's send queue. The two TX-marker
+      entries are the expected outgoing beacon and loopback return, not two
+      beacon transmissions. The temporary beacon was deleted after the test;
+      channel counters were RX 2 / TX 1 and gated test packets 0.</p>
+    <p>To inspect recent test entries, open <strong>APRS Logs</strong>, select
+      <strong>1000 packets</strong>, leave direction on <strong>All</strong>,
+      and search for <code>GW-AGW</code>. Verify <strong>Channel</strong> in
+      the displayed rows; this page does not have a channel selector. Search
+      filters the loaded recent packets, not a permanent test archive.</p>
+    <p><strong>Result:</strong> APRS RX and TX through the real AGWPE LoopBack
+      are validated at the software level. <strong>Deferred:</strong> audio
+      routing through VirtualBox or a physical interface, AFSK decoding and
+      modulation, PTT, radio transmission/reception, and hardware validation
+      with DEV. These have not been validated by this test.</p>
 
     <h2>Port Mapping</h2>
 

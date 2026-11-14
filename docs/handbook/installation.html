@@ -236,6 +236,22 @@ makepkg -si</code></pre>
       <!-- ── Windows ── -->
       <div class="tab-panel" id="tab-windows">
 
+        <h2 id="windows-x86">Windows x86 (32-bit) portable test build</h2>
+        <p>A manual 32-bit test build is available as
+          <code>graywolf_&lt;version&gt;_windows_x86.zip</code>. Extract the
+          complete archive into a writable folder and run <code>graywolf.exe</code>.
+          Keep <code>graywolf-modem.exe</code> beside it: both executables must
+          be 32-bit. Open <code>http://127.0.0.1:8080</code>. The x64 installer
+          described below cannot install this package. The RXT snapshot workflow
+          now packages both Windows x86 and x64 ZIPs and checks the x86 binaries
+          on a Windows runner before publication.</p>
+        <p>On 13 November 2026, both x86 executables started successfully under
+          WOW64 in the Windows 11 VirtualBox guest. Configstore migration and
+          persistence tests passed natively in x86; the app served its Web UI
+          and the Rust modem reached RUNNING. A separate test installation was
+          left at <code>http://127.0.0.1:18080</code> with its own databases.
+          Actual Windows 10 x86, audio/PTT and on-air validation remain pending.</p>
+
         <h2>Run the Installer</h2>
 
         <p>
