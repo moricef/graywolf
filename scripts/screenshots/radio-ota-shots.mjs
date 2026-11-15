@@ -30,7 +30,7 @@ const jobs = {
 };
 let job = null;
 const browser = await chromium.launch({ headless: true, executablePath: process.env.CHROMIUM || '/usr/bin/chromium', args: ['--no-sandbox', '--lang=en-US'], env: { ...process.env, LANG: 'en_US.UTF-8', LANGUAGE: 'en_US' } });
-const page = await (await browser.newContext({ viewport: { width: 1000, height: 1400 }, deviceScaleFactor: 1, locale: 'en-US' })).newPage();
+const page = await (await browser.newContext({ viewport: { width: 1000, height: 2600 }, deviceScaleFactor: 2, locale: 'en-US' })).newPage();
 await page.route('**/api/**', async route => {
   const path = new URL(route.request().url()).pathname;
   let data = {};
@@ -45,30 +45,41 @@ async function open(state) {
   await page.goto(base + '/tests/radio-ota.html');
   await page.getByText('View / edit radio settings', { exact: true }).waitFor();
 }
-async function shot(name) {
-  await page.waitForTimeout(300);
-  await dialog().screenshot({ path: `${out}/${name}.png` });
-  console.log(name);
+// Crop the dialog to the region from the top of `from` to the bottom of `to`,
+// both scrolled into view, so each screenshot stays legible once printed.
+async function shot(name, from, to) {
+  await from.scrollIntoViewIfNeeded();
+  await page.waitForTimeout(250);
+  const box = await dialog().boundingBox();
+  const a = await from.boundingBox(), b = await to.boundingBox();
+  const top = Math.max(box.y, a.y - 12), bottom = b.y + b.height + 12;
+  if (bottom - top < 40) throw new Error(`${name}: empty crop`);
+  // The footer with its Close button starts where the scrolling body ends.
+  const footer = await dialog().getByRole('button', { name: 'Close', exact: true }).boundingBox();
+  if (bottom > footer.y - 8) throw new Error(`${name}: region does not fit; enlarge the viewport`);
+  await page.screenshot({ path: `${out}/${name}.png`, clip: { x: box.x, y: top, width: box.width, height: bottom - top } });
+  console.log(name, Math.round(bottom - top));
 }
+const label = text => page.getByText(text, { exact: true }).first();
+const button = name => page.getByRole('button', { name, exact: true });
 try {
   await open(null);
-  await page.getByRole('button', { name: 'View / edit radio settings', exact: true }).click();
+  await button('View / edit radio settings').click();
   await page.getByLabel('Target board (required)', { exact: true }).waitFor();
-  await shot('01-settings');
-  await page.locator('#ota-transfer-frequency').scrollIntoViewIfNeeded();
-  await page.getByRole('button', { name: 'Save OTA settings', exact: true }).scrollIntoViewIfNeeded();
-  await shot('02-settings-profiles');
+  await shot('01-settings', label('Save once for this station'), page.locator('#ota-relay-chain'));
+  await shot('02-route-key', label('Shared route key (saved; leave blank to keep)'), page.getByText('Target uses a different service profile').first());
+  await shot('03-settings-profiles', label('Controller / relay service profile'), button('Save OTA settings'));
   await open(null);
   await page.locator('input[type="file"]').setInputFiles(image);
   await page.getByLabel('Expected firmware version', { exact: true }).fill('4.0.2RXT-OTA2.2');
   await page.getByLabel('Discard the previous inactive candidate').check();
-  await page.getByRole('button', { name: 'Check preparation', exact: true }).scrollIntoViewIfNeeded();
-  await shot('03-this-update');
-  for (const [state, name] of [['ready', '04-route-checked'], ['running', '05-progress'], ['succeeded', '06-succeeded']]) {
-    await open(state);
-    await page.getByRole('button', { name: 'Check preparation', exact: true }).scrollIntoViewIfNeeded();
-    await shot(name);
-  }
+  await shot('04-this-update', label('Application firmware (.bin)'), button('Update firmware'));
+  await open('ready');
+  await shot('05-route-checked', label('Route checked; no firmware transferred'), page.getByText('Image SHA-256:').first());
+  await open('running');
+  await shot('06-progress', page.locator('progress').first(), button('Pause'));
+  await open('succeeded');
+  await shot('07-succeeded', page.locator('progress').first(), page.getByText('Image SHA-256:').first());
 } finally {
   await browser.close();
 }

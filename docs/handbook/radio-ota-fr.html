@@ -1,4 +1,4 @@
-<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Graywolf — LoRa firmware update</title><style>@page{size:A4;margin:16mm}body{font:11pt Arial,sans-serif;line-height:1.4;max-width:900px;margin:auto;padding:0 16px;color:#222}h1{font-size:21pt}h2{font-size:14pt;margin:16pt 0 6pt}h3{font-size:12pt;margin:10pt 0 4pt}p{margin:7pt 0}li{margin:4pt 0}.note{background:#edf4f7;padding:10pt}.warn{background:#fbf1e6;padding:10pt}a{color:#145780}table{width:100%;border-collapse:collapse;font-size:10pt}td,th{border:1px solid #ddd;padding:5px;text-align:left;vertical-align:top}code{overflow-wrap:anywhere}figure{margin:10pt 0;break-inside:avoid}figure img{display:block;max-width:100%;max-height:640px;border:1px solid #ccc}figcaption{font-size:9.5pt;color:#555;margin-top:3pt}</style></head><body>
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Graywolf — LoRa firmware update</title><style>@page{size:A4;margin:16mm}body{font:11pt Arial,sans-serif;line-height:1.4;max-width:900px;margin:auto;padding:0 16px;color:#222}h1{font-size:21pt}h2{font-size:14pt;margin:16pt 0 6pt}h3{font-size:12pt;margin:10pt 0 4pt}p{margin:7pt 0}li{margin:4pt 0}.note{background:#edf4f7;padding:10pt}.warn{background:#fbf1e6;padding:10pt}a{color:#145780}table{width:100%;border-collapse:collapse;font-size:10pt}td,th{border:1px solid #ddd;padding:5px;text-align:left;vertical-align:top}code{overflow-wrap:anywhere}figure{margin:10pt 0;break-inside:avoid}figure img{display:block;width:100%;height:auto;max-height:110mm;object-fit:contain;object-position:left top;border:1px solid #c7d0db}figcaption{font-size:9.5pt;color:#555;margin-top:3pt}</style></head><body>
 <h1>Mettre à jour une station LoRa par radio depuis Graywolf</h1>
 <p><a href="radio-ota-en.html">English</a> · <a href="Graywolf_radio_OTA_fr.pdf">PDF français</a></p>
 <p>Graywolf envoie un nouveau firmware à un iGate ou digipeater LoRa APRS par la radio, sans Wi-Fi ni accès physique à la station : directement, ou à travers un ou plusieurs relais. Le transfert est intégré à Graywolf ; aucun script externe n'est nécessaire.</p>
@@ -16,7 +16,7 @@
 
 <h2 id="ordre-preparation">2. Réglages à enregistrer une fois</h2>
 <p>Ouvrir <b>Messages</b>, puis la conversation de la <b>cible</b> (pas celle d'un relais), le panneau des commandes et <b>Update firmware over LoRa</b>. Cliquer sur <b>View / edit radio settings</b>.</p>
-<figure><img src="assets/radio-ota/01-settings.png" alt="Réglages de la station : modèle de la cible, port USB du contrôleur, relais et clé de route."><figcaption>Réglages de la station : modèle de la cible, port USB du contrôleur, relais et clé de route.</figcaption></figure>
+<figure><img src="assets/radio-ota/01-settings.png" alt="Modèle de la cible, port USB du contrôleur, premier relais et relais suivants."><figcaption>Modèle de la cible, port USB du contrôleur, premier relais et relais suivants.</figcaption></figure>
 <table>
 <tr><th>Champ</th><th>À renseigner</th></tr>
 <tr><td>Target board</td><td>Le modèle exact de la cible. Aucun modèle n'est présélectionné ; la cible refuse une image d'un autre modèle.</td></tr>
@@ -29,9 +29,10 @@
 <tr><td>Target uses a different service profile</td><td>À cocher seulement si la cible travaille sur un autre profil que le contrôleur et le relais (voir section 5). Un seul relais dans ce cas.</td></tr>
 <tr><td>Temporary transfer profile</td><td>Le profil rapide du transfert, par exemple 434.500 MHz, BW500, SF7, CR4/5. Il doit rester dans la bande autorisée par votre licence.</td></tr>
 </table>
-<figure><img src="assets/radio-ota/02-settings-profiles.png" alt="Profils de service et de transfert, puis Save OTA settings."><figcaption>Profils de service et de transfert, puis Save OTA settings.</figcaption></figure>
+<figure><img src="assets/radio-ota/03-settings-profiles.png" alt="Profil de service du contrôleur et du relais, profil temporaire de transfert, puis Save OTA settings."><figcaption>Profil de service du contrôleur et du relais, profil temporaire de transfert, puis Save OTA settings.</figcaption></figure>
 <p>Enregistrer avec <b>Save OTA settings</b>. Il n'est pas nécessaire de mettre à jour un relais pour le configurer : Graywolf lui donne son rôle par commande signée au moment de la mise à jour de la cible.</p>
 <h3>La clé de route</h3>
+<figure><img src="assets/radio-ota/02-route-key.png" alt="Clé de route : déjà enregistrée, le champ vide la conserve. Generate ne sert qu'au provisionnement initial."><figcaption>Clé de route : déjà enregistrée, le champ vide la conserve. Generate ne sert qu'au provisionnement initial.</figcaption></figure>
 <p>Pour une route déjà installée, réutiliser sa clé : ne jamais en générer une nouvelle à chaque transfert. <b>Generate route key (initial setup)</b> ne sert qu'au provisionnement initial : la nouvelle clé doit ensuite être installée dans la WebUI de chaque relais et de la cible avant toute mise à jour. Graywolf ne la transmet jamais par radio.</p>
 
 <h2>3. Lancer une mise à jour</h2>
@@ -47,8 +48,8 @@
 <li>Cliquer sur <b>Check preparation</b>. Graywolf vérifie chaque relais puis la cible, leur donne leur rôle si nécessaire et prouve la route par un échange authentifié, sans envoyer de firmware. Attendre « Route checked; no firmware transferred ».</li>
 <li>Cliquer sur <b>Update firmware</b> et vérifier le récapitulatif.</li>
 </ol>
-<figure><img src="assets/radio-ota/03-this-update.png" alt="Fichier choisi, version attendue et options de cette tentative."><figcaption>Fichier choisi, version attendue et options de cette tentative.</figcaption></figure>
-<figure><img src="assets/radio-ota/04-route-checked.png" alt="Résultat de Check preparation : route vérifiée, aucun bloc envoyé, firmware actuel de la cible authentifié."><figcaption>Résultat de Check preparation : route vérifiée, aucun bloc envoyé, firmware actuel de la cible authentifié.</figcaption></figure>
+<figure><img src="assets/radio-ota/04-this-update.png" alt="Fichier choisi (descripteur et SHA-256), version attendue et options de cette tentative."><figcaption>Fichier choisi (descripteur et SHA-256), version attendue et options de cette tentative.</figcaption></figure>
+<figure><img src="assets/radio-ota/05-route-checked.png" alt="Résultat de Check preparation : route vérifiée, rôles enregistrés sur le relais et la cible, aucun bloc envoyé."><figcaption>Résultat de Check preparation : route vérifiée, rôles enregistrés sur le relais et la cible, aucun bloc envoyé.</figcaption></figure>
 
 <h2>4. Pendant et après le transfert</h2>
 <ul>
@@ -58,8 +59,8 @@
 <li>Après l'image, Graywolf l'active, la confirme par radio, puis la relit dans une nouvelle session (version, SHA-256, partition). Sans confirmation dans les 180 secondes, la cible revient seule à l'ancienne image.</li>
 <li>À la fin, chaque relais et le contrôleur reprennent leur profil de service, et Graywolf le vérifie.</li>
 </ul>
-<figure><img src="assets/radio-ota/05-progress.png" alt="Transfert en cours : la progression compte les données enregistrées par la cible. Pause reste disponible."><figcaption>Transfert en cours : la progression compte les données enregistrées par la cible. Pause reste disponible.</figcaption></figure>
-<figure><img src="assets/radio-ota/06-succeeded.png" alt="Fin réussie : nouvelle version confirmée et relue (partition active, aucune confirmation en attente)."><figcaption>Fin réussie : nouvelle version confirmée et relue (partition active, aucune confirmation en attente).</figcaption></figure>
+<figure><img src="assets/radio-ota/06-progress.png" alt="Transfert en cours : la progression compte les données enregistrées par la cible. Pause reste disponible."><figcaption>Transfert en cours : la progression compte les données enregistrées par la cible. Pause reste disponible.</figcaption></figure>
+<figure><img src="assets/radio-ota/07-succeeded.png" alt="Fin réussie : nouvelle version confirmée et relue, partition active 0x1f0000, aucune confirmation en attente."><figcaption>Fin réussie : nouvelle version confirmée et relue, partition active 0x1f0000, aucune confirmation en attente.</figcaption></figure>
 <p>Durée : sur banc, une image de 1,78 Mo a demandé environ une heure et demie d'envoi en blocs de 128 octets, à travers un relais et une liaison volontairement affaiblie. Chaque relais supplémentaire allonge le transfert. Une opération est limitée à deux heures.</p>
 <p class="warn">Pendant toute l'opération, les relais ne relaient plus l'APRS habituel. Choisir une heure creuse pour un digipeater dont dépend une zone.</p>
 
