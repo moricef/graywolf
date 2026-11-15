@@ -63,9 +63,9 @@ export function generateRouteSecret(cryptoApi = globalThis.crypto) {
 
 
 export const otaBoards = [
-  {value:'ttgo-lora32-v21', label:'TTGO LoRa32 V2.1', validation:'Physical OTA cycle validated on TTGO. The Graywolf 128-byte path still needs a hardware test.'},
+  {value:'ttgo-lora32-v21', label:'TTGO LoRa32 V2.1', validation:'Validated on TTGO hardware through Graywolf, with one relay (bench, November 2026).'},
   {value:'heltec-v3', label:'Heltec V3', validation:'Software tests only; hardware validation still required.'},
-  {value:'qrp-labs-lightgateway-plus', label:'QRP Labs LightGateway Plus', validation:'Software tests only; hardware validation by Jon still required.'},
+  {value:'qrp-labs-lightgateway-plus', label:'QRP Labs LightGateway Plus', validation:'Software tests only; hardware validation still required.'},
 ];
 export const otaBoard = value => otaBoards.find(board => board.value === value);
 

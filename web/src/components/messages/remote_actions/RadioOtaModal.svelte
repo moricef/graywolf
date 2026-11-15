@@ -184,7 +184,7 @@
               <label for="ota-relay-recipient">Relay RF recipient (blank = relay Callsign-SSID)</label>
               <Input id="ota-relay-recipient" bind:value={cfg.relay_recipient} maxlength={9} />
               <label for="ota-relay-chain">Further relays towards the target (optional)</label>
-              <Input id="ota-relay-chain" bind:value={cfg.chain_text} placeholder="F4MLV-11, F4MLV-12:TACTIC" />
+              <Input id="ota-relay-chain" bind:value={cfg.chain_text} placeholder="N0CALL-11, N0CALL-12:TACTIC" />
               <p>Nearest first, after the relay above. Write CALL-SSID, or CALL-SSID:NAME when the relay transmits under a tactical name. Each relay needs firmware 4.0.2RXT-OTA2.2 or later, the shared route key, digipeating enabled and an authenticated-control key in Graywolf. A relay chain uses one common service profile.</p>
               <p>Use the relay’s on-air tactical name here if it differs. Its authenticated-control key must already exist in Graywolf with the relay Callsign-SSID as signed identity.</p>
               <label for="ota-route-key">Shared route key {cfg.has_route_secret ? '(saved; leave blank to keep)' : ''}</label>
@@ -249,12 +249,12 @@
           {/if}
           <p>Target board: {otaBoard(cfg.target_board)?.label || 'not selected'}. Select the matching OTA-compatible application image, not a merged flash image.</p>
           {#if !editing}<p>{otaBoard(cfg.target_board)?.validation}</p>{/if}
-          <p>Laboratory reference: about 63 minutes to transfer and verify 1.78 MB with 160-byte blocks. A whole image at 128 bytes has not yet been timed. The relay is unavailable for APRS traffic during the operation. The roughly 71-minute laboratory cycle included deliberate rollback; it is not a guaranteed normal-update duration.</p>
+          <p>Bench reference: about 85 minutes of sending for 1.78 MB in 128-byte blocks, through one relay on a deliberately weakened link, link losses included. Each additional relay lengthens the transfer; an operation is limited to two hours. Relays are unavailable for APRS traffic during the operation.</p>
           {#if imageDetails}<p>Image descriptor: {imageDetails.descriptor} · {imageDetails.size} bytes · 128-byte blocks · uncompressed</p><p class="hash">SHA-256: {imageDetails.sha256 || 'calculated by Graywolf after upload (browser has no WebCrypto)'}</p>{/if}
           <fieldset disabled={running || busy}>
             <legend>This update only</legend>
             <label for="ota-expected-version">Expected firmware version</label>
-            <input id="ota-expected-version" type="text" maxlength="40" bind:value={options.expected_version} placeholder="Version reported by the candidate, e.g. 4.0.2RXT-OTA-B" required />
+            <input id="ota-expected-version" type="text" maxlength="40" bind:value={options.expected_version} placeholder="Version reported by the candidate, e.g. 4.0.2RXT-OTA2.2" required />
             <p>Use the firmware version announced by the candidate after reboot. The image descriptor may contain only the ESP-IDF version.</p>
             <label><input type="checkbox" bind:checked={options.replace_existing} /> Discard the previous inactive candidate</label>
             <p>Destructive: removes its saved resume point. Leave unchecked to resume the same image.</p>

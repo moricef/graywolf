@@ -27,7 +27,7 @@ try {
  await page.getByText('Firmware transfer is included in Graywolf. No Python or external scripts are required.',{exact:true}).waitFor();
  assert.equal(await page.getByLabel('Target board (required)',{exact:true}).inputValue(),'');
  await page.getByLabel('Target board (required)',{exact:true}).selectOption('qrp-labs-lightgateway-plus');
- await page.getByText('Software tests only; hardware validation by Jon still required.',{exact:true}).waitFor();
+ await page.getByText('Software tests only; hardware validation still required.',{exact:true}).waitFor();
  await page.getByLabel('Controller USB port on the Graywolf host').fill('COM4');
  await page.getByLabel('Frequency (MHz)',{exact:true}).first().fill('433.775');
  await page.getByLabel('Coding rate',{exact:true}).first().selectOption('5');

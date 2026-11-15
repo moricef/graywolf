@@ -1,4 +1,4 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Graywolf — LoRa firmware update</title><style>@page{size:A4;margin:16mm}body{font:11pt Arial,sans-serif;line-height:1.4;max-width:900px;margin:auto;padding:0 16px;color:#222}h1{font-size:21pt}h2{font-size:14pt;margin:16pt 0 6pt}h3{font-size:12pt;margin:10pt 0 4pt}p{margin:7pt 0}li{margin:4pt 0}.note{background:#edf4f7;padding:10pt}.warn{background:#fbf1e6;padding:10pt}a{color:#145780}table{width:100%;border-collapse:collapse;font-size:10pt}td,th{border:1px solid #ddd;padding:5px;text-align:left;vertical-align:top}code{overflow-wrap:anywhere}</style></head><body>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Graywolf — LoRa firmware update</title><style>@page{size:A4;margin:16mm}body{font:11pt Arial,sans-serif;line-height:1.4;max-width:900px;margin:auto;padding:0 16px;color:#222}h1{font-size:21pt}h2{font-size:14pt;margin:16pt 0 6pt}h3{font-size:12pt;margin:10pt 0 4pt}p{margin:7pt 0}li{margin:4pt 0}.note{background:#edf4f7;padding:10pt}.warn{background:#fbf1e6;padding:10pt}a{color:#145780}table{width:100%;border-collapse:collapse;font-size:10pt}td,th{border:1px solid #ddd;padding:5px;text-align:left;vertical-align:top}code{overflow-wrap:anywhere}figure{margin:10pt 0;break-inside:avoid}figure img{display:block;max-width:100%;max-height:640px;border:1px solid #ccc}figcaption{font-size:9.5pt;color:#555;margin-top:3pt}</style></head><body>
 <h1>Update a LoRa station over radio from Graywolf</h1>
 <p><a href="radio-ota-fr.html">Français</a> · <a href="Graywolf_radio_OTA_en.pdf">English PDF</a></p>
 <p>Graywolf sends new firmware to a LoRa APRS iGate or digipeater over radio, without Wi-Fi or physical access to the station: directly, or through one or more relays. The transfer is built into Graywolf; no external script is needed.</p>
@@ -11,10 +11,12 @@
 <li><b>In Graywolf</b>: an authenticated command key for the target and for each relay, with each board's signed identity (Callsign-SSID). Installing the key on the board and in Graywolf: see the <a href="authenticated-control-en.html">Authenticated control</a> guide (<a href="Graywolf_authenticated_control_en.pdf">PDF</a>).</li>
 <li><b>For a relayed route</b>: the same 43-character route key installed on every relay and on the target.</li>
 </ul>
+<p class="note">The screenshots use demonstration identities (<code>N0CALL-2</code> controller, <code>N0CALL-10</code> relay, <code>N0CALL-15</code> target) and simulated answers; no station was contacted.</p>
 <p class="warn">A board in eco mode ignores update commands. Send it <code>EM=OFF</code> first, then wait for its answer in the Graywolf conversation: <code>DigiEcoMode:OFF</code>, or <code>DigiEcoMode was OFF</code> if it already was. After <code>DigiEcoMode:OFF</code>, the board saves its configuration and restarts; wait for that restart. Without an answer, the board did not receive the command: do not start the update.</p>
 
 <h2 id="preparation-order">2. Settings to save once</h2>
 <p>Open <b>Messages</b>, then the <b>target's</b> conversation (not a relay's), the command panel and <b>Update firmware over LoRa</b>. Click <b>View / edit radio settings</b>.</p>
+<figure><img src="assets/radio-ota/01-settings.png" alt="Station settings: target model, controller USB port, relays and route key."><figcaption>Station settings: target model, controller USB port, relays and route key.</figcaption></figure>
 <table>
 <tr><th>Field</th><th>Enter</th></tr>
 <tr><td>Target board</td><td>The exact target model. Nothing is preselected; the target refuses an image for another model.</td></tr>
@@ -27,6 +29,7 @@
 <tr><td>Target uses a different service profile</td><td>Check only if the target works on another profile than the controller and relay (see section 5). A single relay in that case.</td></tr>
 <tr><td>Temporary transfer profile</td><td>The fast transfer profile, for example 434.500 MHz, BW500, SF7, CR4/5. It must stay within the band allowed by your licence.</td></tr>
 </table>
+<figure><img src="assets/radio-ota/02-settings-profiles.png" alt="Service and transfer profiles, then Save OTA settings."><figcaption>Service and transfer profiles, then Save OTA settings.</figcaption></figure>
 <p>Save with <b>Save OTA settings</b>. A relay does not need its own update to be configured: Graywolf gives it its role by signed command when the target is updated.</p>
 <h3>The route key</h3>
 <p>For an existing route, reuse its key: never generate a new one for each transfer. <b>Generate route key (initial setup)</b> is for initial provisioning only: the new key must then be installed in the WebUI of each relay and of the target before any update. Graywolf never sends it over radio.</p>
@@ -44,6 +47,8 @@
 <li>Click <b>Check preparation</b>. Graywolf checks each relay then the target, gives them their role if needed and proves the route with an authenticated exchange, without sending firmware. Wait for "Route checked; no firmware transferred".</li>
 <li>Click <b>Update firmware</b> and review the summary.</li>
 </ol>
+<figure><img src="assets/radio-ota/03-this-update.png" alt="Selected file, expected version and the options of this attempt."><figcaption>Selected file, expected version and the options of this attempt.</figcaption></figure>
+<figure><img src="assets/radio-ota/04-route-checked.png" alt="Check preparation result: route checked, no block sent, the target's current firmware authenticated."><figcaption>Check preparation result: route checked, no block sent, the target's current firmware authenticated.</figcaption></figure>
 
 <h2>4. During and after the transfer</h2>
 <ul>
@@ -53,6 +58,8 @@
 <li>After the image, Graywolf activates it, confirms it over radio, then reads it back in a fresh session (version, SHA-256, partition). Without confirmation within 180 seconds, the target returns to its previous image by itself.</li>
 <li>At the end, each relay and the controller return to their service profile, and Graywolf checks it.</li>
 </ul>
+<figure><img src="assets/radio-ota/05-progress.png" alt="Transfer in progress: progress counts the data stored by the target. Pause remains available."><figcaption>Transfer in progress: progress counts the data stored by the target. Pause remains available.</figcaption></figure>
+<figure><img src="assets/radio-ota/06-succeeded.png" alt="Successful end: new version confirmed and read back (active partition, no pending confirmation)."><figcaption>Successful end: new version confirmed and read back (active partition, no pending confirmation).</figcaption></figure>
 <p>Duration: on the bench, a 1.78 MB image took about an hour and a half of sending in 128-byte blocks, through one relay and a deliberately weakened link. Each additional relay lengthens the transfer. An operation is limited to two hours.</p>
 <p class="warn">During the whole operation, relays no longer repeat ordinary APRS traffic. Choose a quiet time for a digipeater an area depends on.</p>
 
