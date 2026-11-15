@@ -31,6 +31,7 @@
 </table>
 <figure><img src="assets/radio-ota/03-settings-profiles.png" alt="Controller and relay service profile, temporary transfer profile, then Save OTA settings."><figcaption>Controller and relay service profile, temporary transfer profile, then Save OTA settings.</figcaption></figure>
 <p>Save with <b>Save OTA settings</b>. A relay does not need its own update to be configured: Graywolf gives it its role by signed command when the target is updated.</p>
+<p class="note"><b>Tactical callsign changed on site</b>: neither the command key nor the route key is invalidated. Route roles use the boards' Callsign-SSID, and the route key depends on no name. Only update the on-air name in Graywolf: the target's conversation, or, for a relay, <b>Relay RF recipient</b> or the name after <code>:</code> in <b>Further relays</b>.</p>
 <h3>The route key</h3>
 <figure><img src="assets/radio-ota/02-route-key.png" alt="Route key: once saved, an empty field keeps it. Generate is for initial provisioning only."><figcaption>Route key: once saved, an empty field keeps it. Generate is for initial provisioning only.</figcaption></figure>
 <p>For an existing route, reuse its key: never generate a new one for each transfer. <b>Generate route key (initial setup)</b> is for initial provisioning only: the new key must then be installed in the WebUI of each relay and of the target before any update. Graywolf never sends it over radio.</p>
