@@ -11,7 +11,7 @@
 <li><b>Dans Graywolf</b> : une clé de commande authentifiée pour la cible et pour chaque relais, avec l'identité signée (Callsign-SSID) de chaque carte.</li>
 <li><b>Pour un trajet relayé</b> : la même clé de route, de 43 caractères, installée dans chaque relais et dans la cible.</li>
 </ul>
-<p class="warn">Une carte en mode éco ignore les commandes de mise à jour. Lui envoyer <code>EM=OFF</code> avant de commencer.</p>
+<p class="warn">Une carte en mode éco ignore les commandes de mise à jour. Lui envoyer <code>EM=OFF</code> avant de commencer, puis attendre sa réponse dans la conversation Graywolf : <code>DigiEcoMode:OFF</code>, ou <code>DigiEcoMode was OFF</code> si elle l'était déjà. Après <code>DigiEcoMode:OFF</code>, la carte enregistre sa configuration et redémarre ; attendre ce redémarrage. Sans réponse, la carte n'a pas reçu la commande : ne pas lancer la mise à jour.</p>
 
 <h2 id="ordre-preparation">2. Réglages à enregistrer une fois</h2>
 <p>Ouvrir <b>Messages</b>, puis la conversation de la <b>cible</b> (pas celle d'un relais), le panneau des commandes et <b>Update firmware over LoRa</b>. Cliquer sur <b>View / edit radio settings</b>.</p>

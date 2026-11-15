@@ -11,7 +11,7 @@
 <li><b>In Graywolf</b>: an authenticated command key for the target and for each relay, with each board's signed identity (Callsign-SSID).</li>
 <li><b>For a relayed route</b>: the same 43-character route key installed on every relay and on the target.</li>
 </ul>
-<p class="warn">A board in eco mode ignores update commands. Send it <code>EM=OFF</code> first.</p>
+<p class="warn">A board in eco mode ignores update commands. Send it <code>EM=OFF</code> first, then wait for its answer in the Graywolf conversation: <code>DigiEcoMode:OFF</code>, or <code>DigiEcoMode was OFF</code> if it already was. After <code>DigiEcoMode:OFF</code>, the board saves its configuration and restarts; wait for that restart. Without an answer, the board did not receive the command: do not start the update.</p>
 
 <h2 id="preparation-order">2. Settings to save once</h2>
 <p>Open <b>Messages</b>, then the <b>target's</b> conversation (not a relay's), the command panel and <b>Update firmware over LoRa</b>. Click <b>View / edit radio settings</b>.</p>
