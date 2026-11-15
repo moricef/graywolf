@@ -38,7 +38,7 @@
 <li>Choisir les options de cette tentative :
 <ul>
 <li><b>Discard the previous inactive candidate</b> : efface une image partielle et son point de reprise. Cocher pour une nouvelle image ; décocher pour reprendre la même image après une interruption.</li>
-<li><b>Require target offline</b> : exige que la cible n'ait ni Wi-Fi ni interface IP active, avant et après. Décocher si la cible a son Wi-Fi.</li>
+<li><b>Require target offline</b> : contrôle seulement, sans effet sur le transfert. Graywolf vérifie par radio, avant le premier bloc et après la confirmation, que la cible n'a ni Wi-Fi ni interface IP active ; il ne coupe pas le Wi-Fi. Cela prouve que l'image est arrivée uniquement par radio, et qu'une station volontairement sans réseau n'a pas retrouvé son Wi-Fi avec la nouvelle image. À cocher pour une telle station ; à décocher si la cible a normalement son Wi-Fi, sinon la mise à jour échoue.</li>
 <li><b>Validation: test automatic rollback</b> : retient la confirmation pour observer le retour automatique à l'ancienne image, puis réactive et confirme. Laisser décoché pour une mise à jour normale.</li>
 </ul></li>
 <li>Cliquer sur <b>Check preparation</b>. Graywolf vérifie chaque relais puis la cible, leur donne leur rôle si nécessaire et prouve la route par un échange authentifié, sans envoyer de firmware. Attendre « Route checked; no firmware transferred ».</li>
