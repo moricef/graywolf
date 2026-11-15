@@ -26,6 +26,8 @@ type preparedPort struct {
 	fault             string
 	roleWrites        int
 	armed             bool
+	chainRF           map[string]string // further relays: RF name -> signed identity
+	paths             map[string]string // RF recipient -> APRS path of its last command
 	lastActivity      time.Time
 }
 
@@ -46,6 +48,9 @@ func (p *preparedPort) sign(rf, signed, controller, cmd string) (string, uint64,
 	want := p.target
 	if rf == p.rfRelay {
 		want = p.relay
+	}
+	if call, ok := p.chainRF[rf]; ok {
+		want = call
 	}
 	if signed != want || controller != p.source {
 		return "", 0, errors.New("wrong signing identities")
@@ -105,6 +110,12 @@ func (p *preparedPort) Write(b []byte) (int, error) {
 	if rf == p.rfRelay {
 		signed = p.relay
 	}
+	if call, ok := p.chainRF[rf]; ok {
+		signed = call
+	}
+	if p.paths != nil {
+		p.paths[rf] = packet[:colon]
+	}
 	expected, err := remoteactions.BuildRemoteCommandEnvelope(base64.RawURLEncoding.EncodeToString(p.key), p.source, signed, counter, command)
 	if err != nil || expected != envelope {
 		return 0, errors.New("bad APRS signature")
@@ -137,10 +148,13 @@ func (p *preparedPort) Write(b []byte) (int, error) {
 		case strings.HasPrefix(command, "OTA=RELAY,"):
 			p.roleWrites++
 			answer = fmt.Sprintf("OTA ROUTE RELAY %s>%s KEY=1", p.source, p.target)
+			if parts := strings.Split(strings.TrimPrefix(command, "OTA=RELAY,"), ","); len(parts) == 3 {
+				answer = fmt.Sprintf("OTA ROUTE RELAY %s>%s FROM %s TO %s KEY=1", p.source, parts[0], parts[1], parts[2])
+			}
 			p.roles[rf] = answer
 		case strings.HasPrefix(command, "OTA=VIA,"):
 			p.roleWrites++
-			answer = fmt.Sprintf("OTA ROUTE TARGET VIA %s FROM %s KEY=1", p.relay, p.source)
+			answer = fmt.Sprintf("OTA ROUTE TARGET VIA %s FROM %s KEY=1", strings.TrimPrefix(command, "OTA=VIA,"), p.source)
 			p.roles[rf] = answer
 		case command == "OTA=ROUTE,OFF":
 			p.roleWrites++
@@ -257,5 +271,91 @@ func TestPreparationServiceReadySurvivesRestart(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(root, "transfers", j.ID, "target.key")); !os.IsNotExist(err) {
 		t.Fatal("temporary key retained")
+	}
+}
+
+// Two relays: the first is configured towards the second, the second towards
+// the target, each command travels through the relays before it, and the
+// target is told to expect the second relay.
+func TestPreparationThroughRelayChain(t *testing.T) {
+	p := preparedFake(0x54474732, "F4MLV-10")
+	p.chainRF = map[string]string{"RELAYY": "F4MLV-11"}
+	p.paths = map[string]string{}
+	args := append(p.args(t, true), "--chain", "F4MLV-11:RELAYY")
+	var log bytes.Buffer
+	err := runNative(args, &log, func(string) (otaPort, error) { return p, nil }, p.clock, preparationConfig{Signer: p.sign})
+	if err != nil {
+		t.Fatalf("%v\n%s", err, log.String())
+	}
+	want := map[string]string{
+		"RELAYX": fmt.Sprintf("OTA ROUTE RELAY %s>%s FROM %s TO F4MLV-11 KEY=1", p.source, p.target, p.source),
+		"RELAYY": fmt.Sprintf("OTA ROUTE RELAY %s>%s FROM F4MLV-10 TO %s KEY=1", p.source, p.target, p.target),
+		"GENATX": fmt.Sprintf("OTA ROUTE TARGET VIA F4MLV-11 FROM %s KEY=1", p.source),
+	}
+	for rf, role := range want {
+		if p.roles[rf] != role {
+			t.Fatalf("%s role %q, want %q", rf, p.roles[rf], role)
+		}
+	}
+	paths := map[string]string{
+		"RELAYX": p.source + ">APGRWO,RFONLY",
+		"RELAYY": p.source + ">APGRWO,RELAYX,RFONLY",
+		"GENATX": p.source + ">APGRWO,RELAYX,RELAYY,RFONLY",
+	}
+	for rf, path := range paths {
+		if p.paths[rf] != path {
+			t.Fatalf("%s reached by %q, want %q", rf, p.paths[rf], path)
+		}
+	}
+	first := strings.Index(strings.Join(p.commands, " "), "RELAYY:")
+	if first < 0 || strings.Index(strings.Join(p.commands, " "), "RELAYX:OTA=RELAY,") > first {
+		t.Fatalf("second relay checked before the first was configured: %v", p.commands)
+	}
+}
+
+// A complete update through two relays: the controller still talks only to
+// the first relay, so the transfer itself is unchanged apart from its delays.
+func TestUpdateThroughRelayChain(t *testing.T) {
+	p := preparedFake(0x54474732, "F4MLV-10")
+	p.chainRF = map[string]string{"RELAYY": "F4MLV-11"}
+	args := append(p.args(t, false), "--chain", "F4MLV-11:RELAYY")
+	var log bytes.Buffer
+	err := runNative(args, &log, func(string) (otaPort, error) { return p, nil }, p.clock, preparationConfig{Signer: p.sign})
+	if err != nil {
+		t.Fatalf("%v\n%s", err, log.String())
+	}
+	for _, event := range []string{`"relays":["F4MLV-10","F4MLV-11"]`, "post_install_verified", "controller_service_restored"} {
+		if !strings.Contains(log.String(), event) {
+			t.Fatalf("missing %s", event)
+		}
+	}
+}
+
+func TestRelayChainArguments(t *testing.T) {
+	for _, bad := range []string{"F4MLV-10", "F4MLV-11,F4MLV-11", "f4mlv-11", "F4MLV-11:", "A,B,C,D", "F4MLV-2"} {
+		if _, err := parseChain(bad, "F4MLV-2", "F4MLV-15", "F4MLV-10"); err == nil {
+			t.Fatalf("accepted %q", bad)
+		}
+	}
+	chain, err := parseChain("F4MLV-11:RELAYY, F4MLV-12", "F4MLV-2", "F4MLV-15", "F4MLV-10")
+	if err != nil || len(chain) != 2 || chain[0] != (hop{"F4MLV-11", "RELAYY"}) || chain[1] != (hop{"F4MLV-12", "F4MLV-12"}) {
+		t.Fatalf("%v %v", chain, err)
+	}
+	s := settings()
+	s.Via = "F4MLV-10"
+	s.RouteSecret = secret
+	s.Chain = []Hop{{Callsign: "F4MLV-11", Recipient: "RELAYY"}}
+	if err := s.Validate(); err != nil || s.chainArg() != "F4MLV-11:RELAYY" {
+		t.Fatalf("%v %q", err, s.chainArg())
+	}
+	other := s.Normal
+	other.Frequency = 434100000
+	s.TargetNormal = &other
+	if s.Validate() == nil {
+		t.Fatal("chain accepted with a rendezvous")
+	}
+	s.TargetNormal, s.Via = nil, ""
+	if s.Validate() == nil {
+		t.Fatal("chain accepted without a first relay")
 	}
 }

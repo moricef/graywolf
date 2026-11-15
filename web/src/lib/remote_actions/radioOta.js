@@ -72,3 +72,15 @@ export const otaBoard = value => otaBoards.find(board => board.value === value);
 export function otaPreflightPath(base,options){
  return `${base}/preflight?${new URLSearchParams({expected_version:options.expected_version.trim()})}`;
 }
+
+// Further relays after the first one, nearest first: "CALL[:RFNAME], ...".
+// RFNAME is the on-air (tactical) name when it differs from the Callsign-SSID.
+export function formatRelayChain(chain) {
+  return (chain || []).map(h => h.recipient && h.recipient !== h.callsign ? `${h.callsign}:${h.recipient}` : h.callsign).join(', ');
+}
+export function parseRelayChain(text) {
+  return String(text || '').split(',').map(item => item.trim().toUpperCase()).filter(Boolean).map(item => {
+    const [callsign, recipient = ''] = item.split(':').map(part => part.trim());
+    return recipient && recipient !== callsign ? {callsign, recipient} : {callsign};
+  });
+}

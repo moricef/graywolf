@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { otaProgress, otaPhase, otaStartPath, otaImageDetails, generateRouteSecret } from './radioOta.js';
+import { otaProgress, otaPhase, otaStartPath, otaImageDetails, generateRouteSecret, formatRelayChain, parseRelayChain } from './radioOta.js';
 test('full byte count is not boot confirmation', () => {
  assert.equal(otaProgress({state:'running',written:512,total:512}),99);
  assert.equal(otaProgress({state:'succeeded',written:512,total:512}),100);
@@ -53,4 +53,11 @@ test('route checks remain distinct from firmware installation', async () => {
  assert.match(otaPhase({state:'ready'}),/no firmware transferred/);
  assert.match(otaPhase({state:'running',phase:'releasing_session'}),/without discarding/);
  assert.equal(otaPreflightPath('/radio-ota/GENATX',{expected_version:' new ',replace_existing:true}),'/radio-ota/GENATX/preflight?expected_version=new');
+});
+test('relay chain text keeps order and on-air names', () => {
+ assert.deepEqual(parseRelayChain(' f4mlv-11:relayy , F4MLV-12,, '),[{callsign:'F4MLV-11',recipient:'RELAYY'},{callsign:'F4MLV-12'}]);
+ assert.deepEqual(parseRelayChain('F4MLV-11:F4MLV-11'),[{callsign:'F4MLV-11'}]);
+ assert.deepEqual(parseRelayChain(''),[]);
+ assert.equal(formatRelayChain([{callsign:'F4MLV-11',recipient:'RELAYY'},{callsign:'F4MLV-12'}]),'F4MLV-11:RELAYY, F4MLV-12');
+ assert.equal(formatRelayChain(null),'');
 });

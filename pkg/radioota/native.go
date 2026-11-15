@@ -35,6 +35,7 @@ type nativeEngine struct {
 	targetNormal                                  *Profile
 	savedNormal                                   Profile
 	relayKey                                      []byte
+	chain                                         []hop // relays after the first one, towards the target
 	rendezvousRelay                               *nativeEngine
 	lastMaintain                                  time.Time
 	maintainSequence                              uint32
@@ -180,13 +181,16 @@ func (e *nativeEngine) configureProfiles() error {
 		}
 	}
 	e.normalTimeout = max(12*time.Second, 4*e.normal.airtime(255)+5*time.Second)
+	// Every additional relay repeats each request and each answer once more.
+	extra := time.Duration(len(e.chain))
 	if e.relay != "" {
-		e.normalTimeout = max(35*time.Second, e.normalTimeout)
+		e.normalTimeout = max(35*time.Second, e.normalTimeout) + extra*(2*e.normal.airtime(255)+5*time.Second)
 	}
 	burst := 32 * (e.transfer.airtime(208) + 20*time.Millisecond)
 	e.windowTimeout = 20 * time.Second
 	if e.relay != "" {
-		e.windowTimeout = max(e.windowTimeout, 4*burst+4*e.transfer.airtime(255)+5*time.Second)
+		// Each relay forwards the whole page from its cache before querying.
+		e.windowTimeout = max(e.windowTimeout, (4+2*extra)*burst+(4+2*extra)*e.transfer.airtime(255)+5*time.Second)
 	}
 	e.emit("radio_profiles_configured", map[string]any{"normal": e.normal, "transfer": e.transfer})
 	return e.bridgeProfile(false)
@@ -202,7 +206,8 @@ func (e *nativeEngine) bridgeProfile(fast bool) error {
 	e.fast = fast
 	e.responseTimeout = e.normalTimeout
 	if fast {
-		e.responseTimeout = max(2*time.Second, 4*e.transfer.airtime(255)+2*time.Second)
+		e.responseTimeout = max(2*time.Second, 4*e.transfer.airtime(255)+2*time.Second) +
+			time.Duration(len(e.chain))*(2*e.transfer.airtime(255)+time.Second)
 	}
 	return nil
 }
@@ -597,11 +602,9 @@ func (e *nativeEngine) update(image []byte, opts Options) error {
 		return errors.New("candidate boot proof does not match the expected firmware")
 	}
 	e.emit("boot_pending_confirmation", map[string]any{"reply": candidate})
-	if e.rendezvousRelay != nil {
-		if err := e.verifyTargetService(); err != nil {
-			return err
-		}
-	}
+	// The boot proof above already identifies the candidate. Confirm it first:
+	// the target's own 180-second rollback timer is running. The target's
+	// service profile is verified after confirmation, before success.
 	if opts.ExerciseConfirmTimeout {
 		e.emit("confirmation_withheld", nil)
 		if err = e.wait(190 * time.Second); err != nil {
@@ -656,6 +659,11 @@ func (e *nativeEngine) update(image []byte, opts Options) error {
 			e.emit("radio_confirmed", map[string]any{"reply": p})
 		}
 	}
+	if e.rendezvousRelay != nil {
+		if err := e.verifyTargetService(); err != nil {
+			return err
+		}
+	}
 	if opts.RequireOffline {
 		if err = e.offline("offline_after_update"); err != nil {
 			return err
@@ -701,13 +709,14 @@ func runNative(args []string, out io.Writer, open func(string) (otaPort, error),
 		fs.StringVar(dst, name, "", "")
 	}
 	var windowed, negotiate, prepareRouting, preflightOnly bool
-	var recipient, relayRecipient string
+	var recipient, relayRecipient, chainText string
 	var block int
 	var opts Options
 	fs.BoolVar(&prepareRouting, "prepare-route", false, "")
 	fs.BoolVar(&preflightOnly, "preflight-only", false, "")
 	fs.StringVar(&recipient, "recipient", "", "")
 	fs.StringVar(&relayRecipient, "relay-recipient", "", "")
+	fs.StringVar(&chainText, "chain", "", "")
 	fs.BoolVar(&windowed, "windowed", false, "")
 	fs.BoolVar(&negotiate, "negotiate-profile", false, "")
 	fs.IntVar(&block, "block-size", 0, "")
@@ -765,10 +774,20 @@ func runNative(args []string, out io.Writer, open func(string) (otaPort, error),
 	if !profiles.Normal.Valid() || !profiles.Transfer.Valid() {
 		return errors.New("invalid radio profiles")
 	}
+	chain, err := parseChain(chainText, source, target, relay)
+	if err != nil {
+		return err
+	}
+	if len(chain) > 0 && (relay == "" || !prepareRouting) {
+		return errors.New("a relay chain requires a first relay and route preparation")
+	}
 	var relayKey []byte
 	if profiles.TargetNormal != nil && *profiles.TargetNormal != profiles.Normal {
 		if !profiles.TargetNormal.Valid() || relay == "" || !prepareRouting {
 			return errors.New("different target service profile requires relay route preparation")
+		}
+		if len(chain) > 0 {
+			return errors.New("different service profiles are coordinated through a single relay only")
 		}
 		relayKey, err = loadKey(relayKeyFile)
 		if err != nil {
@@ -817,6 +836,7 @@ func runNative(args []string, out io.Writer, open func(string) (otaPort, error),
 	e.savedNormal = profiles.Normal
 	e.targetNormal = profiles.TargetNormal
 	e.relayKey = relayKey
+	e.chain = chain
 	defer func() {
 		closeErr := e.close()
 		retErr = errors.Join(retErr, closeErr)
@@ -825,11 +845,47 @@ func runNative(args []string, out io.Writer, open func(string) (otaPort, error),
 		}
 	}()
 	if relay != "" {
-		e.emit("route_selected", map[string]any{"via": relay, "chunk": 175})
+		route := []string{relay}
+		for _, r := range chain {
+			route = append(route, r.Call)
+		}
+		e.emit("route_selected", map[string]any{"via": relay, "relays": route, "chunk": 175})
 	}
 	err = e.update(image, opts)
 	if errors.Is(err, errOperatorPause) {
 		e.emit("operator_paused", nil)
 	}
 	return err
+}
+
+// MaxChain bounds the relays after the first one. Every relay adds a full
+// repetition of each page and each answer to a transfer limited to two hours.
+const MaxChain = 3
+
+// parseChain reads "CALL[:RFNAME],CALL[:RFNAME]" for the relays after the
+// first one, nearest first. Every station appears once on the route.
+func parseChain(text, source, target, first string) ([]hop, error) {
+	if strings.TrimSpace(text) == "" {
+		return nil, nil
+	}
+	seen := map[string]bool{source: true, target: true, first: true}
+	var chain []hop
+	for _, item := range strings.Split(text, ",") {
+		call, rf, found := strings.Cut(strings.TrimSpace(item), ":")
+		if !found {
+			rf = call
+		}
+		if !address.MatchString(call) || !rfRecipient.MatchString(rf) {
+			return nil, fmt.Errorf("invalid relay %q: use CALL-SSID or CALL-SSID:RFNAME", item)
+		}
+		if seen[call] {
+			return nil, fmt.Errorf("relay %s appears twice on the route", call)
+		}
+		seen[call] = true
+		chain = append(chain, hop{call, rf})
+	}
+	if len(chain) > MaxChain {
+		return nil, fmt.Errorf("at most %d relays after the first one", MaxChain)
+	}
+	return chain, nil
 }

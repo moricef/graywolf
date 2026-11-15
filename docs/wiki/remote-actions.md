@@ -421,3 +421,17 @@ authenticated before success. The UI exposes controller/relay service, optional
 target service and fast transfer separately. Software tests and local builds
 do not validate RF timing. Automatic reconstruction after a lost rendezvous and
 three distinct service profiles are not implemented; see section 10 of the plan.
+
+#### Relay chains
+
+"Further relays towards the target" adds relays after the first one, nearest
+first, as `CALL-SSID` or `CALL-SSID:NAME` when a relay transmits under a
+tactical name (at most three). Route preparation checks and configures each
+relay in turn, reaching it through the relays already configured with an
+explicit APRS path, with `OTA=RELAY,<target>,<previous>,<next>`; the target is
+told to expect the last relay. The transfer itself is unchanged for the
+controller, which only exchanges frames with the first relay; response delays
+grow with each relay. Every relay needs firmware `4.0.2RXT-OTA2.2` or later,
+the shared route key, digipeating enabled and an authenticated-control key in
+Graywolf. A chain uses one common service profile: the rendezvous between
+different service profiles is limited to a single relay.

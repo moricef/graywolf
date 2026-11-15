@@ -39,7 +39,35 @@ func controlReply(raw []byte, peer, controller string) (string, bool) {
 	return strings.TrimSpace(text), true
 }
 
-func (e *nativeEngine) control(recipient, signedTarget, command string, via bool) (string, error) {
+// hop is one relay of a chain: its route identity (Callsign-SSID, the name it
+// signs with and that the route frames carry) and its on-air APRS name, which
+// may be a tactical callsign and is what an explicit APRS path must name.
+type hop struct{ Call, RF string }
+
+// relays lists the route from the controller towards the target: the relay
+// next to the controller first. Empty for a direct target.
+func (e *nativeEngine) relays() []hop {
+	if e.relay == "" {
+		return nil
+	}
+	rf := e.preparation.RelayRecipient
+	if rf == "" {
+		rf = e.relay
+	}
+	return append([]hop{{e.relay, rf}}, e.chain...)
+}
+
+// pathTo returns the on-air names of the relays before the n-th relay; n equal
+// to the number of relays gives the full path to the target.
+func (e *nativeEngine) pathTo(n int) []string {
+	var path []string
+	for _, r := range e.relays()[:n] {
+		path = append(path, r.RF)
+	}
+	return path
+}
+
+func (e *nativeEngine) control(recipient, signedTarget, command string, path []string) (string, error) {
 	if e.preparation.Signer == nil {
 		return "", errors.New("authenticated route preparation is unavailable")
 	}
@@ -60,11 +88,12 @@ func (e *nativeEngine) control(recipient, signedTarget, command string, via bool
 			return "", err
 		}
 		e.bridge.buffer = nil
-		path := ""
-		if via && e.relay != "" {
-			path = "," + e.preparation.RelayRecipient
+		// Each relay of an explicit path repeats the command in turn.
+		digis := ""
+		for _, name := range path {
+			digis += "," + name
 		}
-		packet := fmt.Sprintf("%s>APGRWO%s,RFONLY::%-9s:%s", e.source, path, recipient, envelope)
+		packet := fmt.Sprintf("%s>APGRWO%s,RFONLY::%-9s:%s", e.source, digis, recipient, envelope)
 		wire := append([]byte{0x3c, 0xff, 1}, []byte(packet)...)
 		if len(wire) > 255 {
 			return "", errors.New("signed preparation packet exceeds LoRa frame size")
@@ -130,8 +159,8 @@ func (e *nativeEngine) control(recipient, signedTarget, command string, via bool
 	}
 	return "", fmt.Errorf("%w: no application reply from %s for %s; verify common service profile, RF message route and control credentials", errRadioTimeout, recipient, command)
 }
-func (e *nativeEngine) normalState(recipient, signed string, via bool) error {
-	answer, err := e.control(recipient, signed, "OTA=?", via)
+func (e *nativeEngine) normalState(recipient, signed string, path []string) error {
+	answer, err := e.control(recipient, signed, "OTA=?", path)
 	if err != nil {
 		return err
 	}
@@ -140,18 +169,18 @@ func (e *nativeEngine) normalState(recipient, signed string, via bool) error {
 	}
 	return nil
 }
-func (e *nativeEngine) ensureRole(recipient, signed, command, expected string, via bool) error {
-	actual, err := e.control(recipient, signed, "OTA=ROUTE?", via)
+func (e *nativeEngine) ensureRole(recipient, signed, command, expected string, path []string) error {
+	actual, err := e.control(recipient, signed, "OTA=ROUTE?", path)
 	if err != nil {
 		return err
 	}
 	if actual == expected {
 		return nil
 	}
-	if _, err = e.control(recipient, signed, command, via); err != nil {
+	if _, err = e.control(recipient, signed, command, path); err != nil {
 		return err
 	}
-	actual, err = e.control(recipient, signed, "OTA=ROUTE?", via)
+	actual, err = e.control(recipient, signed, "OTA=ROUTE?", path)
 	if err != nil {
 		return err
 	}
@@ -161,39 +190,63 @@ func (e *nativeEngine) ensureRole(recipient, signed, command, expected string, v
 	e.emit("route_role_configured", map[string]any{"recipient": recipient, "signed_target": signed, "role": expected})
 	return nil
 }
+
+// relayRole is the command that makes the n-th relay forward between its two
+// neighbours, and the route description that relay then reports. A single
+// relay keeps the short form understood by every route firmware.
+func (e *nativeEngine) relayRole(n int) (command, expected string) {
+	chain := e.relays()
+	previous, next := e.source, e.target
+	if n > 0 {
+		previous = chain[n-1].Call
+	}
+	if n < len(chain)-1 {
+		next = chain[n+1].Call
+	}
+	if previous == e.source && next == e.target {
+		return "OTA=RELAY," + e.target, fmt.Sprintf("OTA ROUTE RELAY %s>%s KEY=1", e.source, e.target)
+	}
+	return fmt.Sprintf("OTA=RELAY,%s,%s,%s", e.target, previous, next),
+		fmt.Sprintf("OTA ROUTE RELAY %s>%s FROM %s TO %s KEY=1", e.source, e.target, previous, next)
+}
 func (e *nativeEngine) prepareRoute() error {
 	e.emit("route_preparation_starting", nil)
-	if e.relay != "" {
-		rf := e.preparation.RelayRecipient
-		if err := e.normalState(rf, e.relay, false); err != nil {
+	chain := e.relays()
+	// Nearest relay first: each one is reached through the relays already
+	// checked, and is configured before the next one depends on it.
+	for n, r := range chain {
+		path := e.pathTo(n)
+		if err := e.normalState(r.RF, r.Call, path); err != nil {
 			return err
 		}
-		expected := fmt.Sprintf("OTA ROUTE RELAY %s>%s KEY=1", e.source, e.target)
-		if err := e.ensureRole(rf, e.relay, "OTA=RELAY,"+e.target, expected, false); err != nil {
+		command, expected := e.relayRole(n)
+		if err := e.ensureRole(r.RF, r.Call, command, expected, path); err != nil {
 			return err
 		}
 	}
 	if err := e.startRendezvous(); err != nil {
 		return err
 	}
-	if err := e.normalState(e.preparation.Recipient, e.target, e.relay != ""); err != nil {
+	path := e.pathTo(len(chain))
+	if err := e.normalState(e.preparation.Recipient, e.target, path); err != nil {
 		return err
 	}
-	if e.relay != "" {
-		expected := fmt.Sprintf("OTA ROUTE TARGET VIA %s FROM %s KEY=1", e.relay, e.source)
-		if err := e.ensureRole(e.preparation.Recipient, e.target, "OTA=VIA,"+e.relay, expected, true); err != nil {
+	if len(chain) > 0 {
+		last := chain[len(chain)-1].Call
+		expected := fmt.Sprintf("OTA ROUTE TARGET VIA %s FROM %s KEY=1", last, e.source)
+		if err := e.ensureRole(e.preparation.Recipient, e.target, "OTA=VIA,"+last, expected, path); err != nil {
 			return err
 		}
 	} else {
-		answer, err := e.control(e.preparation.Recipient, e.target, "OTA=ROUTE?", false)
+		answer, err := e.control(e.preparation.Recipient, e.target, "OTA=ROUTE?", nil)
 		if err != nil {
 			return err
 		}
 		if !strings.HasPrefix(answer, "OTA ROUTE OFF KEY=") {
-			if _, err = e.control(e.preparation.Recipient, e.target, "OTA=ROUTE,OFF", false); err != nil {
+			if _, err = e.control(e.preparation.Recipient, e.target, "OTA=ROUTE,OFF", nil); err != nil {
 				return err
 			}
-			answer, err = e.control(e.preparation.Recipient, e.target, "OTA=ROUTE?", false)
+			answer, err = e.control(e.preparation.Recipient, e.target, "OTA=ROUTE?", nil)
 			if err != nil {
 				return err
 			}
@@ -235,12 +288,14 @@ func (e *nativeEngine) releasePreflight() error {
 		}
 		e.clock.Sleep(100 * time.Millisecond)
 	}
-	if e.relay != "" && e.rendezvousRelay == nil {
-		if err := e.normalState(e.preparation.RelayRecipient, e.relay, false); err != nil {
-			return err
+	if e.rendezvousRelay == nil {
+		for n, r := range e.relays() {
+			if err := e.normalState(r.RF, r.Call, e.pathTo(n)); err != nil {
+				return err
+			}
 		}
 	}
-	if err := e.normalState(e.preparation.Recipient, e.target, e.relay != ""); err != nil {
+	if err := e.normalState(e.preparation.Recipient, e.target, e.pathTo(len(e.relays()))); err != nil {
 		return err
 	}
 	e.emit("preflight_session_released", nil)

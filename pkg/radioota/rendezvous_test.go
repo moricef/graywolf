@@ -368,13 +368,21 @@ func TestDifferentServiceCompleteCycle(t *testing.T) {
 			if p.manifestCount != 1 || p.phase != 0 || p.current != p.service || !p.released || p.pending {
 				t.Fatal("cycle or restoration incomplete")
 			}
-			if rollback && (!p.rollback || p.keepCount < 10) {
+			// The 190-second withheld confirmation alone spans seven keepalive intervals.
+			if rollback && (!p.rollback || p.keepCount < int(190*time.Second/keepaliveInterval)) {
 				t.Fatal("relay not maintained during independent target rollback")
 			}
 			for _, event := range []string{"post_install_verified", "relay_service_restored", "controller_service_restored"} {
 				if !strings.Contains(log.String(), event) {
 					t.Fatalf("missing %s", event)
 				}
+			}
+			// Nothing but the boot proof may stand between the candidate's
+			// boot and its confirmation: the target's rollback timer runs.
+			events := eventsOnly(log.String())
+			boot := strings.LastIndex(events, "boot_pending_confirmation")
+			if confirmed := strings.Index(events[boot:], "radio_confirmed"); confirmed < 0 || strings.Contains(events[boot:boot+confirmed], "target_service_verified") {
+				t.Fatalf("confirmation delayed by other checks: %s", events[boot:])
 			}
 		})
 	}

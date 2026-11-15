@@ -57,8 +57,17 @@ func TargetBoard(model string) (Board, error) {
 	}
 }
 
+// Hop is a relay after the first one: its Callsign-SSID (route identity and
+// signed control identity) and, when different, its on-air tactical name.
+type Hop struct {
+	Callsign  string `json:"callsign"`
+	Recipient string `json:"recipient,omitempty"`
+}
+
 type Settings struct {
-	RelayRecipient string   `json:"relay_recipient,omitempty"`
+	RelayRecipient string `json:"relay_recipient,omitempty"`
+	// Chain lists further relays after Via, nearest first, towards the target.
+	Chain          []Hop    `json:"chain,omitempty"`
 	TargetBoard    string   `json:"target_board"`
 	Bridge         string   `json:"bridge"`
 	Via            string   `json:"via"`
@@ -95,12 +104,36 @@ func (s Settings) Validate() error {
 	if s.TargetNormal != nil && *s.TargetNormal != s.Normal && s.Via == "" {
 		return errors.New("different target service profiles currently require a relay")
 	}
+	if len(s.Chain) > 0 {
+		if s.Via == "" {
+			return errors.New("enter the first relay before further relays")
+		}
+		if s.TargetNormal != nil && *s.TargetNormal != s.Normal {
+			return errors.New("different service profiles are coordinated through a single relay only")
+		}
+		if _, err := parseChain(s.chainArg(), "", "", s.Via); err != nil {
+			return err
+		}
+	}
 	if s.Via != "" {
 		if err := validSecret(s.RouteSecret); err != nil {
 			return errors.New("a 43-character route secret is required for relay transfers")
 		}
 	}
 	return nil
+}
+
+// chainArg encodes Chain for the engine as CALL[:RFNAME],...
+func (s Settings) chainArg() string {
+	var items []string
+	for _, h := range s.Chain {
+		item := h.Callsign
+		if h.Recipient != "" && h.Recipient != h.Callsign {
+			item += ":" + h.Recipient
+		}
+		items = append(items, item)
+	}
+	return strings.Join(items, ",")
 }
 func validSecret(s string) error {
 	b, e := base64.RawURLEncoding.DecodeString(s)
@@ -164,6 +197,7 @@ type Job struct {
 	RolesChanged              []string   `json:"roles_changed,omitempty"`
 	Relay                     string     `json:"relay,omitempty"`
 	RelayRecipient            string     `json:"relay_recipient,omitempty"`
+	Chain                     []Hop      `json:"chain,omitempty"`
 	RouteAuthenticated        bool       `json:"route_authenticated"`
 	SessionReleased           bool       `json:"session_released"`
 	PreflightVerified         bool       `json:"preflight_verified"`
@@ -281,8 +315,21 @@ func (s *Service) Settings(target string) (Settings, error) {
 func (s *Service) Save(target string, cfg Settings) error {
 	cfg.Via = strings.ToUpper(strings.TrimSpace(cfg.Via))
 	cfg.RelayRecipient = strings.ToUpper(strings.TrimSpace(cfg.RelayRecipient))
+	chain := cfg.Chain[:0:0]
+	for _, h := range cfg.Chain {
+		h.Callsign = strings.ToUpper(strings.TrimSpace(h.Callsign))
+		h.Recipient = strings.ToUpper(strings.TrimSpace(h.Recipient))
+		if h.Recipient == h.Callsign {
+			h.Recipient = ""
+		}
+		if h.Callsign != "" || h.Recipient != "" {
+			chain = append(chain, h)
+		}
+	}
+	cfg.Chain = chain
 	if cfg.Via == "" {
 		cfg.RelayRecipient = ""
+		cfg.Chain = nil
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -447,12 +494,15 @@ func (s *Service) Start(target, source, signedTarget, secret string, image []byt
 	}
 	if cfg.Via != "" {
 		args = append(args, "--via", cfg.Via, "--route-key-file", filepath.Join(dir, "route.key"))
+		if len(cfg.Chain) > 0 {
+			args = append(args, "--chain", cfg.chainArg())
+		}
 		if cfg.TargetNormal != nil && *cfg.TargetNormal != cfg.Normal {
 			args = append(args, "--relay-key-file", filepath.Join(dir, "relay.key"))
 		}
 	}
 	sum := sha256.Sum256(image)
-	j := &Job{Relay: cfg.Via, RelayRecipient: cfg.RelayRecipient, Engine: "native-go", BoardID: board.ID, TargetBoard: cfg.TargetBoard, Source: source, SignedTarget: signedTarget, ExpectedVersion: opts.ExpectedVersion, BlockSize: 128, Options: opts, ID: id, Target: target, State: "running", Phase: "connecting", Total: len(image), SHA256: hex.EncodeToString(sum[:]), CanPause: true, Started: time.Now().UTC(), dir: dir}
+	j := &Job{Relay: cfg.Via, RelayRecipient: cfg.RelayRecipient, Chain: cfg.Chain, Engine: "native-go", BoardID: board.ID, TargetBoard: cfg.TargetBoard, Source: source, SignedTarget: signedTarget, ExpectedVersion: opts.ExpectedVersion, BlockSize: 128, Options: opts, ID: id, Target: target, State: "running", Phase: "connecting", Total: len(image), SHA256: hex.EncodeToString(sum[:]), CanPause: true, Started: time.Now().UTC(), dir: dir}
 	s.jobs[target] = j
 	s.active = id
 	if e = s.persist(j); e != nil {
@@ -636,7 +686,11 @@ func (s *Service) OwnsTarget(target string) bool {
 	defer s.mu.Unlock()
 	for _, j := range s.jobs {
 		if j.ID == s.active {
-			for _, name := range []string{j.Source, j.Target, j.SignedTarget, j.Relay, j.RelayRecipient} {
+			names := []string{j.Source, j.Target, j.SignedTarget, j.Relay, j.RelayRecipient}
+			for _, h := range j.Chain {
+				names = append(names, h.Callsign, h.Recipient)
+			}
+			for _, name := range names {
 				if name != "" && strings.EqualFold(name, target) {
 					return true
 				}

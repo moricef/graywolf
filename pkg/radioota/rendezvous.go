@@ -43,22 +43,38 @@ func (e *nativeEngine) radioState() (*radioState, error) {
 	}
 	return r.Radio, nil
 }
+
+// keepaliveInterval leaves a 60-second relay lease room for three lost
+// keepalive answers. Each keepalive costs a full SF12 round trip on the
+// service profile, time taken from the target's own confirmation window.
+const keepaliveInterval = 25 * time.Second
+
+// keepaliveTimeout waits for one direct relay answer on the current profile:
+// a 51-byte request and an 88-byte proof, plus processing.
+func (e *nativeEngine) keepaliveTimeout() time.Duration {
+	p := e.normal
+	if e.fast {
+		p = e.transfer
+	}
+	return 2*p.airtime(100) + 3*time.Second
+}
 func (e *nativeEngine) maintainRendezvous() error {
 	relay := e.rendezvousRelay
-	if relay == nil || e.rendezvousSuspended || e.clock.Now().Sub(e.lastMaintain) < 10*time.Second {
+	if relay == nil || e.rendezvousSuspended || e.clock.Now().Sub(e.lastMaintain) < keepaliveInterval {
 		return nil
 	}
 	var r radioReply
 	var err error
+	timeout := e.keepaliveTimeout()
 	for attempt := 1; ; attempt++ {
 		e.maintainSequence++
-		if r, err = relay.request(opMaintain, e.maintainSequence, nil, e.responseTimeout, 1); err == nil {
+		if r, err = relay.request(opMaintain, e.maintainSequence, nil, timeout, 1); err == nil {
 			break
 		}
 		// One lost answer is not a lost lease: the relay keeps its profile for
 		// 60 s after the last keepalive it accepted. Ask again, with a new
 		// sequence, while that margin lasts.
-		if !errors.Is(err, errRadioTimeout) || attempt >= 3 || e.clock.Now().Sub(e.lastMaintain)+e.responseTimeout >= 50*time.Second {
+		if !errors.Is(err, errRadioTimeout) || attempt >= 3 || e.clock.Now().Sub(e.lastMaintain)+timeout >= 55*time.Second {
 			return fmt.Errorf("relay rendezvous lease not maintained: %w", err)
 		}
 		e.emit("rendezvous_keepalive_retry", map[string]any{"sequence": e.maintainSequence, "attempt": attempt})

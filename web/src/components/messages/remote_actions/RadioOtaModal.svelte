@@ -2,7 +2,7 @@
   import { untrack, tick } from 'svelte';
   import { rememberOtaDraft, otaDraft, discardOtaDraft, frequencyHz } from '../../../lib/remote_actions/radioOtaDrafts.js';
   import { Button, Input, Modal, Icon } from '@chrissnell/chonky-ui';
-  import { otaRequest, otaProgress, otaPhase, otaStartPath, otaPreflightPath, otaImageDetails, generateRouteSecret, otaBoards, otaBoard } from '../../../lib/remote_actions/radioOta.js';
+  import { otaRequest, otaProgress, otaPhase, otaStartPath, otaPreflightPath, otaImageDetails, generateRouteSecret, otaBoards, otaBoard, formatRelayChain, parseRelayChain } from '../../../lib/remote_actions/radioOta.js';
   let { open = $bindable(false), target, credential } = $props();
   // A prop getter can depend on the whole parent conversation object. Buffer
   // primitive identity/open values so replacing that object for an incoming
@@ -35,7 +35,7 @@
       job = data.job; ready = data.engine_ready; engineError = data.engine_error;
       if (first) {
         showRouteKey = false; routeKeyNotice = '';
-        cfg = { ...data.settings, target_board: data.settings.target_board || '', relay_recipient:data.settings.relay_recipient || '', route_secret: '', normal: data.settings.normal.frequency_hz ? data.settings.normal : emptyProfile(),
+        cfg = { ...data.settings, target_board: data.settings.target_board || '', relay_recipient:data.settings.relay_recipient || '', chain_text: formatRelayChain(data.settings.chain), route_secret: '', normal: data.settings.normal.frequency_hz ? data.settings.normal : emptyProfile(),
           transfer: data.settings.transfer.frequency_hz ? data.settings.transfer : emptyProfile() };
         frequencies = {normal: cfg.normal.frequency_hz ? String(cfg.normal.frequency_hz / 1000000) : '', transfer: cfg.transfer.frequency_hz ? String(cfg.transfer.frequency_hz / 1000000) : '',target_normal:cfg.target_normal?.frequency_hz ? String(cfg.target_normal.frequency_hz / 1000000):''};
         editing = !cfg.bridge; loaded = true;
@@ -100,7 +100,9 @@
       const body = { ...cfg, normal: {...cfg.normal, frequency_hz: frequencyHz(frequencies.normal)},
         transfer: {...cfg.transfer, frequency_hz: frequencyHz(frequencies.transfer)} };
       body.target_normal=cfg.target_normal?{...cfg.target_normal,frequency_hz:frequencyHz(frequencies.target_normal)}:null;
-      cfg = { ...await otaRequest(`${base}/settings`, {method: 'PUT', body}), route_secret: '' };
+      body.chain = cfg.via ? parseRelayChain(cfg.chain_text) : []; delete body.chain_text;
+      const saved = await otaRequest(`${base}/settings`, {method: 'PUT', body});
+      cfg = { ...saved, chain_text: formatRelayChain(saved.chain), route_secret: '' };
       discardOtaDraft(target); editing = false; showRouteKey = false; routeKeyNotice = '';
     }
     catch (e) { err = e.message; } finally { busy = false; }
@@ -159,7 +161,7 @@
       {#if loaded && !ready}<p role="alert" class="error">{engineError}</p>{/if}
       {#if cfg}
         <div class="settings-heading">
-          <span>Radio bridge: {cfg.bridge || 'not configured'} · {cfg.via ? `via ${cfg.via}` : 'direct'}</span>
+          <span>Radio bridge: {cfg.bridge || 'not configured'} · {cfg.via ? `via ${[cfg.via, ...parseRelayChain(cfg.chain_text).map(h => h.callsign)].join(' → ')}` : 'direct'}</span>
 
         </div>
         {#if editing}
@@ -181,6 +183,9 @@
             {#if cfg.via}
               <label for="ota-relay-recipient">Relay RF recipient (blank = relay Callsign-SSID)</label>
               <Input id="ota-relay-recipient" bind:value={cfg.relay_recipient} maxlength={9} />
+              <label for="ota-relay-chain">Further relays towards the target (optional)</label>
+              <Input id="ota-relay-chain" bind:value={cfg.chain_text} placeholder="F4MLV-11, F4MLV-12:TACTIC" />
+              <p>Nearest first, after the relay above. Write CALL-SSID, or CALL-SSID:NAME when the relay transmits under a tactical name. Each relay needs firmware 4.0.2RXT-OTA2.2 or later, the shared route key, digipeating enabled and an authenticated-control key in Graywolf. A relay chain uses one common service profile.</p>
               <p>Use the relay’s on-air tactical name here if it differs. Its authenticated-control key must already exist in Graywolf with the relay Callsign-SSID as signed identity.</p>
               <label for="ota-route-key">Shared route key {cfg.has_route_secret ? '(saved; leave blank to keep)' : ''}</label>
               <input id="ota-route-key" type={showRouteKey ? 'text' : 'password'} bind:value={cfg.route_secret} autocomplete="new-password" spellcheck="false" />
