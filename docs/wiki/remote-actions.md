@@ -397,30 +397,29 @@ for configuring its route role. These instructions describe required settings,
 not a live readout or proof of the bench cards' current state.
 
 
-### Different service profiles: proposed contract, not installed support
+### Different service profiles (rendezvous)
 
-The current contract in `../FUOTA_ORCHESTRATION_PLAN_FR.md` supersedes earlier
-instructions to align permanent service profiles. F4MLV-2/F4MLV-10 remain at
-433.775 MHz; GENATX has a different profile (434.100 MHz is the latest verified state in
-the local 14 November deployment inventory, not a fresh live read). The proposed unified-firmware coordinator
-must distinguish service, rendezvous and transfer, keep the relay on the target
-profile through activation/readback, then verify each node on its own service.
-Timings and new authenticated state/close operations remain to validate/specify;
-no implementation or hardware operation follows merely from this contract.
-The original installed common-profile prototype did not meet it. Local code now
-adds the first two-service-profile rendezvous implementation in
-`pkg/radioota/rendezvous.go`, with explicit optional `Settings.TargetNormal`
-and relay-key resolution through the existing credential store. It requires
-coordination v1 in the unified firmware: OTA2 operations 32 state/challenge,
-33 rendezvous, 34 monotonic keepalive, 35 non-destructive release. The common
-service path remains unchanged when TargetNormal is absent. USB RADIOSERVICE
-and RADIOPROFILE distinguish configured service and successfully applied profile.
-The target and candidate must retain coordination support. The relay remains
-on target service through activation/rollback/confirmation, then its service is
-authenticated before success. The UI exposes controller/relay service, optional
-target service and fast transfer separately. Software tests and local builds
-do not validate RF timing. Automatic reconstruction after a lost rendezvous and
-three distinct service profiles are not implemented; see section 10 of the plan.
+When the target's service profile differs from the controller and relay
+profile (`Settings.TargetNormal`), `pkg/radioota/rendezvous.go` moves the relay
+to the target's profile for the operation, then returns it to its own service
+and verifies it. It needs coordination v1 in the unified firmware
+(`4.0.2RXT-OTA2` and later): operations 32 state/challenge, 33 rendezvous,
+34 monotonic keepalive, 35 non-destructive release. The relay key is resolved
+through the existing credential store. USB `RADIOSERVICE` and `RADIOPROFILE`
+distinguish the controller's configured service from its applied profile.
+
+The relay holds the target's profile under a 60-second lease renewed every
+25 s (each keepalive may be asked three times), and returns to its own service
+by itself when the lease lapses. The candidate is confirmed right after its
+boot proof; the target's service profile is verified afterwards. After a lost
+link the rendezvous is established again from the service profiles before the
+transfer resumes. A rendezvous uses a single relay; the common-profile path is
+unchanged when `TargetNormal` is absent.
+
+Validated on the bench on 14-15 November 2026 (three TTGO LoRa32 V2.1,
+433.775 / 434.100 MHz): full image transferred in two sessions with resume,
+five link losses recovered, confirmed and read back, relay and controller read
+back on their own service. No field validation yet.
 
 #### Relay chains
 
