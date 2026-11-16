@@ -451,7 +451,8 @@ func (e *nativeEngine) close() error {
 	// Restore its console explicitly so a subsequent non-resetting open works,
 	// including when the profile proof above failed.
 	if offErr == nil {
-		offErr = e.bridge.command("OTABRIDGE 115200", "OTABRIDGE OK", 2*time.Second, 500*time.Millisecond)
+		// Same reason as RADIOPROFILE above: the controller may be transmitting.
+		offErr = e.bridge.command("OTABRIDGE 115200", "OTABRIDGE OK", 20*time.Second, time.Second)
 		if offErr == nil {
 			offErr = e.bridge.port.SetMode(&serial.Mode{BaudRate: 115200, DataBits: 8, Parity: serial.NoParity, StopBits: serial.OneStopBit})
 		}
