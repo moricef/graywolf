@@ -67,15 +67,17 @@ type Hop struct {
 type Settings struct {
 	RelayRecipient string `json:"relay_recipient,omitempty"`
 	// Chain lists further relays after Via, nearest first, towards the target.
-	Chain          []Hop    `json:"chain,omitempty"`
-	TargetBoard    string   `json:"target_board"`
-	Bridge         string   `json:"bridge"`
-	Via            string   `json:"via"`
-	RouteSecret    string   `json:"route_secret,omitempty"`
-	HasRouteSecret bool     `json:"has_route_secret"`
-	Normal         Profile  `json:"normal"`
-	TargetNormal   *Profile `json:"target_normal,omitempty"`
-	Transfer       Profile  `json:"transfer"`
+	Chain          []Hop  `json:"chain,omitempty"`
+	TargetBoard    string `json:"target_board"`
+	Bridge         string `json:"bridge"`
+	Via            string `json:"via"`
+	RouteSecret    string `json:"route_secret,omitempty"`
+	HasRouteSecret bool   `json:"has_route_secret"`
+	// RouteKeyFingerprint matches the fingerprint the iGate WebUI shows for its route key.
+	RouteKeyFingerprint string   `json:"route_key_fingerprint,omitempty"`
+	Normal              Profile  `json:"normal"`
+	TargetNormal        *Profile `json:"target_normal,omitempty"`
+	Transfer            Profile  `json:"transfer"`
 }
 
 func (s Settings) Validate() error {
@@ -309,6 +311,7 @@ func (s *Service) Settings(target string) (Settings, error) {
 	defer s.mu.Unlock()
 	cfg, e := s.load(target)
 	cfg.HasRouteSecret = cfg.RouteSecret != ""
+	cfg.RouteKeyFingerprint = keyFingerprint(cfg.RouteSecret)
 	cfg.RouteSecret = ""
 	return cfg, e
 }
@@ -347,6 +350,7 @@ func (s *Service) Save(target string, cfg Settings) error {
 		cfg.RouteSecret = ""
 	}
 	cfg.HasRouteSecret = false
+	cfg.RouteKeyFingerprint = ""
 	if e = cfg.Validate(); e != nil {
 		return e
 	}
@@ -698,4 +702,15 @@ func (s *Service) OwnsTarget(target string) bool {
 		}
 	}
 	return false
+}
+
+// keyFingerprint is remoteactions.KeyFingerprint for the route key: first
+// 3 bytes of SHA-256 over the 32 decoded bytes, 6 hex digits, "" if invalid.
+func keyFingerprint(key string) string {
+	decoded, err := base64.RawURLEncoding.DecodeString(strings.TrimSpace(key))
+	if err != nil || len(decoded) != 32 {
+		return ""
+	}
+	sum := sha256.Sum256(decoded)
+	return hex.EncodeToString(sum[:3])
 }

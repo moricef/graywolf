@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"math"
@@ -44,6 +45,19 @@ type RemoteCommandCredential struct {
 }
 
 func (*RemoteCommandCredential) TableName() string { return "remote_command_credentials" }
+
+// KeyFingerprint identifies a 43-character key without revealing it: the
+// first 3 bytes of SHA-256 over the 32 decoded key bytes, as 6 lowercase hex
+// digits. The LoRa iGate WebUI shows the same value for its installed key, so
+// the two sides can be compared. It returns "" for an invalid key.
+func KeyFingerprint(secretBase64URL string) string {
+	decoded, err := base64.RawURLEncoding.DecodeString(strings.TrimSpace(secretBase64URL))
+	if err != nil || len(decoded) != remoteCommandSecretLen {
+		return ""
+	}
+	sum := sha256.Sum256(decoded)
+	return hex.EncodeToString(sum[:3])
+}
 
 func NormalizeRemoteCommandSecret(value string) (string, error) {
 	clean := strings.TrimSpace(value)

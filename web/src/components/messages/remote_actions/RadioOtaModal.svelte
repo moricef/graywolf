@@ -1,4 +1,5 @@
 <script>
+  import { keyLengthText, keyLengthWrong, fingerprintText } from '../../../lib/remote_actions/keyText.js';
   import { untrack, tick } from 'svelte';
   import { rememberOtaDraft, otaDraft, discardOtaDraft, frequencyHz } from '../../../lib/remote_actions/radioOtaDrafts.js';
   import { Button, Input, Modal, Icon } from '@chrissnell/chonky-ui';
@@ -189,6 +190,8 @@
               <p>Use the relay’s on-air tactical name here if it differs. Its authenticated-control key must already exist in Graywolf with the relay Callsign-SSID as signed identity.</p>
               <label for="ota-route-key">Shared route key {cfg.has_route_secret ? '(saved; leave blank to keep)' : ''}</label>
               <input id="ota-route-key" type={showRouteKey ? 'text' : 'password'} bind:value={cfg.route_secret} autocomplete="new-password" spellcheck="false" />
+              {#if keyLengthText(cfg.route_secret)}<p class:bad-key={keyLengthWrong(cfg.route_secret)}>{keyLengthText(cfg.route_secret)}</p>{/if}
+              {#if cfg.route_key_fingerprint && !cfg.route_secret}<p>{fingerprintText(cfg.route_key_fingerprint)}</p>{/if}
               <div class="buttons">
                 <Button variant="secondary" size="sm" disabled={running || busy} onclick={generateRouteKey}>Generate route key (initial setup)</Button>
                 <Button variant="secondary" size="sm" disabled={running || busy || !cfg.route_secret} onclick={() => showRouteKey = !showRouteKey}>{showRouteKey ? 'Hide route key' : 'Show route key'}</Button>
@@ -286,6 +289,7 @@
 </Modal>
 
 <style>
+  .bad-key { color: var(--color-danger, #d9534f); }
  :global(.radio-ota-modal) {width:min(760px,96vw);max-height:calc(100dvh - 24px)}
  :global(.radio-ota-modal > .modal-header) {gap:12px;padding:12px 16px}
  :global(.radio-ota-modal > .modal-header h3) {margin:0;font-size:14px}

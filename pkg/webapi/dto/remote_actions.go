@@ -86,15 +86,17 @@ type RemoteOTPCode struct {
 // credential. The HMAC secret is deliberately absent and can never be read
 // back through the API.
 type RemoteCommandCredential struct {
-	ID           uint    `json:"id"`
-	Name         string  `json:"name"`
-	TargetCall   string  `json:"target_call"`
-	SignedTarget string  `json:"signed_target"`
-	KeyID        string  `json:"key_id"`
-	LastCounter  string  `json:"last_counter"`
-	CreatedAt    string  `json:"created_at"`
-	UpdatedAt    string  `json:"updated_at"`
-	LastUsedAt   *string `json:"last_used_at,omitempty"`
+	ID           uint   `json:"id"`
+	Name         string `json:"name"`
+	TargetCall   string `json:"target_call"`
+	SignedTarget string `json:"signed_target"`
+	KeyID        string `json:"key_id"`
+	// KeyFingerprint matches the fingerprint the iGate WebUI shows for its key.
+	KeyFingerprint string  `json:"key_fingerprint,omitempty"`
+	LastCounter    string  `json:"last_counter"`
+	CreatedAt      string  `json:"created_at"`
+	UpdatedAt      string  `json:"updated_at"`
+	LastUsedAt     *string `json:"last_used_at,omitempty"`
 }
 
 // RemoteCommandCredentialRequest creates or updates a target credential. An

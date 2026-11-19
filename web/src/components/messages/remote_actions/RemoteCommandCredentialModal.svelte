@@ -1,4 +1,5 @@
 <script>
+  import { keyLengthText, keyLengthWrong, fingerprintText } from '../../../lib/remote_actions/keyText.js';
   import { Button, Icon, Input, Modal, toast } from '@chrissnell/chonky-ui';
   import { push } from 'svelte-spa-router';
   import { remoteCommandCredsApi } from '../../../lib/remote_actions/api.js';
@@ -108,6 +109,8 @@
           autocomplete="new-password"
           placeholder={isEdit ? '(leave blank to keep current key)' : 'paste the key installed on the iGate'}
         ></textarea>
+        {#if keyLengthText(secret)}<p class="help" class:bad={keyLengthWrong(secret)}>{keyLengthText(secret)}</p>{/if}
+        {#if isEdit && credential?.key_fingerprint && !secret.trim()}<p class="help">{fingerprintText(credential.key_fingerprint)}</p>{/if}
         {#if isEdit && secret.trim()}
           <p class="warning">Replacing the key resets Graywolf's sender counter. Install the same new key on the iGate.</p>
         {/if}
@@ -129,6 +132,7 @@
   .field { display: flex; flex-direction: column; gap: 4px; }
   .field label { font-size: 11px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--color-text-dim); }
   .secret { font-family: var(--font-mono); font-size: 13px; padding: 6px 8px; border: 1px solid var(--color-border); border-radius: var(--radius); background: var(--color-surface); color: var(--color-text); resize: vertical; }
+  .bad { color: var(--color-danger, #d9534f); }
   .warning { margin: 0; color: var(--color-warning, #d89b2b); font-size: 12px; }
   .help { margin: 0; color: var(--color-text-muted); font-size: 12px; }
   .err { margin: 0; color: var(--color-danger); font-size: 0.875rem; }
