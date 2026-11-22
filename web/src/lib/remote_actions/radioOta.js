@@ -69,6 +69,11 @@ export const otaBoards = [
 ];
 export const otaBoard = value => otaBoards.find(board => board.value === value);
 
+export function otaSpreadingFactors(board,profile,separateTarget=false) {
+  const ttgoTarget=board==='ttgo-lora32-v21' && (profile!=='normal' || !separateTarget);
+  return ttgoTarget ? [7,8,9,10,11,12] : [5,6,7,8,9,10,11,12];
+}
+
 export function otaPreflightPath(base,options){
  return `${base}/preflight?${new URLSearchParams({expected_version:options.expected_version.trim()})}`;
 }

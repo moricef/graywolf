@@ -35,7 +35,14 @@ type Profile struct {
 }
 
 func (p Profile) Valid() bool {
-	return p.Frequency >= 420000000 && p.Frequency <= 450000000 && (p.Bandwidth == 7800 || p.Bandwidth == 10400 || p.Bandwidth == 15600 || p.Bandwidth == 20800 || p.Bandwidth == 31250 || p.Bandwidth == 41700 || p.Bandwidth == 62500 || p.Bandwidth == 125000 || p.Bandwidth == 250000 || p.Bandwidth == 500000) && p.SF >= 7 && p.SF <= 12 && p.CR >= 5 && p.CR <= 8 && p.Power >= 2 && p.Power <= 20
+	return p.Frequency >= 420000000 && p.Frequency <= 450000000 && (p.Bandwidth == 7800 || p.Bandwidth == 10400 || p.Bandwidth == 15600 || p.Bandwidth == 20800 || p.Bandwidth == 31250 || p.Bandwidth == 41700 || p.Bandwidth == 62500 || p.Bandwidth == 125000 || p.Bandwidth == 250000 || p.Bandwidth == 500000) && p.SF >= 5 && p.SF <= 12 && p.CR >= 5 && p.CR <= 8 && p.Power >= 2 && p.Power <= 20
+}
+
+func validateTargetProfiles(board uint32, service, transfer Profile) error {
+	if board == 0x54474732 && (service.SF < 7 || transfer.SF < 7) {
+		return errors.New("TTGO LoRa32 V2.1 / SX1278 requires SF7-SF12 for OTA; SF5/SF6 require SX126x radios on the entire route")
+	}
+	return nil
 }
 
 // Board identifies the target firmware variant, independently of the USB controller.
@@ -81,7 +88,8 @@ type Settings struct {
 }
 
 func (s Settings) Validate() error {
-	if _, err := TargetBoard(s.TargetBoard); err != nil {
+	board, err := TargetBoard(s.TargetBoard)
+	if err != nil {
 		return err
 	}
 	if strings.HasPrefix(s.Bridge, "/dev/ttyACM") || strings.HasPrefix(s.Bridge, "/dev/ttyUSB") {
@@ -98,10 +106,17 @@ func (s Settings) Validate() error {
 		return errors.New("relay identity must contain 1–8 uppercase letters, digits or hyphens")
 	}
 	if !s.Normal.Valid() || !s.Transfer.Valid() {
-		return errors.New("invalid 70 cm SX1278 radio profile")
+		return errors.New("invalid 70 cm LoRa radio profile (SF5-SF12)")
 	}
 	if s.TargetNormal != nil && !s.TargetNormal.Valid() {
 		return errors.New("invalid target service radio profile")
+	}
+	service := s.Normal
+	if s.TargetNormal != nil {
+		service = *s.TargetNormal
+	}
+	if err := validateTargetProfiles(board.ID, service, s.Transfer); err != nil {
+		return err
 	}
 	if s.TargetNormal != nil && *s.TargetNormal != s.Normal && s.Via == "" {
 		return errors.New("different target service profiles currently require a relay")

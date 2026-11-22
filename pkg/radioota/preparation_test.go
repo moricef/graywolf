@@ -19,16 +19,17 @@ import (
 
 type preparedPort struct {
 	*fakeOTA
-	roles             map[string]string
-	rfTarget, rfRelay string
-	counters          map[string]uint64
-	commands          []string
-	fault             string
-	roleWrites        int
-	armed             bool
-	chainRF           map[string]string // further relays: RF name -> signed identity
-	paths             map[string]string // RF recipient -> APRS path of its last command
-	lastActivity      time.Time
+	roles                map[string]string
+	rfTarget, rfRelay    string
+	counters             map[string]uint64
+	commands             []string
+	fault                string
+	unsupportedProfileRF string
+	roleWrites           int
+	armed                bool
+	chainRF              map[string]string // further relays: RF name -> signed identity
+	paths                map[string]string // RF recipient -> APRS path of its last command
+	lastActivity         time.Time
 }
 
 func preparedFake(board uint32, relay string) *preparedPort {
@@ -134,6 +135,11 @@ func (p *preparedPort) Write(b []byte) (int, error) {
 		answer = "AUTH FAILED"
 	} else {
 		switch {
+		case strings.HasPrefix(command, "OTA=PROFILE,"):
+			answer = "OTA PROFILE READY (RAM)"
+			if p.fault == "unsupported-profile" || p.unsupportedProfileRF == rf {
+				answer = "OTA UNSUPPORTED PROFILE"
+			}
 		case command == "OTA=?":
 			armed := 0
 			if p.armed && rf == p.rfTarget {

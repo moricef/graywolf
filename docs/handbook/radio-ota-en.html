@@ -27,7 +27,7 @@
 <tr><td>Shared route key</td><td>The key already installed on the relays and the target. Once saved, leave the field empty to keep it.</td></tr>
 <tr><td>Controller / relay service profile</td><td>The boards' usual profile: exact frequency, bandwidth, SF, CR and power.</td></tr>
 <tr><td>Target uses a different service profile</td><td>Check only if the target works on another profile than the controller and relay (see section 5). A single relay in that case.</td></tr>
-<tr><td>Temporary transfer profile</td><td>The fast transfer profile, for example 434.500 MHz, BW500, SF7, CR4/5. It must stay within the band allowed by your licence.</td></tr>
+<tr><td>Temporary transfer profile</td><td>The fast transfer profile. With SX126x radios throughout the route, select BW500, SF5, CR4/5 if appropriate for your link. QRP Labs and Heltec V3 targets offer SF5-SF12; TTGO targets require SF7-SF12. The USB controller, every relay and the target must support the selected profile. Keep the service profile unchanged. The transfer frequency must stay within your licensed band.</td></tr>
 </table>
 <figure><img src="assets/radio-ota/03-settings-profiles.png" alt="Controller and relay service profile, temporary transfer profile, then Save OTA settings."><figcaption>Controller and relay service profile, temporary transfer profile, then Save OTA settings.</figcaption></figure>
 <p>Save with <b>Save OTA settings</b>. A relay does not need its own update to be configured: Graywolf gives it its role by signed command when the target is updated.</p>

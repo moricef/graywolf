@@ -1,6 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { otaProgress, otaPhase, otaStartPath, otaImageDetails, generateRouteSecret, formatRelayChain, parseRelayChain } from './radioOta.js';
+import { otaProgress, otaPhase, otaStartPath, otaImageDetails, generateRouteSecret, formatRelayChain, parseRelayChain, otaSpreadingFactors } from './radioOta.js';
+
+test('SF5/SF6 are selectable for SX126x targets, never for TTGO target profiles',()=>{
+ for(const board of ['heltec-v3','qrp-labs-lightgateway-plus']) {
+  for(const profile of ['normal','target_normal','transfer']) assert.deepEqual(otaSpreadingFactors(board,profile),[5,6,7,8,9,10,11,12]);
+ }
+ for(const profile of ['normal','target_normal','transfer']) assert.deepEqual(otaSpreadingFactors('ttgo-lora32-v21',profile),[7,8,9,10,11,12]);
+ assert.deepEqual(otaSpreadingFactors('ttgo-lora32-v21','normal',true),[5,6,7,8,9,10,11,12]);
+ assert.deepEqual(otaSpreadingFactors('ttgo-lora32-v21','transfer',true),[7,8,9,10,11,12]);
+});
 test('full byte count is not boot confirmation', () => {
  assert.equal(otaProgress({state:'running',written:512,total:512}),99);
  assert.equal(otaProgress({state:'succeeded',written:512,total:512}),100);

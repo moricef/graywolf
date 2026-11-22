@@ -177,6 +177,9 @@ func (e *nativeEngine) configureProfiles() error {
 	for i, p := range []Profile{e.normal, e.transfer} {
 		command := fmt.Sprintf("PROFILEDEF %d %d %d %d %d %d", i, p.Frequency, p.Bandwidth, p.SF, p.CR, p.Power)
 		if err := e.bridge.command(command, fmt.Sprintf("PROFILEDEF %d OK", i), 4*time.Second, time.Second); err != nil {
+			if p.SF < 7 {
+				return fmt.Errorf("controller could not configure SF%d; SF5/SF6 require an SX126x USB radio: %w", p.SF, err)
+			}
 			return err
 		}
 	}
@@ -487,6 +490,7 @@ func (e *nativeEngine) offline(event string) error {
 }
 func (e *nativeEngine) update(image []byte, opts Options) error {
 	if err := e.configureProfiles(); err != nil {
+		e.emit("route_preparation_failed", map[string]any{"message": "Controller radio profile could not be configured. No firmware blocks were sent. " + err.Error()})
 		return err
 	}
 	if e.prepareRouting {
@@ -494,6 +498,9 @@ func (e *nativeEngine) update(image []byte, opts Options) error {
 			message := "Could not prepare the selected radio route. No firmware blocks were sent. Check the saved radio profiles, RF recipients and control credentials; command details are retained on the Graywolf host."
 			if e.targetNormal != nil && *e.targetNormal != e.savedNormal {
 				message = "Could not establish the temporary radio rendezvous. No firmware blocks were sent. Different service profiles require coordination firmware v1 on all three devices. Check the profiles and retained command details on the Graywolf host."
+			}
+			if e.transfer.SF < 7 {
+				message = fmt.Sprintf("Could not prepare the SF%d transfer route. No firmware blocks were sent. %v", e.transfer.SF, err)
 			}
 			e.emit("route_preparation_failed", map[string]any{"message": message})
 			return err
@@ -774,6 +781,16 @@ func runNative(args []string, out io.Writer, open func(string) (otaPort, error),
 	}
 	if !profiles.Normal.Valid() || !profiles.Transfer.Valid() {
 		return errors.New("invalid radio profiles")
+	}
+	targetService := profiles.Normal
+	if profiles.TargetNormal != nil {
+		if !profiles.TargetNormal.Valid() {
+			return errors.New("invalid target service radio profile")
+		}
+		targetService = *profiles.TargetNormal
+	}
+	if err := validateTargetProfiles(uint32(board), targetService, profiles.Transfer); err != nil {
+		return err
 	}
 	chain, err := parseChain(chainText, source, target, relay)
 	if err != nil {

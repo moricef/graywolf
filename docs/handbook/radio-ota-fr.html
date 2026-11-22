@@ -27,7 +27,7 @@
 <tr><td>Shared route key</td><td>La clé déjà installée dans les relais et la cible. Une fois enregistrée, laisser le champ vide pour la conserver.</td></tr>
 <tr><td>Controller / relay service profile</td><td>Le profil habituel des cartes : fréquence, largeur de bande, SF, CR et puissance exacts.</td></tr>
 <tr><td>Target uses a different service profile</td><td>À cocher seulement si la cible travaille sur un autre profil que le contrôleur et le relais (voir section 5). Un seul relais dans ce cas.</td></tr>
-<tr><td>Temporary transfer profile</td><td>Le profil rapide du transfert, par exemple 434.500 MHz, BW500, SF7, CR4/5. Il doit rester dans la bande autorisée par votre licence.</td></tr>
+<tr><td>Temporary transfer profile</td><td>Le profil rapide du transfert. Avec des radios SX126x sur tout le trajet, choisir BW500, SF5, CR4/5 si la liaison le permet. Les cibles QRP Labs et Heltec V3 proposent SF5-SF12 ; les cibles TTGO exigent SF7-SF12. Le controleur USB, chaque relais et la cible doivent accepter le profil choisi. Conserver le profil de service habituel. La frequence de transfert doit rester dans la bande autorisee par votre licence.</td></tr>
 </table>
 <figure><img src="assets/radio-ota/03-settings-profiles.png" alt="Profil de service du contrôleur et du relais, profil temporaire de transfert, puis Save OTA settings."><figcaption>Profil de service du contrôleur et du relais, profil temporaire de transfert, puis Save OTA settings.</figcaption></figure>
 <p>Enregistrer avec <b>Save OTA settings</b>. Il n'est pas nécessaire de mettre à jour un relais pour le configurer : Graywolf lui donne son rôle par commande signée au moment de la mise à jour de la cible.</p>

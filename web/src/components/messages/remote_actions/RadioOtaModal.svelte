@@ -3,7 +3,7 @@
   import { untrack, tick } from 'svelte';
   import { rememberOtaDraft, otaDraft, discardOtaDraft, frequencyHz } from '../../../lib/remote_actions/radioOtaDrafts.js';
   import { Button, Input, Modal, Icon } from '@chrissnell/chonky-ui';
-  import { otaRequest, otaProgress, otaPhase, otaStartPath, otaPreflightPath, otaImageDetails, generateRouteSecret, otaBoards, otaBoard, formatRelayChain, parseRelayChain } from '../../../lib/remote_actions/radioOta.js';
+  import { otaRequest, otaProgress, otaPhase, otaStartPath, otaPreflightPath, otaImageDetails, generateRouteSecret, otaBoards, otaBoard, otaSpreadingFactors, formatRelayChain, parseRelayChain } from '../../../lib/remote_actions/radioOta.js';
   let { open = $bindable(false), target, credential } = $props();
   // A prop getter can depend on the whole parent conversation object. Buffer
   // primitive identity/open values so replacing that object for an incoming
@@ -213,7 +213,10 @@
                   </select>
                   <label for={`ota-${name}-sf`}>Spreading factor</label>
                   <select id={`ota-${name}-sf`} bind:value={cfg[name].spreading_factor}>
-                    {#each [7,8,9,10,11,12] as sf}<option value={sf}>SF{sf}</option>{/each}
+                    {#if !otaSpreadingFactors(cfg.target_board,name,!!cfg.target_normal).includes(cfg[name].spreading_factor)}
+                      <option value={cfg[name].spreading_factor} disabled>SF{cfg[name].spreading_factor} (unsupported by target)</option>
+                    {/if}
+                    {#each otaSpreadingFactors(cfg.target_board,name,!!cfg.target_normal) as sf}<option value={sf}>SF{sf}</option>{/each}
                   </select>
                   <label for={`ota-${name}-cr`}>Coding rate</label>
                   <select id={`ota-${name}-cr`} bind:value={cfg[name].coding_rate}>

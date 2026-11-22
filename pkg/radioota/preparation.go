@@ -223,6 +223,9 @@ func (e *nativeEngine) prepareRoute() error {
 		if err := e.ensureRole(r.RF, r.Call, command, expected, path); err != nil {
 			return err
 		}
+		if err := e.checkFastProfile(r.RF, r.Call, path); err != nil {
+			return err
+		}
 	}
 	if err := e.startRendezvous(); err != nil {
 		return err
@@ -256,7 +259,27 @@ func (e *nativeEngine) prepareRoute() error {
 			e.emit("route_role_configured", map[string]any{"recipient": e.preparation.Recipient, "signed_target": e.target, "role": answer})
 		}
 	}
+	if err := e.checkFastProfile(e.preparation.Recipient, e.target, path); err != nil {
+		return err
+	}
 	e.emit("route_roles_observed", nil)
+	return nil
+}
+
+func (e *nativeEngine) checkFastProfile(recipient, signed string, path []string) error {
+	if e.transfer.SF >= 7 {
+		return nil
+	}
+	p := e.transfer
+	command := fmt.Sprintf("OTA=PROFILE,%d,%d,%d,%d,%d", p.Frequency, p.Bandwidth, p.SF, p.CR, p.Power)
+	answer, err := e.control(recipient, signed, command, path)
+	if err != nil {
+		return err
+	}
+	if answer != "OTA PROFILE READY (RAM)" {
+		return fmt.Errorf("%s did not accept the SF%d transfer profile: %s; SF5/SF6 require SX126x radios on the entire route", recipient, p.SF, answer)
+	}
+	e.emit("transfer_profile_observed", map[string]any{"recipient": recipient, "sf": p.SF, "authenticated": false})
 	return nil
 }
 func (e *nativeEngine) releasePreflight() error {

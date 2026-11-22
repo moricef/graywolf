@@ -423,6 +423,18 @@ back on their own service. No field validation yet.
 
 #### Relay chains
 
+OTA profiles accept SF5-SF12. The target-specific UI and backend keep SF7 as
+the minimum for TTGO/SX1278 target service and transfer profiles; QRP Labs
+(SX1268) and Heltec V3 (SX1262) can select SF5/SF6. A target model says nothing
+about the USB controller or relays. The controller validates PROFILEDEF in its
+own firmware. For SF5/SF6 transfer, preparation also sends OTA=PROFILE to every
+relay and the target, requiring exactly OTA PROFILE READY (RAM) before binary
+negotiation. This validates support without switching profiles or writing Config;
+APRS replies remain observations, not authenticated proof. Actual switching
+still uses the existing HMAC PREPARE_FAST exchange and firmware chip limits.
+No settings migration or firmware change is needed. SF5/SF6 paths have software
+tests only, not a physical transfer validation.
+
 "Further relays towards the target" adds relays after the first one, nearest
 first, as `CALL-SSID` or `CALL-SSID:NAME` when a relay transmits under a
 tactical name (at most three). Route preparation checks and configures each
