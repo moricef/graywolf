@@ -302,6 +302,19 @@ validate the new Go implementation on cards.
 
 ### Route preparation and non-destructive preflight
 
+Native OTA diagnostics include `usb_tx`, `usb_tx_complete`, `usb_read`,
+`usb_rx`, `usb_rx_partial`, `usb_read_error` and `usb_write_error` in each
+attempt's existing `transfer.jsonl`. The optional bridge trace callback is
+installed before the USB handshake. `serial_trace.go` summarizes binary RF
+frames without payloads or HMACs, redacts long encoded tokens in console text,
+and bounds retained diagnostic text. Partial reads record lengths, not raw
+fragments. `bridge_tx_timeout` identifies a missing local controller `TXDONE`
+with the block offset and wait duration. Driver write completion is not an RF
+receipt. These events do not change retries, profile leases or recovery.
+Tests cover fragmented replies, absent TXDONE, I/O errors, secret redaction
+and a full simulated cycle with trace persistence. Hardware diagnosis remains
+to be performed. Operator paths and sharing precautions are in the OTA guides.
+
 `preparation.go` sends signed `!RC1` APRS frames through `TXRAW` on the reserved
 controller USB bridge. It uses `CommandCredentialStore.ReserveEnvelope` through
 a server-provided signer, with the RF recipient and signed identity checked

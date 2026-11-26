@@ -24,7 +24,7 @@ roles.
 - [`invariants.md`](invariants.md) -- cross-cutting "if X then also Y" rules with reasons.
 - [`glossary.md`](glossary.md) -- domain terms as graywolf uses them, with source pointers.
 - [`actions.md`](actions.md) -- the `@@`-prefixed APRS Actions subsystem: trigger surface, classifier topology, source-aware reply, lifecycle, schema.
-- [`remote-actions.md`](remote-actions.md) -- outbound Actions: macro + remote-OTP credential CRUD; the Messages drawer that fires `@@<otp>#<action>` at remote stations.
+- [`remote-actions.md`](remote-actions.md) -- outbound Actions and authenticated iGate control; FR/EN operator guides cover identities, key fingerprints and OTA settings; the Messages drawer that fires `@@<otp>#<action>` at remote stations.
 - [`rxt-telemetry.md`](rxt-telemetry.md) -- lossless LoRa APRS NDJSON/RXT input, extended textual identities, receive-only policy, configuration, health status, link lifetime, and portable Windows setup.
 - [`lora-tnc2-transceiver.md`](lora-tnc2-transceiver.md) -- direct LoRa TNC2 reception and explicitly authorized TCP/serial transmission, including messaging and ACK ownership.
 

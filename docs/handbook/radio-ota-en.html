@@ -12,7 +12,7 @@
 <li><b>For a relayed route</b>: the same 43-character route key installed on every relay and on the target.</li>
 </ul>
 <p class="note">The screenshots use demonstration identities (<code>N0CALL-2</code> controller, <code>N0CALL-10</code> relay, <code>N0CALL-15</code> target) and simulated answers; no station was contacted.</p>
-<p class="warn">A board in eco mode ignores update commands. Send it <code>EM=OFF</code> first, then wait for its answer in the Graywolf conversation: <code>DigiEcoMode:OFF</code>, or <code>DigiEcoMode was OFF</code> if it already was. After <code>DigiEcoMode:OFF</code>, the board saves its configuration and restarts; wait for that restart. Without an answer, the board did not receive the command: do not start the update.</p>
+<p class="warn">A board in eco mode ignores update commands. Send it <code>EM=OFF</code> first, then wait for its answer in the Graywolf conversation: <code>DigiEcoMode:OFF</code>, or <code>DigiEcoMode was OFF</code> if it already was. After <code>DigiEcoMode:OFF</code>, the board saves its configuration and restarts; wait for that restart. Without an answer, the board’s state is unconfirmed: the command may have been received but rejected, or its reply may have been lost. Resolve this before starting the update.</p>
 
 <h2 id="preparation-order">2. Settings to save once</h2>
 <p>Open <b>Messages</b>, then the <b>target's</b> conversation (not a relay's), the command panel and <b>Update firmware over LoRa</b>. Click <b>View / edit radio settings</b>.</p>
@@ -32,9 +32,9 @@
 <figure><img src="assets/radio-ota/03-settings-profiles.png" alt="Controller and relay service profile, temporary transfer profile, then Save OTA settings."><figcaption>Controller and relay service profile, temporary transfer profile, then Save OTA settings.</figcaption></figure>
 <p>Save with <b>Save OTA settings</b>. A relay does not need its own update to be configured: Graywolf gives it its role by signed command when the target is updated.</p>
 <p class="note"><b>Tactical callsign changed on site</b>: neither the command key nor the route key is invalidated. Route roles use the boards' Callsign-SSID, and the route key depends on no name. Only update the on-air name in Graywolf: the target's conversation, or, for a relay, <b>Relay RF recipient</b> or the name after <code>:</code> in <b>Further relays</b>.</p>
-<h3>The route key</h3>
+<p class="note"><b>Two different settings windows:</b> <b>Key settings</b> configures authenticated commands. The relay fields above belong to <b>Update firmware over LoRa → View / edit radio settings</b> in Graywolf, not to the board’s Remote Management page. First obtain a successful signed command for each station using the <a href="authenticated-control-en.html">authenticated-control guide</a>, then prepare the OTA route.</p><h3>The route key</h3>
 <figure><img src="assets/radio-ota/02-route-key.png" alt="Route key: once saved, an empty field keeps it. Generate is for initial provisioning only."><figcaption>Route key: once saved, an empty field keeps it. Generate is for initial provisioning only.</figcaption></figure>
-<p>For an existing route, reuse its key: never generate a new one for each transfer. <b>Generate route key (initial setup)</b> is for initial provisioning only: the new key must then be installed in the WebUI of each relay and of the target before any update. Graywolf never sends it over radio.</p>
+<p>For an existing route, reuse its key: never generate a new one for each transfer. <b>Generate route key (initial setup)</b> is for initial provisioning only: the new key must then be installed in the WebUI of each relay and of the target before any update. Graywolf never sends it over radio.</p><p>After <b>Save OTA settings</b>, reopen the settings and leave <b>Shared route key</b> empty. Compare <b>Saved key fingerprint</b> below it with <b>Route key installed — fingerprint</b> under <b>Radio update route key</b> on each relay and on the target. All must match. The command-key fingerprint is checked separately in <b>Key settings</b>.</p>
 
 <h2>3. Start an update</h2>
 <ol>
@@ -78,6 +78,9 @@
 <tr><td>Radio restoration could not be confirmed</td><td>Read back the profile of each relay and of the controller. A relay returns to its profile by itself after 60 seconds without a keepalive.</td></tr>
 </table>
 
+<h3>USB diagnostics</h3>
+<p>Each new check or update records the USB bridge exchanges in its <code>transfer.jsonl</code>. On Windows, the default location is <code>C:\ProgramData\Graywolf\radio-ota\transfers\&lt;attempt-id&gt;\transfer.jsonl</code>. With a custom configuration database location, the <code>radio-ota</code> directory is beside <code>graywolf.db</code>. Use the folder for the attempt you are diagnosing.</p>
+<p>The trace includes commands, bridge replies such as <code>TXDONE</code>, partial serial lines and read/write errors. RF frame contents and long encoded tokens are omitted or redacted. A completed USB write means the serial driver accepted the command, not that the radio transmitted it. <code>bridge_tx_timeout</code> means Graywolf did not receive the controller's <code>TXDONE</code> confirmation within the allowed time; it is not proof that the target lost the RF packet. Send <b>transfer.jsonl only</b> for diagnosis, not the whole attempt folder, which may contain credentials. Do not open PuTTY on the controller port during the update: Graywolf owns that port.</p>
 <h2>Validation status</h2>
 <p>Bench run on 14-15 November 2026: three TTGO LoRa32 V2.1, one relay, target on another service profile (433.775 / 434.100 MHz). Full image transferred in two sessions with resume from the stored point, five link losses recovered, activation, confirmation and readback succeeded. Chains of several relays are tested in simulation only. Heltec and QRP Labs have not yet been run on hardware. No field validation.</p>
 </body></html>

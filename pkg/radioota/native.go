@@ -330,7 +330,8 @@ func (e *nativeEngine) sendBlock(offset uint32, payload []byte) error {
 			return errors.New("bridge burst transmission failed")
 		}
 	}
-	return fmt.Errorf("%w: burst transmission", errRadioTimeout)
+	e.emit("bridge_tx_timeout", map[string]any{"op": opWindowData, "offset": offset, "seconds": allowance.Seconds(), "partial_bytes": len(e.bridge.buffer), "message": "No TXDONE confirmation received from the USB controller"})
+	return fmt.Errorf("%w: USB controller TXDONE confirmation missing for firmware block at offset %d", errRadioTimeout, offset)
 }
 func (e *nativeEngine) transferImage(image []byte, sha [32]byte) (radioReply, error) {
 	manifest := make([]byte, 40)
@@ -845,7 +846,7 @@ func runNative(args []string, out io.Writer, open func(string) (otaPort, error),
 	if preflightOnly && !prepareRouting {
 		return errors.New("preflight requires route preparation")
 	}
-	br, err := openBridge(port, open, clock)
+	br, err := openBridge(port, open, clock, emit)
 	if err != nil {
 		emit("engine_failed", map[string]any{"error": err.Error()})
 		return err
